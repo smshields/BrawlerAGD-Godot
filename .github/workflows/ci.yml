@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # The determinism contract: the sim core must be engine-free and clock-free.
+      # Matches actual usage (imports, references, constructor calls), not comments.
+      - name: Enforce engine-free sim core
+        run: |
+          ! grep -rnE 'using Godot|Godot\.NET|Include="Godot|new (System\.)?Random\(|DateTime\.(Now|UtcNow)|Environment\.TickCount|Stopwatch' \
+              --include='*.cs' --include='*.csproj' BrawlerSim/
+
+      - name: Build
+        run: dotnet build BrawlerAGD.sln --configuration Release
+
+      - name: Test
+        run: dotnet test BrawlerAGD.sln --configuration Release --no-build --verbosity normal

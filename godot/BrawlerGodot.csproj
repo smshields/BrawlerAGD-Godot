@@ -1,0 +1,16 @@
+<Project Sdk="Godot.NET.Sdk/4.7.0">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Nullable>enable</Nullable>
+    <RootNamespace>BrawlerGodot</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!--
+      The ONLY sanctioned dependency direction: the view layer consumes the sim.
+      BrawlerSim must never reference Godot (enforced in CI) — see
+      docs/CONVERSION_PLAN.md, "The determinism contract".
+    -->
+    <ProjectReference Include="..\BrawlerSim\BrawlerSim.csproj" />
+  </ItemGroup>
+</Project>

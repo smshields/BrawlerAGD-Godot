@@ -1,0 +1,20 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+
+# Godot
+godot/.godot/
+godot/*.sln
+godot/export_presets.cfg
+
+# Evolution run output (checkpoints, results, replays)
+runs/
+
+# IDE
+.idea/
+.vscode/
+
+# macOS
+.DS_Store

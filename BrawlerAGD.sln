@@ -1,0 +1,40 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BrawlerSim", "BrawlerSim\BrawlerSim.csproj", "{0DF8C018-B89E-4047-9E03-7EAB6794602E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BrawlerSim.Tests", "BrawlerSim.Tests\BrawlerSim.Tests.csproj", "{A9F92220-F400-44B9-889A-0E8273A0649C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BrawlerRunner", "BrawlerRunner\BrawlerRunner.csproj", "{5D350911-7263-4957-9FD4-63AFD77D1226}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BrawlerGodot", "godot\BrawlerGodot.csproj", "{EAD8A9B5-DBB0-47A1-8BAC-5294F69ECC38}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0DF8C018-B89E-4047-9E03-7EAB6794602E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0DF8C018-B89E-4047-9E03-7EAB6794602E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0DF8C018-B89E-4047-9E03-7EAB6794602E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0DF8C018-B89E-4047-9E03-7EAB6794602E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A9F92220-F400-44B9-889A-0E8273A0649C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A9F92220-F400-44B9-889A-0E8273A0649C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A9F92220-F400-44B9-889A-0E8273A0649C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A9F92220-F400-44B9-889A-0E8273A0649C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5D350911-7263-4957-9FD4-63AFD77D1226}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5D350911-7263-4957-9FD4-63AFD77D1226}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5D350911-7263-4957-9FD4-63AFD77D1226}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5D350911-7263-4957-9FD4-63AFD77D1226}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EAD8A9B5-DBB0-47A1-8BAC-5294F69ECC38}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EAD8A9B5-DBB0-47A1-8BAC-5294F69ECC38}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EAD8A9B5-DBB0-47A1-8BAC-5294F69ECC38}.Release|Any CPU.ActiveCfg = Debug|Any CPU
+		{EAD8A9B5-DBB0-47A1-8BAC-5294F69ECC38}.Release|Any CPU.Build.0 = Debug|Any CPU
+	EndGlobalSection
+EndGlobal
