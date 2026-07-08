@@ -105,8 +105,9 @@ public class MatchTests
     public void GoldenMatchHashMatches()
     {
         MatchResult result = RunAiMatch(StudyGame("GameC"), seed: 20260707);
-        // Re-pinned 2026-07-08: capped player-contact depenetration (teleport bug fix).
-        Assert.Equal(402495818163503563UL, result.FinalHash);
+        // Re-pinned 2026-07-08: solid player-contact model (movement clamping with
+        // momentum transfer + capped residual resolution + fixed approach check).
+        Assert.Equal(1788087336528951335UL, result.FinalHash);
     }
 
     [Fact]

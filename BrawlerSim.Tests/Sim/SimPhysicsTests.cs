@@ -143,5 +143,55 @@ public class SimPhysicsTests
         }
         // And they do eventually separate.
         Assert.False(top.Body.Overlaps(bottom.Body), "players never separated");
+        // The landing player must end up resting ABOVE the opponent, not squeezed
+        // through them: sink-through was the second face of the teleport bug.
+        Assert.True(top.Position.Y > bottom.Position.Y, "top player sank through the opponent");
+    }
+
+    [Fact]
+    public void WalkingIntoTheOpponentPushesInsteadOfPassingThrough()
+    {
+        var world = new SimWorld(TestGames.FlatArena());
+        SimPlayer walker = world.Players[0];
+        SimPlayer target = world.Players[1];
+        walker.Position = new Vec2(-2f, -1.45f);
+        walker.Velocity = Vec2.Zero;
+        target.Position = new Vec2(0f, -1.45f);
+        target.Velocity = Vec2.Zero;
+
+        // Stop before the pair reaches the stage edge: pushing the opponent off the
+        // platform (and into a respawn) is legitimate gameplay, not pass-through.
+        Span<InputFrame> inputs = stackalloc[] { new InputFrame(1f, false, false), InputFrame.Neutral };
+        int ticks = 0;
+        while (target.Position.X < 3f && ticks++ < 400)
+        {
+            world.Tick(inputs);
+            Assert.True(walker.Position.X < target.Position.X,
+                $"tick {ticks}: walker passed through the opponent " +
+                $"({walker.Position.X:F2} >= {target.Position.X:F2})");
+        }
+        // Solid contact transfers momentum: the target must have been shoved along.
+        Assert.True(target.Position.X >= 3f, $"target was never pushed (x={target.Position.X:F2})");
+    }
+
+    [Fact]
+    public void FallingOntoTheOpponentLandsOnTheirHead()
+    {
+        var world = new SimWorld(TestGames.FlatArena());
+        SimPlayer top = world.Players[0];
+        SimPlayer bottom = world.Players[1];
+        bottom.Position = new Vec2(0f, -1.45f);
+        bottom.Velocity = Vec2.Zero;
+        top.Position = new Vec2(0.02f, 2f); // free fall from above, nearly centered
+        top.Velocity = Vec2.Zero;
+
+        Span<InputFrame> neutral = stackalloc[] { InputFrame.Neutral, InputFrame.Neutral };
+        for (int i = 0; i < 300; i++)
+        {
+            world.Tick(neutral);
+        }
+        // Rests on the opponent (or has slid off beside them) — never inside them.
+        Assert.False(top.Body.Overlaps(bottom.Body), "top ended up inside the opponent");
+        Assert.True(top.Position.Y >= bottom.Position.Y - 0.01f, "top sank below the opponent");
     }
 }

@@ -4,14 +4,21 @@ namespace BrawlerSim.Sim;
 
 /// <summary>
 /// Deterministic kinematics: Box2D-equivalent gravity/damping integration, substepped
-/// axis-separated platform collision (no tunneling at knockback speeds), correct ground
-/// detection (fixes Unity defect #5), and mass-weighted player push-apart.
+/// axis-separated collision (no tunneling at knockback speeds), correct ground detection
+/// (fixes Unity defect #5), and solid player-vs-player contact.
+///
+/// Player contact model (mirrors Box2D dynamic-vs-dynamic behavior):
+/// 1. During movement, the opponent's body is a SOLID collider — a move that would cross
+///    into them clamps at the contact face and transfers momentum (mass-weighted), so
+///    players can push each other, stand on heads, and never pass through one another.
+/// 2. Any RESIDUAL overlap (spawn overlap, simultaneous moves) separates gradually via
+///    ResolvePlayerContact, capped per tick so deep overlaps never resolve as a teleport.
 /// </summary>
 public static class SimPhysics
 {
     private const float Skin = 0.001f; // resolution slack to keep resting contacts stable
 
-    public static void Step(SimPlayer player, IReadOnlyList<Aabb> platforms, MatchConfig config)
+    public static void Step(SimPlayer player, SimPlayer opponent, IReadOnlyList<Aabb> platforms, MatchConfig config)
     {
         float dt = config.Dt;
 
@@ -26,23 +33,58 @@ public static class SimPhysics
 
         for (int i = 0; i < substeps; i++)
         {
-            MoveAxis(player, platforms, step.X, horizontal: true);
-            MoveAxis(player, platforms, step.Y, horizontal: false);
+            MoveAxis(player, opponent, platforms, step.X, horizontal: true);
+            MoveAxis(player, opponent, platforms, step.Y, horizontal: false);
         }
 
         player.OnGroundedChanged(IsGrounded(player, platforms));
     }
 
-    /// <summary>Move along one axis, clamping against the first overlapping platform.</summary>
-    private static void MoveAxis(SimPlayer player, IReadOnlyList<Aabb> platforms, float delta, bool horizontal)
+    /// <summary>
+    /// Move along one axis, clamping against platforms and — when the move would CREATE
+    /// a crossing — against the opponent's body. Pre-existing overlap is left for the
+    /// capped resolver, so residual contact never snaps positions.
+    /// </summary>
+    private static void MoveAxis(SimPlayer player, SimPlayer opponent, IReadOnlyList<Aabb> platforms, float delta, bool horizontal)
     {
         if (delta == 0f)
         {
             return;
         }
+        bool overlappedBefore = player.Body.Overlaps(opponent.Body);
         player.Position += horizontal ? new Vec2(delta, 0f) : new Vec2(0f, delta);
-        Aabb body = player.Body;
 
+        // Opponent contact FIRST, and only when this motion created the overlap —
+        // platform clamps below may squeeze players together, and that residual case
+        // belongs to the capped resolver, never to a face snap. The contact face comes
+        // from relative position (nearest side), not motion direction: a squeezed
+        // player moving "down" is not necessarily above the opponent.
+        if (!overlappedBefore && player.Body.Overlaps(opponent.Body))
+        {
+            Aabb other = opponent.Body;
+            if (horizontal)
+            {
+                bool playerOnLeft = player.Position.X <= opponent.Position.X;
+                float resolvedX = playerOnLeft
+                    ? other.Left - player.BodyHalf.X - Skin
+                    : other.Right + player.BodyHalf.X + Skin;
+                player.Position = player.Position with { X = resolvedX };
+                ResolveAxisVelocity(player, opponent, horizontal: true,
+                    directionOfA: playerOnLeft ? -1f : 1f);
+            }
+            else
+            {
+                bool playerBelow = player.Position.Y <= opponent.Position.Y;
+                float resolvedY = playerBelow
+                    ? other.Bottom - player.BodyHalf.Y - Skin
+                    : other.Top + player.BodyHalf.Y + Skin;
+                player.Position = player.Position with { Y = resolvedY };
+                ResolveAxisVelocity(player, opponent, horizontal: false,
+                    directionOfA: playerBelow ? -1f : 1f);
+            }
+        }
+
+        Aabb body = player.Body;
         foreach (Aabb platform in platforms)
         {
             if (!body.Overlaps(platform))
@@ -132,7 +174,10 @@ public static class SimPhysics
         float va = horizontal ? a.Velocity.X : a.Velocity.Y;
         float vb = horizontal ? b.Velocity.X : b.Velocity.Y;
         // Only resolve if they are moving toward each other along the contact axis.
-        if ((vb - va) * directionOfA >= 0f)
+        // directionOfA is the push-out direction of A (away from B), so the pair is
+        // approaching iff (vb − va)·directionOfA > 0. (The original check was inverted:
+        // it skipped approaching pairs and glued separating ones together.)
+        if ((vb - va) * directionOfA <= 0f)
         {
             return;
         }

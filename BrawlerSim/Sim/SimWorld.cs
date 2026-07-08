@@ -56,10 +56,10 @@ public sealed class SimWorld
             player.StepStateMachine(inputs[i]);
         }
 
-        // 2. Kinematics + platform collision.
-        foreach (SimPlayer player in _players)
+        // 2. Kinematics + collision (platforms and the opponent's body), fixed order.
+        for (int i = 0; i < _players.Length; i++)
         {
-            SimPhysics.Step(player, Platforms, Config);
+            SimPhysics.Step(_players[i], _players[1 - i], Platforms, Config);
         }
 
         // 3. Body-vs-body contact.
