@@ -60,6 +60,25 @@ public partial class Boot : Node
         }
     }
 
+    /// <summary>Fullscreen toggle: F11 anywhere, or macOS-standard Cmd+Ctrl+F.</summary>
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        if (@event is not InputEventKey { Pressed: true, Echo: false } key)
+        {
+            return;
+        }
+        bool f11 = key.PhysicalKeycode == Key.F11;
+        bool macFullscreen = key.PhysicalKeycode == Key.F && key.MetaPressed && key.CtrlPressed;
+        if (!f11 && !macFullscreen)
+        {
+            return;
+        }
+        Window window = GetWindow();
+        window.Mode = window.Mode == Window.ModeEnum.Fullscreen
+            ? Window.ModeEnum.Maximized
+            : Window.ModeEnum.Fullscreen;
+    }
+
     private static void RegisterActions()
     {
         // (action, key, padDevice, padButton, axisValue)
