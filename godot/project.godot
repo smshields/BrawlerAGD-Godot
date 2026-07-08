@@ -7,13 +7,30 @@ config_version=5
 [application]
 
 config/name="BrawlerAGD-Godot"
+run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "C#")
+
+[autoload]
+
+Boot="*res://src/Boot.cs"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
 
 [dotnet]
 
 project/assembly_name="BrawlerGodot"
 
+[physics]
+
+common/physics_ticks_per_second=60
+
 [rendering]
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.09, 0.09, 0.12, 1)
