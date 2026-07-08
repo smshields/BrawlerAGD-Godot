@@ -6,7 +6,6 @@ obj/
 
 # Godot
 godot/.godot/
-godot/*.sln
 
 # Evolution run output (checkpoints, results, replays)
 runs/
