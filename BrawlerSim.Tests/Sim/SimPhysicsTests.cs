@@ -82,7 +82,7 @@ public class SimPhysicsTests
     }
 
     [Fact]
-    public void OverlappingPlayersPushApartByMass()
+    public void OverlappingPlayersPushApartByMassOverTime()
     {
         var world = new SimWorld(TestGames.FlatArena());
         SimPlayer a = world.Players[0];
@@ -92,9 +92,56 @@ public class SimPhysicsTests
         a.Velocity = Vec2.Zero;
         b.Velocity = Vec2.Zero;
 
-        world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
-
+        Span<InputFrame> neutral = stackalloc[] { InputFrame.Neutral, InputFrame.Neutral };
+        int ticks = 0;
+        while (a.Body.Overlaps(b.Body) && ticks++ < 120)
+        {
+            world.Tick(neutral);
+        }
         Assert.True(a.Position.X < b.Position.X);
         Assert.False(a.Body.Overlaps(b.Body));
+    }
+
+    [Fact]
+    public void LandingOnTheOpponentDoesNotTeleportAnyone()
+    {
+        // Regression: contact resolution used to remove the ENTIRE overlap in one tick,
+        // so landing on the opponent's head snapped a character sideways by up to the
+        // full combined half-widths. Depenetration is now capped per tick.
+        var world = new SimWorld(TestGames.FlatArena());
+        SimPlayer top = world.Players[0];
+        SimPlayer bottom = world.Players[1];
+        bottom.Position = new Vec2(0f, -1.45f); // standing on the floor
+        bottom.Velocity = Vec2.Zero;
+        top.Position = new Vec2(0.01f, -0.9f);  // dropped straight onto its head
+        top.Velocity = new Vec2(0f, -2f);
+
+        Span<InputFrame> neutral = stackalloc[] { InputFrame.Neutral, InputFrame.Neutral };
+        float cap = world.Config.MaxDepenetrationPerTick;
+        for (int i = 0; i < 240; i++)
+        {
+            Vec2 topBefore = top.Position;
+            Vec2 bottomBefore = bottom.Position;
+            // Contact resolution may zero a velocity after movement, so bound kinematic
+            // displacement by the larger of the pre- and post-tick speeds.
+            float speedBefore = MathF.Max(
+                MathF.Abs(top.Velocity.X) + MathF.Abs(top.Velocity.Y),
+                MathF.Abs(bottom.Velocity.X) + MathF.Abs(bottom.Velocity.Y));
+            world.Tick(neutral);
+            float speedAfter = MathF.Max(
+                MathF.Abs(top.Velocity.X) + MathF.Abs(top.Velocity.Y),
+                MathF.Abs(bottom.Velocity.X) + MathF.Abs(bottom.Velocity.Y));
+
+            // Positions may move by normal kinematics (velocity·dt) plus at most the
+            // depenetration cap — never a whole-overlap jump.
+            float maxKinematic = MathF.Max(speedBefore, speedAfter) * world.Config.Dt;
+            float allowance = maxKinematic + cap + 0.01f;
+            Assert.True((top.Position - topBefore).Length() <= allowance,
+                $"tick {i}: top jumped {(top.Position - topBefore).Length():F3} (> {allowance:F3})");
+            Assert.True((bottom.Position - bottomBefore).Length() <= allowance,
+                $"tick {i}: bottom jumped {(bottom.Position - bottomBefore).Length():F3} (> {allowance:F3})");
+        }
+        // And they do eventually separate.
+        Assert.False(top.Body.Overlaps(bottom.Body), "players never separated");
     }
 }

@@ -95,7 +95,7 @@ public static class SimPhysics
     /// approaching velocity resolved inelastically (momentum-conserving) — a deterministic
     /// stand-in for Box2D's dynamic-vs-dynamic contact solve.
     /// </summary>
-    public static void ResolvePlayerContact(SimPlayer a, SimPlayer b)
+    public static void ResolvePlayerContact(SimPlayer a, SimPlayer b, MatchConfig config)
     {
         Aabb bodyA = a.Body;
         Aabb bodyB = b.Body;
@@ -108,16 +108,21 @@ public static class SimPhysics
         float total = a.Mass + b.Mass;
         if (pen.X < pen.Y)
         {
+            // Capped like Box2D's Baumgarte correction: deep overlaps resolve over
+            // several ticks instead of one instant position jump (landing on the
+            // opponent's head used to teleport a character sideways).
+            float correction = MathF.Min(pen.X, config.MaxDepenetrationPerTick);
             float direction = a.Position.X <= b.Position.X ? -1f : 1f;
-            a.Position += new Vec2(direction * pen.X * (b.Mass / total), 0f);
-            b.Position -= new Vec2(direction * pen.X * (a.Mass / total), 0f);
+            a.Position += new Vec2(direction * correction * (b.Mass / total), 0f);
+            b.Position -= new Vec2(direction * correction * (a.Mass / total), 0f);
             ResolveAxisVelocity(a, b, horizontal: true, direction);
         }
         else
         {
+            float correction = MathF.Min(pen.Y, config.MaxDepenetrationPerTick);
             float direction = a.Position.Y <= b.Position.Y ? -1f : 1f;
-            a.Position += new Vec2(0f, direction * pen.Y * (b.Mass / total));
-            b.Position -= new Vec2(0f, direction * pen.Y * (a.Mass / total));
+            a.Position += new Vec2(0f, direction * correction * (b.Mass / total));
+            b.Position -= new Vec2(0f, direction * correction * (a.Mass / total));
             ResolveAxisVelocity(a, b, horizontal: false, direction);
         }
     }

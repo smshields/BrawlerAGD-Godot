@@ -50,6 +50,13 @@ public sealed record MatchConfig
     /// <summary>Max distance a body may travel per collision substep (anti-tunneling).</summary>
     public float MaxStepDistance { get; init; } = 0.25f;
 
+    /// <summary>
+    /// Max player-vs-player overlap resolved per tick. Deep overlaps (landing on the
+    /// opponent's head) separate smoothly over several ticks like Box2D's positional
+    /// correction, instead of one teleport-sized position jump.
+    /// </summary>
+    public float MaxDepenetrationPerTick { get; init; } = 0.05f;
+
     public static readonly MatchConfig Default = new();
 
     public int ToTicks(float seconds) => (int)MathF.Round(seconds * TicksPerSecond);

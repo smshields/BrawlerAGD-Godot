@@ -63,7 +63,7 @@ public sealed class SimWorld
         }
 
         // 3. Body-vs-body contact.
-        SimPhysics.ResolvePlayerContact(_players[0], _players[1]);
+        SimPhysics.ResolvePlayerContact(_players[0], _players[1], Config);
 
         // 4. Hit detection, fixed attacker order.
         for (int i = 0; i < _players.Length; i++)
