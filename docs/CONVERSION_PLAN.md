@@ -48,6 +48,14 @@ diverged, balance collapsed.
 | 8 | Paths | `Constants.PC_SLASH = "\\"` hardcoded — breaks on macOS/Linux; population is written *inside* `Assets/`. |
 | 9 | `Player.Update()` | Entire state-machine switch duplicated in two branches (evo null-check vs paused-check); `shielding` case silently missing from the evo branch. |
 | 10 | Shield/parry system | Half-implemented and effectively dead: parry/reflect windows are fields that no code reads; shield break logs a string and does nothing; `isShield` is an `int`. Move 2 was retrofitted late (`ArenaManager` has `serializedMove2*` but `GenerateGame` creates both, crossover only reads/writes move1 files… inconsistently). |
+| 11 | `MapGenerator.Above()` | Child width computed as `rand.Next(2, platform.xSize - x + 1)` with **absolute** x where parent-relative was clearly intended — children of negative-x parents could exceed the parent's width and the design-space max. Fixed in the port (`StageGenerator.Above` uses `x - parent.X`); guarded by `NoPlatformExceedsTheDesignSpaceMaximumWidth`. |
+
+> **Phase 1 finding (2026-07-07):** `knockbackModX/Y` values in evolved/legacy data
+> legitimately exceed their generation ranges — the generation-time constraint lerps them
+> toward the hitbox location, and Unity re-saved post-flip values into the study files. The
+> schema now distinguishes generation range from valid domain (`ParamSpec.ValidMin/Max`,
+> ±1.5 for both components = the convex hull of the lerp endpoints). Discovered by the
+> importer tests against Games A–F.
 
 ### Performance bottlenecks (why runs take 12h)
 1. **Real-time evaluation** — each candidate plays up to 60 wall-clock-scaled seconds; the

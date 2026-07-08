@@ -50,6 +50,25 @@ public sealed class Pcg32
         }
     }
 
+    /// <summary>
+    /// Uniform int in [minInclusive, maxExclusive). Mirrors System.Random.Next(min, max)
+    /// semantics, which the legacy generator relied on: equal bounds return minInclusive;
+    /// inverted bounds throw.
+    /// </summary>
+    public int NextInt(int minInclusive, int maxExclusive)
+    {
+        if (maxExclusive < minInclusive)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxExclusive),
+                $"maxExclusive ({maxExclusive}) must be >= minInclusive ({minInclusive}).");
+        }
+        if (maxExclusive == minInclusive)
+        {
+            return minInclusive;
+        }
+        return minInclusive + NextInt(maxExclusive - minInclusive);
+    }
+
     /// <summary>Uniform float in [0, 1), with 24 bits of precision.</summary>
     public float NextFloat() => (NextUInt() >> 8) * (1f / 16777216f);
 

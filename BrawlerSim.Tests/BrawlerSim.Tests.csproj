@@ -26,4 +26,9 @@
     <ProjectReference Include="..\BrawlerSim\BrawlerSim.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Real Unity study games (A–F) used as importer/round-trip fixtures. -->
+    <None Include="TestData\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

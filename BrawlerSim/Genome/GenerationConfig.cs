@@ -1,0 +1,31 @@
+using BrawlerSim.Params;
+
+namespace BrawlerSim.Genome;
+
+/// <summary>
+/// Everything the generator needs to create a fresh game genome. Defaults reproduce the
+/// Unity setup: MapGenerator(2, 2, 3, 6), 3 stocks, one evolvable move per character,
+/// and the Kenney sprite-sheet slice counts (players 87, moves 265) for cosmetic genes.
+/// </summary>
+public sealed record GenerationConfig
+{
+    public ParamSchema CharacterSchema { get; init; } = DefaultSchemas.Character;
+    public ParamSchema MoveSchema { get; init; } = DefaultSchemas.Move;
+
+    public int CharacterCount { get; init; } = 2;
+    public int MovesPerCharacter { get; init; } = 1;
+    public int Stocks { get; init; } = 3;
+
+    public int PlayerSpriteCount { get; init; } = 87;
+    public int MoveSpriteCount { get; init; } = 265;
+
+    public int JumpHeight { get; init; } = 2;
+    public int JumpLength { get; init; } = 2;
+    public int PlatformCount { get; init; } = 3;
+    public int MaxPlatformSize { get; init; } = 6;
+
+    public StageGenerator CreateStageGenerator() =>
+        new(JumpHeight, JumpLength, PlatformCount, MaxPlatformSize);
+
+    public static readonly GenerationConfig Default = new();
+}
