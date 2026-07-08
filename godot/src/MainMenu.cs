@@ -4,10 +4,8 @@ using BrawlerSim.Serialization;
 namespace BrawlerGodot;
 
 /// <summary>
-/// App shell, first cut: Play (2P / vs CPU), Watch AI, Watch Replay. Game files are
-/// picked with a file dialog (any game.json — evolved runs, imports, saved replays).
-/// The Evolve dashboard and Manage browser land in the next Phase 4 drop; evolution is
-/// fully available via the CLI meanwhile.
+/// App shell: Play (2P / vs CPU), Watch AI, Watch Replay (file dialogs for any
+/// game.json), plus the Evolve dashboard and the Manage library browser.
 /// </summary>
 public partial class MainMenu : Control
 {
@@ -43,12 +41,14 @@ public partial class MainMenu : Control
         AddButton(box, "PLAY — VS CPU", () => PickGame(MatchMode.HumanVsCpu));
         AddButton(box, "WATCH AI MATCH", () => PickGame(MatchMode.AiVsAi));
         AddButton(box, "WATCH REPLAY", () => PickGame(MatchMode.Replay));
+        AddButton(box, "EVOLVE", () => GetTree().ChangeSceneToFile("res://scenes/evolve.tscn"));
+        AddButton(box, "MANAGE GAMES", () => GetTree().ChangeSceneToFile("res://scenes/manage.tscn"));
         AddButton(box, "QUIT", () => GetTree().Quit());
 
         _hint = new Label
         {
             Text = "P1: A/D move · W jump · S attack        P2: J/L move · I jump · K attack\n" +
-                   "gamepads: stick/dpad · A/B jump · X/Y attack        evolve: BrawlerRunner CLI",
+                   "gamepads: stick/dpad · A/B jump · X/Y attack",
             HorizontalAlignment = HorizontalAlignment.Center,
             Modulate = new Color(0.55f, 0.6f, 0.68f),
             AnchorTop = 1f, AnchorBottom = 1f, AnchorRight = 1f,

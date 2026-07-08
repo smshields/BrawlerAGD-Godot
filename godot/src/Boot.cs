@@ -37,10 +37,19 @@ public partial class Boot : Node
             GetTree().Quit(1);
         }
 
-        // Menu screenshot support: BRAWLER_SHOT without autoplay captures whatever
-        // scene is up after a second, then quits.
+        // Scene navigation for automation: BRAWLER_SCENE="evolve"|"manage" jumps there.
+        string scene = OS.GetEnvironment("BRAWLER_SCENE");
+        if (scene.Length > 0)
+        {
+            CallDeferred(nameof(GoToScene), $"res://scenes/{scene}.tscn");
+        }
+
+        // Screen capture support: BRAWLER_SHOT (without autoplay/autoevolve, which handle
+        // their own captures) saves whatever scene is up after a second, then quits.
         string shot = OS.GetEnvironment("BRAWLER_SHOT");
-        if (shot.Length > 0 && OS.GetEnvironment("BRAWLER_AUTOPLAY").Length == 0)
+        if (shot.Length > 0
+            && OS.GetEnvironment("BRAWLER_AUTOPLAY").Length == 0
+            && OS.GetEnvironment("BRAWLER_AUTOEVOLVE").Length == 0)
         {
             GetTree().CreateTimer(1.0).Timeout += () =>
             {
@@ -98,6 +107,11 @@ public partial class Boot : Node
     private void GoToArena()
     {
         GetTree().ChangeSceneToFile("res://scenes/arena.tscn");
+    }
+
+    private void GoToScene(string path)
+    {
+        GetTree().ChangeSceneToFile(path);
     }
 
     private static void EnsureAction(string action)
