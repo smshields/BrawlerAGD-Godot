@@ -25,6 +25,18 @@ public sealed class Pcg32
         NextUInt();
     }
 
+    private Pcg32(ulong rawState, ulong rawInc, bool _)
+    {
+        _state = rawState;
+        _inc = rawInc;
+    }
+
+    /// <summary>Raw generator state, for checkpointing an evolution run mid-stream.</summary>
+    public (ulong State, ulong Inc) Snapshot() => (_state, _inc);
+
+    /// <summary>Rebuilds a generator from Snapshot() output, continuing the exact sequence.</summary>
+    public static Pcg32 Resume(ulong state, ulong inc) => new(state, inc, true);
+
     public uint NextUInt()
     {
         ulong oldState = _state;
