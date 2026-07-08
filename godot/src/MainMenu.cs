@@ -99,7 +99,8 @@ public partial class MainMenu : Control
             Access = FileDialog.AccessEnum.Filesystem,
             FileMode = FileDialog.FileModeEnum.OpenFile,
             Filters = new[] { "*.json" },
-            CurrentDir = ProjectSettings.GlobalizePath("res://").GetBaseDir(),
+            // Open where evolution runs and imported games live.
+            CurrentDir = AppPaths.RunsRoot(),
         };
         dialog.FileSelected += path => onSelected(path);
         AddChild(dialog);
