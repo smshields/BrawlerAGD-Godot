@@ -137,11 +137,12 @@ study validating dynamics against the paper (plateau criterion + both design mot
 reproduced). Designer has play-confirmed core combat + solid-contact physics.
 Phase 6 feature 1 (multi-move control scheme: 4 assignable action buttons, button→move
 genome gene, WASD + Space + IJKL, 2P requires a controller — see
-docs/features/multi-move-controls.md) is implemented, behavior-equivalence proven, and
-awaiting the designer play-test gate. Trace format is now 7 values/player (legacy
-readable); game.json is formatVersion 2 (v1 readable). Outstanding: first push + CI
-cross-platform canary review (needs designer's GitHub auth); ongoing feel calibration
-vs the original (Unity .exe is Windows-only — reference is the paper + designer
-memory). Next: designer confirms the controls, then actual multiple moves per
-character (schema counts, agent move selection — an instrument change that needs its
-own DEVIATIONS entry).
+docs/features/multi-move-controls.md) and feature 2 (**UtilityAgent is now the fitness
+instrument**, replacing the decision tree as default everywhere; DEVIATIONS.md #18,
+docs/features/utility-agent.md, comparison report in docs/reports/) are implemented
+and awaiting the designer play-test gate. Trace format is 7 values/player (legacy
+readable); game.json is formatVersion 2 (v1 readable); run.json records the agent
+config (old checkpoints resume as DT). Outstanding: first push + CI canary review
+(needs designer's GitHub auth); DT archival after designer confirms the utility pivot.
+Next after confirmation: actual multiple moves per character (schema counts + utility
+move selection).

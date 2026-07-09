@@ -155,8 +155,8 @@ public sealed class EvolutionEngine
         ulong seed = SeedMix.MatchSeed(_config.Seed, generation, individual, round);
         var sources = new IInputSource[]
         {
-            new DecisionTreeAgent(new Pcg32(seed, 0)),
-            new DecisionTreeAgent(new Pcg32(seed, 1)),
+            _config.Agent.CreateSource(new Pcg32(seed, 0)),
+            _config.Agent.CreateSource(new Pcg32(seed, 1)),
         };
         return MatchRunner.Run(genome, sources, _config.Match, recordTrace);
     }

@@ -21,7 +21,9 @@ internal static class Commands
         Console.WriteLine("Commands:");
         Console.WriteLine("  evolve   --out <dir> [--seed 1] [--pop 100] [--generations 100] [--rounds 1]");
         Console.WriteLine("           [--dropout 0.5] [--mutation 0.4] [--resume]");
+        Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
         Console.WriteLine("  evaluate --game <game.json> [--seed 7] [--rounds 5]");
+        Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
         Console.WriteLine("  replay   --game <game.json> --trace <trace.json>");
         Console.WriteLine("  import   --unity-dir <GameX folder> --out <game.json>");
         Console.WriteLine("  bench    <unity game folder>");
@@ -51,6 +53,7 @@ internal static class Commands
                 RoundsPerIndividual = GetInt(opts, "rounds", 1),
                 DropoutRate = GetFloat(opts, "dropout", 0.5f),
                 MutationRate = GetFloat(opts, "mutation", 0.4f),
+                Agent = ParseAgent(opts),
             };
             engine = new EvolutionEngine(config);
             history = new List<GenerationStats>();
@@ -87,14 +90,16 @@ internal static class Commands
         GameRecord record = GameGenomeJson.Load(Require(opts, "game"));
         ulong seed = (ulong)GetInt(opts, "seed", 7);
         int rounds = GetInt(opts, "rounds", 5);
+        AgentConfig agent = ParseAgent(opts);
         var fitness = new StandardFitness();
 
-        Console.WriteLine($"Evaluating '{record.Name}' ({record.Origin}) over {rounds} rounds, seed {seed}:");
+        Console.WriteLine(
+            $"Evaluating '{record.Name}' ({record.Origin}) over {rounds} rounds, seed {seed}, agent {agent.Kind}:");
         var scores = new List<float>();
         for (int round = 0; round < rounds; round++)
         {
             ulong matchSeed = SeedMix.MatchSeed(seed, 0, 0, round);
-            MatchResult result = MatchRunner.Run(record.Genome, AiSources(matchSeed));
+            MatchResult result = MatchRunner.Run(record.Genome, AiSources(matchSeed, agent));
             float score = fitness.Evaluate(result);
             scores.Add(score);
             Console.WriteLine(
@@ -147,10 +152,22 @@ internal static class Commands
         return 0;
     }
 
-    private static IInputSource[] AiSources(ulong seed) => new IInputSource[]
+    private static IInputSource[] AiSources(ulong seed, AgentConfig agent) => new IInputSource[]
     {
-        new DecisionTreeAgent(new Pcg32(seed, 0)),
-        new DecisionTreeAgent(new Pcg32(seed, 1)),
+        agent.CreateSource(new Pcg32(seed, 0)),
+        agent.CreateSource(new Pcg32(seed, 1)),
+    };
+
+    private static AgentConfig ParseAgent(Dictionary<string, string> opts) => new()
+    {
+        Kind = opts.GetValueOrDefault("agent", "utility") switch
+        {
+            "dtree" or "decision-tree" => AgentKind.DecisionTree,
+            "utility" => AgentKind.Utility,
+            var other => throw new ArgumentException($"Unknown --agent '{other}' (utility|dtree)."),
+        },
+        Randomness = GetFloat(opts, "agent-randomness", AgentConfig.Default.Randomness),
+        DecisionIntervalTicks = GetInt(opts, "agent-interval", AgentConfig.Default.DecisionIntervalTicks),
     };
 
     private static Dictionary<string, string> ParseOptions(string[] args)

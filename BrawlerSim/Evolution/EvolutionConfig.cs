@@ -1,3 +1,4 @@
+using BrawlerSim.Agents;
 using BrawlerSim.Genome;
 using BrawlerSim.Sim;
 
@@ -29,6 +30,10 @@ public sealed record EvolutionConfig
 
     public GenerationConfig Generation { get; init; } = GenerationConfig.Default;
     public MatchConfig Match { get; init; } = MatchConfig.Default;
+
+    /// <summary>The playtesting instrument (recorded in run.json — part of what a
+    /// fitness score MEANS). Utility by default since 2026-07-09.</summary>
+    public AgentConfig Agent { get; init; } = AgentConfig.Default;
 }
 
 /// <summary>One generation's summary, recorded in the run manifest.</summary>

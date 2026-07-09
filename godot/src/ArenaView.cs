@@ -192,12 +192,12 @@ public partial class ArenaView : Node2D
         MatchMode.HumanVsCpu => new IInputSource[]
         {
             new HumanInputSource(1),
-            new DecisionTreeAgent(new Pcg32(MatchSession.AiSeed, 1)),
+            AgentConfig.Default.CreateSource(new Pcg32(MatchSession.AiSeed, 1)),
         },
         MatchMode.AiVsAi => new IInputSource[]
         {
-            new DecisionTreeAgent(new Pcg32(MatchSession.AiSeed, 0)),
-            new DecisionTreeAgent(new Pcg32(MatchSession.AiSeed, 1)),
+            AgentConfig.Default.CreateSource(new Pcg32(MatchSession.AiSeed, 0)),
+            AgentConfig.Default.CreateSource(new Pcg32(MatchSession.AiSeed, 1)),
         },
         MatchMode.Replay => ReplaySources(),
         _ => throw new System.InvalidOperationException($"Unknown mode {MatchSession.Mode}"),

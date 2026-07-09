@@ -26,7 +26,7 @@ internal static class Bench
     private static MatchResult RunOne(BrawlerSim.Genome.GameGenome g, ulong seed) =>
         MatchRunner.Run(g, new IInputSource[]
         {
-            new DecisionTreeAgent(new Pcg32(seed, 0)),
-            new DecisionTreeAgent(new Pcg32(seed, 1)),
+            AgentConfig.Default.CreateSource(new Pcg32(seed, 0)),
+            AgentConfig.Default.CreateSource(new Pcg32(seed, 1)),
         });
 }

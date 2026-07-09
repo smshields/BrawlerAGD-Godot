@@ -48,6 +48,9 @@ public static class RunStore
             RoundsPerIndividual = config.RoundsPerIndividual,
             Aggregate = config.Aggregate.ToString(),
             TargetGameLengthSeconds = config.TargetGameLengthSeconds,
+            Agent = config.Agent.Kind.ToString(),
+            AgentRandomness = config.Agent.Randomness,
+            AgentDecisionIntervalTicks = config.Agent.DecisionIntervalTicks,
             GenerationsCompleted = engine.GenerationsCompleted,
             RngState = state,
             RngInc = inc,
@@ -86,6 +89,15 @@ public static class RunStore
             RoundsPerIndividual = manifest.RoundsPerIndividual,
             Aggregate = Enum.Parse<FitnessAggregate>(manifest.Aggregate ?? "Median"),
             TargetGameLengthSeconds = manifest.TargetGameLengthSeconds,
+            // Runs checkpointed before 2026-07-09 have no agent fields: they were
+            // produced by the decision tree — resuming must keep that instrument.
+            Agent = new Agents.AgentConfig
+            {
+                Kind = Enum.Parse<Agents.AgentKind>(manifest.Agent ?? "DecisionTree"),
+                Randomness = manifest.AgentRandomness ?? Agents.AgentConfig.Default.Randomness,
+                DecisionIntervalTicks =
+                    manifest.AgentDecisionIntervalTicks ?? Agents.AgentConfig.Default.DecisionIntervalTicks,
+            },
         };
 
         var population = new List<GameGenome>(manifest.PopulationSize);
@@ -116,6 +128,9 @@ public static class RunStore
         public int RoundsPerIndividual { get; set; }
         public string? Aggregate { get; set; }
         public float TargetGameLengthSeconds { get; set; }
+        public string? Agent { get; set; }
+        public float? AgentRandomness { get; set; }
+        public int? AgentDecisionIntervalTicks { get; set; }
         public int GenerationsCompleted { get; set; }
         public ulong RngState { get; set; }
         public ulong RngInc { get; set; }
