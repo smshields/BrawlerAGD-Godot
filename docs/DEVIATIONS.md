@@ -46,6 +46,12 @@ Within this system, all results are exactly reproducible from (genome, seed).
 | 15 | All RNG seeded (PCG32; per-match streams derived from run seed) | GA time-seeded; AI used a second, unseeded RNG | Any match or whole run is exactly reproducible; every fitness score is replayable from its input trace. |
 | 16 | Evaluation is parallel and order-independent | Sequential, real-time, one Unity scene at a time (~12 h/run) | ~50,000× faster per core; replicate studies are practical (minutes). Parallelism provably does not change results (tested). |
 
+## Controls & input (2026-07-09, docs/features/multi-move-controls.md)
+
+| # | Change | Unity behavior | Why it matters |
+|---|--------|----------------|----------------|
+| 17 | Input model: 4 assignable action buttons + captured (inert) vertical axis; genome gains a button→move mapping gene; keyboard scheme is WASD + Space + IJKL, P2 is gamepad-only | One attack button (P1: S, P2: K); W/I jumped; no button assignment concept | Foundation for evolving multiple moves per character. The agent's DECISIONS are unchanged — it presses the lowest button mapped to move 0 instead of "attack" — and for single-move genomes (everything the paper studied) behavior is provably identical: pre/post evaluation of Games A/C/F × 2 seeds reproduced all 30 rounds' stats exactly, and genome-generation RNG streams are untouched (button genes consume RNG only when >1 move exists). Trace format grew 3→7 values/player (old traces load and replay bit-identically); game.json is formatVersion 2 (v1 loads with all-buttons→move-0). When multi-move genomes arrive, agent move SELECTION will be new instrument behavior and gets its own entry. |
+
 ## Known intentional quirk preservation (unchanged, for the record)
 
 - AI playtester ported verbatim including: absolute-Y target comparisons, level-based

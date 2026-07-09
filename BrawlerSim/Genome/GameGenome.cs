@@ -31,13 +31,38 @@ public sealed class CharacterGenome
     public ParamSet Params { get; }
     public IReadOnlyList<MoveGenome> Moves { get; }
 
-    public CharacterGenome(string name, int stocks, int spriteIndex, ParamSet @params, IEnumerable<MoveGenome> moves)
+    /// <summary>
+    /// Button→move mapping gene (2026-07-08, docs/features/multi-move-controls.md):
+    /// ButtonMoves[b] is the index into Moves triggered by action button b. Length is
+    /// always InputFrame.ActionCount. A structural int gene (like SpriteIndex), not a
+    /// ParamSpec: its valid range [0, Moves.Count-1] depends on the move count, which a
+    /// static schema range cannot express.
+    /// </summary>
+    public IReadOnlyList<int> ButtonMoves { get; }
+
+    public CharacterGenome(string name, int stocks, int spriteIndex, ParamSet @params, IEnumerable<MoveGenome> moves,
+        IEnumerable<int>? buttonMoves = null)
     {
         Name = name;
         Stocks = stocks;
         SpriteIndex = spriteIndex;
         Params = @params;
         Moves = moves.ToArray();
+        ButtonMoves = buttonMoves?.ToArray() ?? new int[Sim.InputFrame.ActionCount];
+        if (ButtonMoves.Count != Sim.InputFrame.ActionCount)
+        {
+            throw new ArgumentException(
+                $"buttonMoves must have {Sim.InputFrame.ActionCount} entries, got {ButtonMoves.Count}.");
+        }
+        int maxMove = Math.Max(0, Moves.Count - 1);
+        foreach (int move in ButtonMoves)
+        {
+            if (move < 0 || move > maxMove)
+            {
+                throw new ArgumentException(
+                    $"buttonMoves entry {move} is outside the move list (0..{maxMove}).");
+            }
+        }
     }
 
     public static CharacterGenome Generate(string name, GenerationConfig config, Pcg32 rng)
@@ -49,7 +74,18 @@ public sealed class CharacterGenome
         {
             moves.Add(MoveGenome.Generate(config, rng));
         }
-        return new CharacterGenome(name, config.Stocks, spriteIndex, @params, moves);
+        // Button genes consume RNG only when there is a real choice (>1 move), so
+        // single-move populations reproduce pre-feature RNG streams bit-exactly
+        // (golden population fingerprints and replicate runs stay valid).
+        int[] buttonMoves = new int[Sim.InputFrame.ActionCount];
+        if (config.MovesPerCharacter > 1)
+        {
+            for (int b = 0; b < buttonMoves.Length; b++)
+            {
+                buttonMoves[b] = rng.NextInt(config.MovesPerCharacter);
+            }
+        }
+        return new CharacterGenome(name, config.Stocks, spriteIndex, @params, moves, buttonMoves);
     }
 }
 

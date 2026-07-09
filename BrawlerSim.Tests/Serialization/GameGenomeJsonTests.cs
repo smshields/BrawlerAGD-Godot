@@ -63,7 +63,39 @@ public class GameGenomeJsonTests
     public void UnsupportedFormatVersionThrows()
     {
         string json = GameGenomeJson.Serialize(NewRecord());
-        json = json.Replace("\"formatVersion\": 1", "\"formatVersion\": 999");
+        json = json.Replace($"\"formatVersion\": {GameGenomeJson.CurrentFormatVersion}", "\"formatVersion\": 999");
+        Assert.Contains("\"formatVersion\": 999", json); // guard: the replace must hit
         Assert.Throws<NotSupportedException>(() => GameGenomeJson.Deserialize(json));
+    }
+
+    [Fact]
+    public void FormatVersion1FilesLoadWithDefaultButtonMoves()
+    {
+        // Every pre-feature file (evolved runs, Unity imports) is v1 with no buttonMoves:
+        // it must load with the all-zeros mapping, i.e. every button triggers move 0.
+        string json = GameGenomeJson.Serialize(NewRecord());
+        json = json.Replace($"\"formatVersion\": {GameGenomeJson.CurrentFormatVersion}", "\"formatVersion\": 1");
+        json = System.Text.RegularExpressions.Regex.Replace(json, "\\s*\"buttonMoves\": \\[[^\\]]*\\],", "");
+        Assert.DoesNotContain("buttonMoves", json);
+
+        GameRecord loaded = GameGenomeJson.Deserialize(json);
+        Assert.All(loaded.Genome.Characters, c =>
+        {
+            Assert.Equal(BrawlerSim.Sim.InputFrame.ActionCount, c.ButtonMoves.Count);
+            Assert.All(c.ButtonMoves, m => Assert.Equal(0, m));
+        });
+    }
+
+    [Fact]
+    public void ButtonMovesRoundTripThroughJson()
+    {
+        GameRecord original = NewRecord();
+        string json = GameGenomeJson.Serialize(original);
+        Assert.Contains("\"buttonMoves\"", json);
+        GameRecord loaded = GameGenomeJson.Deserialize(json);
+        for (int c = 0; c < original.Genome.Characters.Count; c++)
+        {
+            Assert.Equal(original.Genome.Characters[c].ButtonMoves, loaded.Genome.Characters[c].ButtonMoves);
+        }
     }
 }

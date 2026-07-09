@@ -29,7 +29,7 @@ public class HitResolutionTests
 
     private static void RunAttack(SimWorld world, int ticks = 40)
     {
-        Span<InputFrame> frame = stackalloc[] { new InputFrame(0f, false, Attack: true), InputFrame.Neutral };
+        Span<InputFrame> frame = stackalloc[] { new InputFrame(0f, 0f, false, InputFrame.ActionBit(0)), InputFrame.Neutral };
         world.Tick(frame);
         frame[0] = InputFrame.Neutral;
         for (int i = 0; i < ticks; i++)
@@ -59,7 +59,7 @@ public class HitResolutionTests
 
         bool sawStun = false;
         int stunTicksObserved = 0;
-        Span<InputFrame> frame = stackalloc[] { new InputFrame(0f, false, Attack: true), InputFrame.Neutral };
+        Span<InputFrame> frame = stackalloc[] { new InputFrame(0f, 0f, false, InputFrame.ActionBit(0)), InputFrame.Neutral };
         world.Tick(frame);
         frame[0] = InputFrame.Neutral;
         for (int i = 0; i < 120; i++)
@@ -129,8 +129,8 @@ public class HitResolutionTests
         // Victim starts its own long warm-up; attacker's faster move lands first.
         Span<InputFrame> frame = stackalloc[]
         {
-            new InputFrame(0f, false, Attack: true),
-            new InputFrame(0f, false, Attack: true),
+            new InputFrame(0f, 0f, false, InputFrame.ActionBit(0)),
+            new InputFrame(0f, 0f, false, InputFrame.ActionBit(0)),
         };
         world.Tick(frame);
         Assert.Equal(PlayerState.WarmUp, victim.State);

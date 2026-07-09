@@ -129,13 +129,19 @@ doesn't already answer — before writing any code:
 Record the answers, then follow `docs/ADDING_FEATURES.md` step by step
 (schema → sim → stats → agent → tests → view → docs → designer test gate).
 
-## STATUS (as of 2026-07-08)
+## STATUS (as of 2026-07-09)
 
 Conversion phases 0–5 complete: schema/genome layer, deterministic sim core, evolution
 engine + CLI, full Godot app (Play/Watch/Evolve/Manage), export pipeline, replication
 study validating dynamics against the paper (plateau criterion + both design motifs
 reproduced). Designer has play-confirmed core combat + solid-contact physics.
-Outstanding: first push + CI cross-platform canary review (needs designer's GitHub
-auth); ongoing feel calibration vs the original (Unity .exe is Windows-only — reference
-is the paper + designer memory). Next: Phase 6 — new parameter-driven gameplay features
-via the pattern above.
+Phase 6 feature 1 (multi-move control scheme: 4 assignable action buttons, button→move
+genome gene, WASD + Space + IJKL, 2P requires a controller — see
+docs/features/multi-move-controls.md) is implemented, behavior-equivalence proven, and
+awaiting the designer play-test gate. Trace format is now 7 values/player (legacy
+readable); game.json is formatVersion 2 (v1 readable). Outstanding: first push + CI
+cross-platform canary review (needs designer's GitHub auth); ongoing feel calibration
+vs the original (Unity .exe is Windows-only — reference is the paper + designer
+memory). Next: designer confirms the controls, then actual multiple moves per
+character (schema counts, agent move selection — an instrument change that needs its
+own DEVIATIONS entry).

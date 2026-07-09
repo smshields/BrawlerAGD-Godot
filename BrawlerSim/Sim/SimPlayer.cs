@@ -26,7 +26,21 @@ public sealed class SimPlayer
 {
     public int Index { get; }
     public string Name { get; }
-    public SimMove Move { get; }
+
+    /// <summary>All of this character's moves, resolved to tick-domain values.</summary>
+    public IReadOnlyList<SimMove> Moves => _moves;
+
+    /// <summary>Genome button→move mapping: ButtonMoves[b] = move triggered by button b.</summary>
+    public IReadOnlyList<int> ButtonMoves => _buttonMoves;
+
+    /// <summary>
+    /// The move whose phases/hitbox are in effect — the one most recently started.
+    /// Meaningful during WarmUp/Attack/CoolDown; stale (but deterministic) otherwise.
+    /// </summary>
+    public SimMove Move => _moves[CurrentMoveIndex];
+
+    private readonly SimMove[] _moves;
+    private readonly int[] _buttonMoves;
 
     // Character constants, resolved once from the genome.
     public readonly float GroundAcceleration;
@@ -53,6 +67,7 @@ public sealed class SimPlayer
     public float Damage;
     public int Stocks;
     public int InvincibleTicksLeft;
+    public int CurrentMoveIndex;         // index into Moves; set by StartMove (hashed state)
 
     // Stats accumulated for fitness/research.
     public float TotalDamageTaken;
@@ -63,7 +78,8 @@ public sealed class SimPlayer
     {
         Index = index;
         Name = genome.Name;
-        Move = new SimMove(genome.Moves[0], config);
+        _moves = genome.Moves.Select(m => new SimMove(m, config)).ToArray();
+        _buttonMoves = genome.ButtonMoves.ToArray();
 
         ParamSet p = genome.Params;
         MaxGroundSpeed = p.Get(CharacterParams.MaxGroundSpeed);
@@ -137,9 +153,9 @@ public sealed class SimPlayer
                     Velocity = Velocity with { Y = GroundJumpForce };
                     State = PlayerState.Air;
                 }
-                else if (input.Attack)
+                else if (input.Actions != 0)
                 {
-                    StartMove();
+                    StartMove(_buttonMoves[input.FirstAction]);
                 }
                 return;
 
@@ -151,9 +167,9 @@ public sealed class SimPlayer
                     JumpsExhausted = true;
                     State = PlayerState.AirJumpsExhausted;
                 }
-                else if (input.Attack)
+                else if (input.Actions != 0)
                 {
-                    StartMove();
+                    StartMove(_buttonMoves[input.FirstAction]);
                 }
                 return;
 
@@ -203,10 +219,27 @@ public sealed class SimPlayer
         JumpsExhausted = false;
     }
 
-    private void StartMove()
+    private void StartMove(int moveIndex)
     {
+        CurrentMoveIndex = moveIndex;
         State = PlayerState.WarmUp;
         PhaseTicksLeft = Move.WarmUpTicks;
+    }
+
+    /// <summary>
+    /// Lowest-index button mapped to <paramref name="moveIndex"/>, or -1 when none. The
+    /// decision-tree agent uses this to express "do move X" in button vocabulary.
+    /// </summary>
+    public int ButtonForMove(int moveIndex)
+    {
+        for (int b = 0; b < _buttonMoves.Length; b++)
+        {
+            if (_buttonMoves[b] == moveIndex)
+            {
+                return b;
+            }
+        }
+        return -1;
     }
 
     private void ResolveNeutralState()

@@ -70,6 +70,10 @@ public class Phase1PipelineTests
     [Fact]
     public void PopulationFingerprintMatchesGoldenValue()
     {
-        Assert.Equal(9300943650238635838UL, RunPipeline(20260707));
+        // Re-pinned 2026-07-09: multi-move controls changed the SERIALIZED form only
+        // (formatVersion 2 + buttonMoves in game.json). The underlying RNG streams are
+        // unchanged — proven by diffing every generated param/sprite/stage value of this
+        // exact pipeline against a pre-feature build (identical output, 200 genomes).
+        Assert.Equal(13551893661434631362UL, RunPipeline(20260707));
     }
 }

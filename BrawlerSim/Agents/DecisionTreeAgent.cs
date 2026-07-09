@@ -63,7 +63,21 @@ public sealed class DecisionTreeAgent : IInputSource
         }
 
         float horizontal = _pressLeft ? -1f : (_pressRight ? 1f : 0f);
-        return new InputFrame(horizontal, _pressJump, _pressAttack);
+
+        // 2026-07-08 multi-move controls: the agent's decisions are unchanged, only the
+        // encoding — "attack" now means pressing the lowest-index button mapped to the
+        // move it wants. The ported tree only ever wants move 0 (the single Unity move);
+        // move selection for multi-move genomes is future agent work (DEVIATIONS.md).
+        byte actions = 0;
+        if (_pressAttack)
+        {
+            int button = self.ButtonForMove(0);
+            if (button >= 0)
+            {
+                actions = InputFrame.ActionBit(button);
+            }
+        }
+        return new InputFrame(horizontal, 0f, _pressJump, actions);
     }
 
     private void UpdatePursue(SimWorld world, SimPlayer self, SimPlayer opponent)

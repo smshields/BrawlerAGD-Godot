@@ -13,6 +13,7 @@ public partial class MainMenu : Control
     private FileDialog _traceDialog = null!;
     private MatchMode _pendingMode;
     private Label _hint = null!;
+    private Button _twoPlayerButton = null!;
 
     public override void _Ready()
     {
@@ -37,7 +38,7 @@ public partial class MainMenu : Control
         box.AddChild(subtitle);
         box.AddChild(new Control { CustomMinimumSize = new Vector2(0, 18) });
 
-        AddButton(box, "PLAY — 2 PLAYERS", () => PickGame(MatchMode.HumanVsHuman));
+        _twoPlayerButton = AddButton(box, "PLAY — 2 PLAYERS", () => PickGame(MatchMode.HumanVsHuman));
         AddButton(box, "PLAY — VS CPU", () => PickGame(MatchMode.HumanVsCpu));
         AddButton(box, "WATCH AI MATCH", () => PickGame(MatchMode.AiVsAi));
         AddButton(box, "WATCH REPLAY", () => PickGame(MatchMode.Replay));
@@ -47,8 +48,8 @@ public partial class MainMenu : Control
 
         _hint = new Label
         {
-            Text = "P1: A/D move · W jump · S attack        P2: J/L move · I jump · K attack\n" +
-                   "gamepads: stick/dpad · A/B jump · X/Y attack",
+            Text = "P1: A/D move · SPACE jump · I/J/K/L attacks        P2: gamepad\n" +
+                   "gamepad: stick/dpad move · Y/B jump · X/A/L1/R1 attacks",
             HorizontalAlignment = HorizontalAlignment.Center,
             Modulate = new Color(0.55f, 0.6f, 0.68f),
             AnchorTop = 1f, AnchorBottom = 1f, AnchorRight = 1f,
@@ -59,6 +60,26 @@ public partial class MainMenu : Control
 
         _gameDialog = MakeDialog("Choose a game.json", OnGamePicked);
         _traceDialog = MakeDialog("Choose the matching trace.json", OnTracePicked);
+
+        // 2-player needs a controller (the keyboard is entirely P1's now).
+        Input.Singleton.JoyConnectionChanged += OnJoyConnectionChanged;
+        UpdateTwoPlayerAvailability();
+    }
+
+    public override void _ExitTree()
+    {
+        Input.Singleton.JoyConnectionChanged -= OnJoyConnectionChanged;
+    }
+
+    private void OnJoyConnectionChanged(long device, bool connected) => UpdateTwoPlayerAvailability();
+
+    private void UpdateTwoPlayerAvailability()
+    {
+        bool hasPad = Input.GetConnectedJoypads().Count > 0;
+        _twoPlayerButton.Disabled = !hasPad;
+        _twoPlayerButton.Text = hasPad
+            ? "PLAY — 2 PLAYERS"
+            : "PLAY — 2 PLAYERS · CONNECT A CONTROLLER";
     }
 
     private void PickGame(MatchMode mode)
@@ -107,10 +128,11 @@ public partial class MainMenu : Control
         return dialog;
     }
 
-    private static void AddButton(VBoxContainer box, string text, System.Action onPressed)
+    private static Button AddButton(VBoxContainer box, string text, System.Action onPressed)
     {
         var button = new Button { Text = text, CustomMinimumSize = new Vector2(340f, 44f) };
         button.Pressed += () => onPressed();
         box.AddChild(button);
+        return button;
     }
 }

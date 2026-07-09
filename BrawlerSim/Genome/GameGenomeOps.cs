@@ -46,10 +46,29 @@ public static class GameGenomeOps
                 character.Stocks,
                 rng.NextInt(config.PlayerSpriteCount),
                 GenomeOps.Mutate(character.Params, rng),
-                moves));
+                moves,
+                MutateButtonMoves(character, rng)));
         }
         StageGenome stage = config.CreateStageGenerator().Generate(rng);
         return new GameGenome(mutated, stage);
+    }
+
+    /// <summary>
+    /// Button→move genes re-randomize on mutation like the sprite genes, but consume RNG
+    /// only when there is a real choice (>1 move) so that single-move games reproduce
+    /// pre-feature RNG streams bit-exactly (see docs/features/multi-move-controls.md).
+    /// </summary>
+    private static int[] MutateButtonMoves(CharacterGenome character, Pcg32 rng)
+    {
+        var buttonMoves = character.ButtonMoves.ToArray();
+        if (character.Moves.Count > 1)
+        {
+            for (int b = 0; b < buttonMoves.Length; b++)
+            {
+                buttonMoves[b] = rng.NextInt(character.Moves.Count);
+            }
+        }
+        return buttonMoves;
     }
 
     /// <summary>Crossover followed by the single all-or-none mutation roll.</summary>
@@ -79,6 +98,16 @@ public static class GameGenomeOps
             int moveSprite = rng.NextInt(2) == 0 ? a.Moves[m].SpriteIndex : b.Moves[m].SpriteIndex;
             moves.Add(new MoveGenome(moveParams, moveSprite));
         }
-        return new CharacterGenome(a.Name, a.Stocks, spriteIndex, childParams, moves);
+        // Per-button coin flip between parents, RNG-gated like MutateButtonMoves: with a
+        // single move both parents' genes are identical zeros, so no draw is consumed.
+        var buttonMoves = a.ButtonMoves.ToArray();
+        if (a.Moves.Count > 1)
+        {
+            for (int btn = 0; btn < buttonMoves.Length; btn++)
+            {
+                buttonMoves[btn] = rng.NextInt(2) == 0 ? a.ButtonMoves[btn] : b.ButtonMoves[btn];
+            }
+        }
+        return new CharacterGenome(a.Name, a.Stocks, spriteIndex, childParams, moves, buttonMoves);
     }
 }

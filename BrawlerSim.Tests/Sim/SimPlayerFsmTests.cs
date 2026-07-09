@@ -33,7 +33,7 @@ public class SimPlayerFsmTests
     {
         SimWorld world = GroundedWorld(out SimPlayer player);
         Assert.Equal(PlayerState.Idle, player.State);
-        TickWith(world, new InputFrame(0f, Jump: true, Attack: false));
+        TickWith(world, new InputFrame(0f, 0f, Jump: true, Actions: 0));
         Assert.Equal(PlayerState.Air, player.State);
         Assert.True(player.Velocity.Y > 0f);
     }
@@ -43,7 +43,7 @@ public class SimPlayerFsmTests
     {
         // Unity parity: the AI's level-based jump chains both jumps on consecutive ticks.
         SimWorld world = GroundedWorld(out SimPlayer player);
-        var jump = new InputFrame(0f, Jump: true, Attack: false);
+        var jump = new InputFrame(0f, 0f, Jump: true, Actions: 0);
         TickWith(world, jump);
         Assert.Equal(PlayerState.Air, player.State);
         TickWith(world, jump);
@@ -57,7 +57,7 @@ public class SimPlayerFsmTests
     public void LandingRestoresIdleAndJumps()
     {
         SimWorld world = GroundedWorld(out SimPlayer player);
-        var jump = new InputFrame(0f, Jump: true, Attack: false);
+        var jump = new InputFrame(0f, 0f, Jump: true, Actions: 0);
         TickWith(world, jump);
         TickWith(world, jump); // exhausted, rising
         for (int i = 0; i < 600 && player.State != PlayerState.Idle; i++)
@@ -73,7 +73,7 @@ public class SimPlayerFsmTests
     public void AttackRunsWarmUpExecuteCoolDownWithExactTickCounts()
     {
         SimWorld world = GroundedWorld(out SimPlayer player);
-        TickWith(world, new InputFrame(0f, false, Attack: true));
+        TickWith(world, new InputFrame(0f, 0f, false, InputFrame.ActionBit(0)));
         Assert.Equal(PlayerState.WarmUp, player.State);
 
         int warmUpTicks = 1, activeTicks = 0, coolDownTicks = 0;
@@ -95,11 +95,11 @@ public class SimPlayerFsmTests
     public void NoAttacksOnceAirJumpsAreExhausted()
     {
         SimWorld world = GroundedWorld(out SimPlayer player);
-        var jump = new InputFrame(0f, Jump: true, Attack: false);
+        var jump = new InputFrame(0f, 0f, Jump: true, Actions: 0);
         TickWith(world, jump);
         TickWith(world, jump);
         Assert.Equal(PlayerState.AirJumpsExhausted, player.State);
-        TickWith(world, new InputFrame(0f, false, Attack: true));
+        TickWith(world, new InputFrame(0f, 0f, false, InputFrame.ActionBit(0)));
         Assert.Equal(PlayerState.AirJumpsExhausted, player.State); // Unity parity: ignored
     }
 
@@ -109,7 +109,7 @@ public class SimPlayerFsmTests
         // Defect #4 fix: knockback speed above the cap is preserved when holding toward it.
         SimWorld world = GroundedWorld(out SimPlayer player);
         player.Velocity = new Vec2(20f, 0f);
-        TickWith(world, new InputFrame(1f, false, false));
+        TickWith(world, new InputFrame(1f, 0f, false, 0));
         Assert.True(player.Velocity.X > 10f, $"self-movement bled knockback speed to {player.Velocity.X}");
     }
 
@@ -119,7 +119,7 @@ public class SimPlayerFsmTests
         // Defect #4 fix: tapping the opposite direction must not snap to full speed.
         SimWorld world = GroundedWorld(out SimPlayer player);
         player.Velocity = new Vec2(-4f, 0f);
-        TickWith(world, new InputFrame(1f, false, false));
+        TickWith(world, new InputFrame(1f, 0f, false, 0));
         Assert.True(player.Velocity.X < 0f, $"velocity snapped to {player.Velocity.X}");
         Assert.True(player.Velocity.X > -4f);
     }
@@ -128,11 +128,11 @@ public class SimPlayerFsmTests
     public void FacingFollowsLastHorizontalInput()
     {
         SimWorld world = GroundedWorld(out SimPlayer player);
-        TickWith(world, new InputFrame(-1f, false, false));
+        TickWith(world, new InputFrame(-1f, 0f, false, 0));
         Assert.Equal(-1, player.Facing);
         // Hitbox mirrors with facing: offset (1, 0) flips to the left side.
         Assert.True(player.Hitbox.Center.X < player.Position.X);
-        TickWith(world, new InputFrame(1f, false, false));
+        TickWith(world, new InputFrame(1f, 0f, false, 0));
         Assert.Equal(1, player.Facing);
     }
 }

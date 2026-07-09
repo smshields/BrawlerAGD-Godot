@@ -168,6 +168,9 @@ public sealed class SimWorld
             hash = Fnv1a.Add(hash, p.Facing);
             hash = Fnv1a.Add(hash, p.JumpsExhausted ? 1 : 0);
             hash = Fnv1a.Add(hash, p.InvincibleTicksLeft);
+            // 2026-07-08 multi-move controls: which move is in flight is now mutable
+            // state and must be fingerprinted (an unhashed field is a determinism hole).
+            hash = Fnv1a.Add(hash, p.CurrentMoveIndex);
         }
         return hash;
     }

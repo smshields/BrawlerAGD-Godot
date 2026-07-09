@@ -72,7 +72,7 @@ public class SimPhysicsTests
         player.Position = new Vec2(0f, -1.4f);
         world.Players[1].Position = new Vec2(6f, -1.4f);
 
-        Span<InputFrame> right = stackalloc[] { new InputFrame(1f, false, false), InputFrame.Neutral };
+        Span<InputFrame> right = stackalloc[] { new InputFrame(1f, 0f, false, 0), InputFrame.Neutral };
         for (int i = 0; i < 120; i++)
         {
             world.Tick(right);
@@ -161,7 +161,7 @@ public class SimPhysicsTests
 
         // Stop before the pair reaches the stage edge: pushing the opponent off the
         // platform (and into a respawn) is legitimate gameplay, not pass-through.
-        Span<InputFrame> inputs = stackalloc[] { new InputFrame(1f, false, false), InputFrame.Neutral };
+        Span<InputFrame> inputs = stackalloc[] { new InputFrame(1f, 0f, false, 0), InputFrame.Neutral };
         int ticks = 0;
         while (target.Position.X < 3f && ticks++ < 400)
         {

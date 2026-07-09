@@ -105,9 +105,12 @@ public class MatchTests
     public void GoldenMatchHashMatches()
     {
         MatchResult result = RunAiMatch(StudyGame("GameC"), seed: 20260707);
-        // Re-pinned 2026-07-08: solid player-contact model (movement clamping with
-        // momentum transfer + capped residual resolution + fixed approach check).
-        Assert.Equal(1788087336528951335UL, result.FinalHash);
+        // Re-pinned 2026-07-09: multi-move controls added CurrentMoveIndex to StateHash,
+        // changing the FINGERPRINT FORMAT only. Match behavior is unchanged — proven by
+        // re-running the GameA/C/F × seeds 11/20260707 evaluation baseline (all 30
+        // rounds' fitness/length/loser/damage/hits/stocks identical pre/post).
+        // Previous pin: 1788087336528951335 (2026-07-08, solid player-contact model).
+        Assert.Equal(8640048477680184839UL, result.FinalHash);
     }
 
     [Fact]

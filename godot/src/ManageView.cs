@@ -19,6 +19,7 @@ public partial class ManageView : Control
     private ItemList _list = null!;
     private Label _detail = null!;
     private ConfirmationDialog _confirm = null!;
+    private Button _twoPlayerButton = null!;
 
     public override void _Ready()
     {
@@ -166,7 +167,7 @@ public partial class ManageView : Control
         var buttons = new HBoxContainer();
         buttons.AddThemeConstantOverride("separation", 10);
         root.AddChild(buttons);
-        AddButton(buttons, "PLAY 2P", () => Launch(MatchMode.HumanVsHuman));
+        _twoPlayerButton = AddButton(buttons, "PLAY 2P", () => Launch(MatchMode.HumanVsHuman));
         AddButton(buttons, "PLAY vs CPU", () => Launch(MatchMode.HumanVsCpu));
         AddButton(buttons, "WATCH", () => Launch(MatchMode.Replay));
         AddButton(buttons, "DELETE…", ConfirmDelete);
@@ -176,12 +177,31 @@ public partial class ManageView : Control
         _confirm = new ConfirmationDialog { Title = "Delete" };
         _confirm.Confirmed += DeleteSelected;
         AddChild(_confirm);
+
+        // 2-player needs a controller (the keyboard is entirely P1's now).
+        Input.Singleton.JoyConnectionChanged += OnJoyConnectionChanged;
+        UpdateTwoPlayerAvailability();
     }
 
-    private static void AddButton(HBoxContainer box, string text, System.Action onPressed)
+    public override void _ExitTree()
+    {
+        Input.Singleton.JoyConnectionChanged -= OnJoyConnectionChanged;
+    }
+
+    private void OnJoyConnectionChanged(long device, bool connected) => UpdateTwoPlayerAvailability();
+
+    private void UpdateTwoPlayerAvailability()
+    {
+        bool hasPad = Input.GetConnectedJoypads().Count > 0;
+        _twoPlayerButton.Disabled = !hasPad;
+        _twoPlayerButton.TooltipText = hasPad ? "" : "CONNECT A CONTROLLER";
+    }
+
+    private static Button AddButton(HBoxContainer box, string text, System.Action onPressed)
     {
         var button = new Button { Text = text };
         button.Pressed += () => onPressed();
         box.AddChild(button);
+        return button;
     }
 }

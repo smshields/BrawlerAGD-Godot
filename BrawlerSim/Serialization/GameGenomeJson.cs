@@ -6,13 +6,20 @@ using BrawlerSim.Params;
 namespace BrawlerSim.Serialization;
 
 /// <summary>
-/// Reads and writes the single-file game.json format (formatVersion 1). Params are
+/// Reads and writes the single-file game.json format (formatVersion 2). Params are
 /// serialized by name in schema order, so files stay human-readable and diff-able and
 /// survive schema extension (unknown keys in a file are ignored; missing keys throw).
+///
+/// Format history:
+///   1 — original (Phase 1).
+///   2 — 2026-07-08 multi-move controls: characters gained "buttonMoves" (the button→
+///       move mapping gene, 4 ints). v1 files load with all-zeros (every button = move
+///       0), which reproduces pre-feature behavior exactly; files are written as v2.
 /// </summary>
 public static class GameGenomeJson
 {
-    public const int CurrentFormatVersion = 1;
+    public const int CurrentFormatVersion = 2;
+    private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -34,6 +41,7 @@ public static class GameGenomeJson
                 Stocks = c.Stocks,
                 SpriteIndex = c.SpriteIndex,
                 Params = c.Params.ToDictionary(),
+                ButtonMoves = c.ButtonMoves.ToList(),
                 Moves = c.Moves.Select(m => new MoveDoc
                 {
                     SpriteIndex = m.SpriteIndex,
@@ -55,10 +63,11 @@ public static class GameGenomeJson
         config ??= GenerationConfig.Default;
         GameDoc doc = JsonSerializer.Deserialize<GameDoc>(json, Options)
             ?? throw new JsonException("game.json parsed to null.");
-        if (doc.FormatVersion != CurrentFormatVersion)
+        if (doc.FormatVersion is < MinSupportedFormatVersion or > CurrentFormatVersion)
         {
             throw new NotSupportedException(
-                $"game.json formatVersion {doc.FormatVersion} is not supported (expected {CurrentFormatVersion}).");
+                $"game.json formatVersion {doc.FormatVersion} is not supported " +
+                $"(expected {MinSupportedFormatVersion}..{CurrentFormatVersion}).");
         }
         if (doc.Characters is null || doc.Stage?.Platforms is null)
         {
@@ -72,7 +81,8 @@ public static class GameGenomeJson
             ParamSet.FromDictionary(config.CharacterSchema, Require(c.Params, "character params")),
             (c.Moves ?? new List<MoveDoc>()).Select(m => new MoveGenome(
                 ParamSet.FromDictionary(config.MoveSchema, Require(m.Params, "move params")),
-                m.SpriteIndex))));
+                m.SpriteIndex)),
+            c.ButtonMoves)); // null (v1 files) → all-zeros default in the ctor
 
         var stage = new StageGenome(doc.Stage.Platforms.Select(p => new PlatformGene(p.X, p.Y, p.XSize, p.YSize)));
         return new GameRecord(doc.Name ?? "Unnamed", doc.Origin, new GameGenome(characters, stage));
@@ -107,6 +117,7 @@ public static class GameGenomeJson
         public int Stocks { get; set; }
         public int SpriteIndex { get; set; }
         public Dictionary<string, float>? Params { get; set; }
+        public List<int>? ButtonMoves { get; set; }
         public List<MoveDoc>? Moves { get; set; }
     }
 
