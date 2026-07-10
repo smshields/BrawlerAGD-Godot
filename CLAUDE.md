@@ -50,7 +50,7 @@ recordings), then wait for their confirmation.
 | `BrawlerSim/Genome/` | Genome types, `DefaultSchemas` (the live Table 1), Unity-parity genetic ops, `MoveRules` (derived values), `StageGenerator`. |
 | `BrawlerSim/Sim/` | `MatchConfig` (all constants, documented provenance), `SimWorld` (fixed tick order), `SimPlayer` FSM, `SimPhysics`, `MatchRunner`. |
 | `BrawlerSim/Agents/` | `DecisionTreeAgent` — the fitness instrument. Quirks documented + intentional. |
-| `BrawlerSim/Fitness/` | Versioned fitness functions (`standard-v2`). Pluggable — new research fitness = new class. |
+| `BrawlerSim/Fitness/` | Versioned fitness functions — `standard-v3` (default, composable terms + per-stock damage shaping), `standard-v2` (frozen). New research fitness = new class via `FitnessRegistry`; run.json records the name and resume honors it. |
 | `BrawlerSim/Evolution/` | `EvolutionEngine` (parallel, order-independent), `RunStore` (checkpoints under `runs/<name>/`). |
 | `BrawlerSim/Replay/` | `InputTrace` record/playback + JSON. |
 | `BrawlerRunner/` | Headless CLI: `evolve / evaluate / replay / import / bench`. |
@@ -116,7 +116,7 @@ doesn't already answer — before writing any code:
    therefore the trace format — see Q8.)
 7. What should the fitness function and research data see? New per-player/match stats to
    record? Should existing fitness remain blind to it, or does it need new terms
-   (new fitness = new versioned class, never edit `standard-v2` in place)?
+   (new fitness = new versioned class, never edit a shipped version in place)?
 8. Serialization & legacy: does it add genome params (schema append) or structure
    (formatVersion bump)? What default do imported Unity games and existing evolved
    games get? Does the InputFrame/trace format change?

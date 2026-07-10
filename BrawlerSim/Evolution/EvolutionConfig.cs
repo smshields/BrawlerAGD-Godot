@@ -25,6 +25,10 @@ public sealed record EvolutionConfig
     public FitnessAggregate Aggregate { get; init; } = FitnessAggregate.Median;
     public float TargetGameLengthSeconds { get; init; } = 45f;
 
+    /// <summary>Which versioned fitness scores this run (FitnessRegistry). Recorded in
+    /// run.json; resuming honors the recorded name, so old runs keep standard-v2.</summary>
+    public string FitnessName { get; init; } = Fitness.FitnessRegistry.DefaultName;
+
     /// <summary>Evaluation threads; 0 = one per processor. Results are identical at any value.</summary>
     public int Parallelism { get; init; }
 

@@ -22,7 +22,8 @@ internal static class Commands
         Console.WriteLine("  evolve   --out <dir> [--seed 1] [--pop 100] [--generations 100] [--rounds 1]");
         Console.WriteLine("           [--dropout 0.5] [--mutation 0.4] [--resume]");
         Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
-        Console.WriteLine("  evaluate --game <game.json> [--seed 7] [--rounds 5]");
+        Console.WriteLine("  evaluate --game <game.json> [--seed 7] [--rounds 5] [--fitness standard-v3|standard-v2]");
+        Console.WriteLine("           [--breakdown] [--max-seconds 60] [--target-seconds 45]");
         Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
         Console.WriteLine("  replay   --game <game.json> --trace <trace.json>");
         Console.WriteLine("  import   --unity-dir <GameX folder> --out <game.json>");
@@ -50,8 +51,9 @@ internal static class Commands
         ulong seed = (ulong)GetInt(opts, "seed", 1);
         AgentConfig agent = ParseAgent(opts);
         var match = MatchConfig.Default with { MaxMatchSeconds = maxSeconds };
-        var fitness = new StandardFitness(targetSeconds, maxSeconds);
-        string config = $"r{rounds}-{(median ? "med" : "mean")}-{maxSeconds:F0}s-t{targetSeconds:F0}";
+        IFitnessFunction fitness = FitnessRegistry.Create(
+            opts.GetValueOrDefault("fitness", FitnessRegistry.DefaultName), targetSeconds, maxSeconds);
+        string config = $"r{rounds}-{(median ? "med" : "mean")}-{maxSeconds:F0}s-t{targetSeconds:F0}-{fitness.Name}";
 
         Console.WriteLine("game,config,reps,mean,std,min,max,drawRate");
         foreach (string path in games)
@@ -121,6 +123,7 @@ internal static class Commands
                 TargetGameLengthSeconds = GetFloat(opts, "target-seconds", 45f),
                 Match = MatchConfig.Default with { MaxMatchSeconds = GetFloat(opts, "max-seconds", 60f) },
                 DiversityWeight = GetFloat(opts, "diversity-weight", 0f),
+                FitnessName = opts.GetValueOrDefault("fitness", FitnessRegistry.DefaultName),
             };
             engine = new EvolutionEngine(config);
             history = new List<GenerationStats>();
@@ -158,15 +161,21 @@ internal static class Commands
         ulong seed = (ulong)GetInt(opts, "seed", 7);
         int rounds = GetInt(opts, "rounds", 5);
         AgentConfig agent = ParseAgent(opts);
-        var fitness = new StandardFitness();
+        float maxSeconds = GetFloat(opts, "max-seconds", 60f);
+        var matchConfig = MatchConfig.Default with { MaxMatchSeconds = maxSeconds };
+        IFitnessFunction fitness = FitnessRegistry.Create(
+            opts.GetValueOrDefault("fitness", FitnessRegistry.DefaultName),
+            GetFloat(opts, "target-seconds", 45f), maxSeconds);
+        bool breakdown = opts.ContainsKey("breakdown");
 
         Console.WriteLine(
-            $"Evaluating '{record.Name}' ({record.Origin}) over {rounds} rounds, seed {seed}, agent {agent.Kind}:");
+            $"Evaluating '{record.Name}' ({record.Origin}) over {rounds} rounds, seed {seed}, " +
+            $"agent {agent.Kind}, fitness {fitness.Name}:");
         var scores = new List<float>();
         for (int round = 0; round < rounds; round++)
         {
             ulong matchSeed = SeedMix.MatchSeed(seed, 0, 0, round);
-            MatchResult result = MatchRunner.Run(record.Genome, AiSources(matchSeed, agent));
+            MatchResult result = MatchRunner.Run(record.Genome, AiSources(matchSeed, agent), matchConfig);
             float score = fitness.Evaluate(result);
             scores.Add(score);
             Console.WriteLine(
@@ -175,6 +184,16 @@ internal static class Commands
                 $"dmg {result.Players[0].TotalDamageTaken:F0}/{result.Players[1].TotalDamageTaken:F0}  " +
                 $"hits {result.Players[0].TotalHitsReceived}/{result.Players[1].TotalHitsReceived}  " +
                 $"stocks {result.Players[0].RemainingStocks}/{result.Players[1].RemainingStocks}");
+            if (breakdown && fitness is ComposedFitness composed)
+            {
+                Console.WriteLine("           " + string.Join("  ",
+                    composed.Breakdown(result).Select(t => $"{t.Name} {t.Value:F1}")));
+            }
+            else if (breakdown && fitness is StandardFitnessV3 v3)
+            {
+                Console.WriteLine("           " + string.Join("  ",
+                    v3.Breakdown(result).Select(t => $"{t.Name} {t.Value:F1}")));
+            }
         }
         scores.Sort();
         Console.WriteLine($"Median fitness ({fitness.Name}): {scores[scores.Count / 2]:F2}");

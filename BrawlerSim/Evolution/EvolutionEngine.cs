@@ -37,8 +37,8 @@ public sealed class EvolutionEngine
     public EvolutionEngine(EvolutionConfig config, IFitnessFunction? fitness = null)
     {
         _config = config;
-        _fitness = fitness ?? new StandardFitness(
-            config.TargetGameLengthSeconds, config.Match.MaxMatchSeconds);
+        _fitness = fitness ?? FitnessRegistry.Create(
+            config.FitnessName, config.TargetGameLengthSeconds, config.Match.MaxMatchSeconds);
         _rng = new Pcg32(config.Seed);
         _population = new GameGenome[config.PopulationSize];
         _lastFitness = new float[config.PopulationSize];
@@ -62,8 +62,8 @@ public sealed class EvolutionEngine
                 $"Checkpoint population size {population.Count} does not match config {config.PopulationSize}.");
         }
         _config = config;
-        _fitness = fitness ?? new StandardFitness(
-            config.TargetGameLengthSeconds, config.Match.MaxMatchSeconds);
+        _fitness = fitness ?? FitnessRegistry.Create(
+            config.FitnessName, config.TargetGameLengthSeconds, config.Match.MaxMatchSeconds);
         _rng = Pcg32.Resume(rngState.State, rngState.Inc);
         _population = population.ToArray();
         _lastFitness = new float[config.PopulationSize];

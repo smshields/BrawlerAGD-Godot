@@ -84,6 +84,9 @@ public static class RunStore
 
         var config = new EvolutionConfig
         {
+            // Pre-v3 manifests recorded "standard-v2"; honoring the recorded name means
+            // resumed runs keep the fitness that produced their history.
+            FitnessName = manifest.FitnessName ?? "standard-v2",
             Seed = manifest.Seed,
             PopulationSize = manifest.PopulationSize,
             DropoutRate = manifest.DropoutRate,

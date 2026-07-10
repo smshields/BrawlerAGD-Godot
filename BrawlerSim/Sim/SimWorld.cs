@@ -178,7 +178,8 @@ public sealed class SimWorld
     public MatchResult BuildResult(Replay.InputTrace? trace = null) =>
         new(
             _players.Select(p => new PlayerStats(
-                p.TotalDamageTaken, p.TotalHitsReceived, p.Stocks, p.RecoveryTicks)).ToArray(),
+                p.TotalDamageTaken, p.TotalHitsReceived, p.Stocks, p.RecoveryTicks,
+                p.CompletedStockDamage.Append(p.Damage).ToArray())).ToArray(),
             LoserIndex,
             TickCount,
             TickCount / (float)Config.TicksPerSecond,

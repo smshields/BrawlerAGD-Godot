@@ -74,6 +74,10 @@ public sealed class SimPlayer
     public int TotalHitsReceived;
     public int RecoveryTicks;            // Unity's totalRecoveryStateTransition (see agent)
 
+    /// <summary>Damage taken in each COMPLETED life (closed out by Respawn). The live
+    /// stock's running damage is `Damage`; BuildResult appends it non-mutatingly.</summary>
+    public readonly List<float> CompletedStockDamage = new();
+
     public SimPlayer(int index, CharacterGenome genome, Vec2 spawn, MatchConfig config)
     {
         Index = index;
@@ -210,6 +214,7 @@ public sealed class SimPlayer
 
     public void Respawn()
     {
+        CompletedStockDamage.Add(Damage);
         Stocks--;
         Damage = 0f;
         Velocity = Vec2.Zero;
