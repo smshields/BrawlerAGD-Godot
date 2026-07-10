@@ -184,7 +184,7 @@ public sealed class SimWorld
             _players.Select(p => new PlayerStats(
                 p.TotalDamageTaken, p.TotalHitsReceived, p.Stocks, p.RecoveryTicks,
                 p.CompletedStockDamage.Append(p.Damage).ToArray(),
-                p.MoveUses.ToArray(), p.StunTicks)).ToArray(),
+                p.MoveUses.ToArray(), p.StunTicks, p.Jumps)).ToArray(),
             LoserIndex,
             TickCount,
             TickCount / (float)Config.TicksPerSecond,

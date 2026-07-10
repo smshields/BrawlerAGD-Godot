@@ -142,6 +142,13 @@ These weights are v1 calibration targets — the comparison study is the feedbac
   the designer's stay-recoverable constraint), and approach's jump-at-target is
   suppressed while blocked. Regression tests: UtilityAgentFlankTests (stall
   reproduced pre-fix). Golden re-pinned 3417322836374644188.
+- **2026-07-10 TelegraphDodgeBehavior** (designer: agents should use jumps to escape
+  attacks): when the opponent is in WarmUp and their move's arc (+1 margin) covers us
+  and we cannot hit back and we're not mid-swing, jump (2.0) + move away (1.0). Makes
+  jumping a live defensive tool; with the fitness jump reward, evolved jump-force
+  genes recovered. Tested: TelegraphedSwingsAreDodgedWithAJump. (Goldens unchanged by
+  the behavior itself — GameC's pinned match never aligns the trigger — but re-pinned
+  the same day for the 0.25 s stun cap.)
 - Comparison study delivered: docs/reports/2026-07-09-utility-agent-comparison.md
   (+ battery CSV, runs/compare-*, clips in runs/media/).
 - DEVIATIONS.md #18. DT archival deferred until designer confirmation.

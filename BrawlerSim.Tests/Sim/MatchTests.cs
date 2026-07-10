@@ -105,11 +105,11 @@ public class MatchTests
     public void GoldenMatchHashMatches()
     {
         MatchResult result = RunAiMatch(StudyGame("GameC"), seed: 20260707);
-        // Re-pinned 2026-07-10: MaxStunSeconds default 0.75 s (stun-cap experiment,
-        // docs/features/second-move.md) — a real gameplay change; GameC stuns
-        // previously ran multi-second. Prior pins: 8640048477680184839 (2026-07-09,
-        // hash-format only), 1788087336528951335 (2026-07-08, solid contact).
-        Assert.Equal(5450044395552427516UL, result.FinalHash);
+        // Re-pinned 2026-07-10 (2nd): MaxStunSeconds 0.75 → 0.25 s — the second
+        // stun-cap sweep showed 0.75 s still allowed re-stun chains (97%-stunned
+        // round). Prior pins: 5450044395552427516 (0.75 s cap), 8640048477680184839
+        // (2026-07-09, hash-format only), 1788087336528951335 (2026-07-08).
+        Assert.Equal(13546504710617393521UL, result.FinalHash);
     }
 
     [Fact]

@@ -44,12 +44,14 @@ public sealed record MatchConfig
     /// Upper bound on a single hit's stun (2026-07-10, docs/features/second-move.md):
     /// stun scales with victim damage, so uncapped it grows into multi-second locks
     /// that high-scoring genomes exploit. PositiveInfinity = uncapped (Unity parity);
-    /// the shipped default comes from the stun-cap experiment in that doc:
-    /// 0.75 s (2026-07-10) — bounds single-hit locks while stun chains keep the
-    /// mechanic alive; uncapped runs let a 46%-stunned near-single-move exploiter top
-    /// the fitness table, 0.75 s produced the healthiest champions across seeds.
+    /// the shipped default comes from the stun-cap experiments in that doc:
+    /// 0.75 s (first sweep) still allowed re-stun CHAINS up to a 97%-stunned round
+    /// (0.1 s invincibility < 0.75 s stun ⇒ infinite re-chaining), so the second sweep
+    /// (2026-07-10, with the stunLock fitness penalty + jump reward live) settled on
+    /// 0.25 s: a flinch that cannot chain past ~16% of a match, with the strongest
+    /// champions and recovered jump-force genes.
     /// </summary>
-    public float MaxStunSeconds { get; init; } = 0.75f;
+    public float MaxStunSeconds { get; init; } = 0.25f;
 
     /// <summary>
     /// Half extents of the AI's platform-sensing box (Unity: 20×15 BoxCollider2D on the

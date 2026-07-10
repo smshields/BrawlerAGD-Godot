@@ -49,6 +49,24 @@ public sealed class StandardFitnessV3 : IFitnessFunction
     /// </summary>
     public const float DefaultMoveMixWeight = 5f;
 
+    /// <summary>
+    /// Stun-lock penalty (2026-07-10 designer amendment: "stun locks cannot or at
+    /// least very rarely exist"). Per player, punish the SHARE of the match spent
+    /// stunned above a tolerance: −weight × max(0, stunShare − tolerance) × 100.
+    /// Chains are what the per-hit cap cannot reach — this term prices them directly.
+    /// At the defaults, a 26% stunned player costs −55, a 46% one −155.
+    /// </summary>
+    public const float DefaultStunLockWeight = 5f;
+    public const float DefaultStunShareTolerance = 0.15f;
+
+    /// <summary>
+    /// Jump reward (same amendment: "reward games ... if there are a decent amount of
+    /// jumps"). weight × min(totalJumps, saturation) / saturation — SATURATING, so
+    /// jumping matters but jump-spam earns nothing extra. Max +10: nudge-scale.
+    /// </summary>
+    public const float DefaultJumpWeight = 10f;
+    public const float DefaultJumpSaturation = 40f;
+
     private readonly ComposedFitness _composed;
 
     public StandardFitnessV3(
@@ -59,7 +77,9 @@ public sealed class StandardFitnessV3 : IFitnessFunction
         float stockDamageCap = DefaultStockDamageCap,
         float punishSlope = DefaultPunishSlope,
         float collisionScalar = DefaultCollisionScalar,
-        float moveMixWeight = DefaultMoveMixWeight)
+        float moveMixWeight = DefaultMoveMixWeight,
+        float stunLockWeight = DefaultStunLockWeight,
+        float jumpWeight = DefaultJumpWeight)
     {
         _composed = new ComposedFitness("standard-v3", new ComposedFitness.Term[]
         {
@@ -81,6 +101,12 @@ public sealed class StandardFitnessV3 : IFitnessFunction
                 3f - DetMath.Abs(r.Players[0].RemainingStocks - r.Players[1].RemainingStocks)),
             new("moveMix", r =>
                 moveMixWeight * (MoveEvenness(r.Players[0]) + MoveEvenness(r.Players[1]))),
+            new("stunLock", r =>
+                -stunLockWeight * 100f * (StunExcess(r.Players[0], r.Ticks)
+                                        + StunExcess(r.Players[1], r.Ticks))),
+            new("jumps", r =>
+                jumpWeight * MathF.Min(r.Players[0].Jumps + r.Players[1].Jumps, DefaultJumpSaturation)
+                    / DefaultJumpSaturation),
         });
     }
 
@@ -124,6 +150,10 @@ public sealed class StandardFitnessV3 : IFitnessFunction
         }
         return total == 0 ? 0f : player.MoveUses.Count * min / (float)total;
     }
+
+    /// <summary>Stun share above the tolerance, 0 for healthy matches.</summary>
+    private static float StunExcess(PlayerStats player, int ticks) =>
+        ticks == 0 ? 0f : MathF.Max(0f, player.StunTicks / (float)ticks - DefaultStunShareTolerance);
 
     /// <summary>Σ per-stock damage beyond the punishment threshold (each stock's excess
     /// saturates at cap − start).</summary>

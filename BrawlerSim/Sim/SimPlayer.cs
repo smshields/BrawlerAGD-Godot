@@ -84,6 +84,9 @@ public sealed class SimPlayer
     /// <summary>Total ticks spent in Stun (2026-07-10, stun-cap research stat).</summary>
     public int StunTicks;
 
+    /// <summary>Ground + air jumps executed (2026-07-10, jump-value research stat).</summary>
+    public int Jumps;
+
     public SimPlayer(int index, CharacterGenome genome, Vec2 spawn, MatchConfig config)
     {
         Index = index;
@@ -162,6 +165,7 @@ public sealed class SimPlayer
                 ApplyHorizontal(input.Horizontal);
                 if (input.Jump && IsGrounded)
                 {
+                    Jumps++;
                     Velocity = Velocity with { Y = GroundJumpForce };
                     State = PlayerState.Air;
                 }
@@ -175,6 +179,7 @@ public sealed class SimPlayer
                 ApplyHorizontal(input.Horizontal);
                 if (input.Jump && !JumpsExhausted)
                 {
+                    Jumps++;
                     Velocity = Velocity with { Y = AirJumpForce };
                     JumpsExhausted = true;
                     State = PlayerState.AirJumpsExhausted;

@@ -86,3 +86,33 @@ re-pinned (dated). Uncapped remains one flag away (--max-stun) for comparison st
   runs/media/stun075_501_best.mp4.
 - Population fingerprint re-pinned (2-move generation); both match goldens re-pinned
   (stun cap). 148 tests green.
+
+## Follow-up 2026-07-10: stun-lock elimination + jump valuation (designer-directed)
+
+The 0.75 s cap turned out insufficient: 0.1 s invincibility < 0.75 s stun means an
+attacker can re-chain indefinitely — the second sweep caught a champion round with a
+97%-stunned victim. Changes:
+
+- **standard-v3 `stunLock` term**: −5 × 100 × max(0, stunShare − 15%) per player —
+  prices the chains the per-hit cap can't reach (26% → −55, 46% → −155).
+- **standard-v3 `jumps` term**: 10 × min(totalJumps, 40)/40 — saturating, so jumping
+  matters but spam earns nothing.
+- **Agent TelegraphDodgeBehavior**: the opponent's WarmUp is a readable wind-up — if
+  their arc (+1.0 margin) covers us and we can't hit back, hop away (jump 2.0,
+  move-away 1.0). Committed swings stay planted; trades are still taken.
+- **Stats**: PlayerStats.Jumps; evaluate prints jumps per player.
+- **Cap re-sweep** (0.75/0.50/0.25 × 2 seeds × 300 gens, new regime; chart:
+  runs/media/charts/stunlock-jump-trajectories.png):
+
+| config | best-ever | champ re-eval | worst stun share | jumps/match | jump gene |
+|---|---|---|---|---|---|
+| old regime 0.75 s | 112.1 / 89.2 | 52.4 / 55.5 | 26% / 21% | 34.6 / 31.4 | 8.66 / 7.98 |
+| new 0.75 s | 54.5 / 80.4 | 30.4 / 1.4 | 5% / **97%** | 74.4 / 35.6 | 4.89 / 8.17 |
+| new 0.50 s | 63.1 / 76.7 | 49.6 / 71.3 | 14% / 15% | 47.0 / 46.4 | 5.08 / 4.99 |
+| **new 0.25 s (chosen)** | 99.7 / 109.7 | 55.1 / 79.6 | **11% / 16%** | 46.6 / 48.4 | **10.00 / 7.21** |
+
+**Decision: MaxStunSeconds = 0.25 s** — stun becomes a flinch that cannot chain past
+~16% of a match even in the worst champion round; jumps/match rose ~40% over the old
+regime; the mean jump-force GENE in final populations recovered (7.2–10.0 vs ~5 at the
+laggard caps — evolution reinvests in jumps when agents and fitness value them);
+trajectories match or beat the old regime. Goldens re-pinned again (dated).

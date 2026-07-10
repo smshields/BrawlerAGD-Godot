@@ -51,6 +51,11 @@ public sealed class UtilityAgent : IInputSource
     private const float FlankUnsafeScale = 0.5f;  // no ground beyond either edge → tepid
     private const float VerticalBlockThreshold = 1.5f;
     private const float FlankEdgeProbe = 0.75f;   // how far beyond the edge safety looks
+    // Telegraph dodge (2026-07-10 designer request: agents should USE jumps to escape):
+    // the opponent's WarmUp is a readable wind-up — hop out of the incoming arc.
+    private const float TelegraphDodgeJump = 2.0f;
+    private const float TelegraphDodgeMove = 1.0f;
+    private const float TelegraphDodgeMargin = 1.0f; // how far past their reach we react
 
     private readonly Pcg32 _rng;
     private readonly AgentConfig _config;
@@ -375,6 +380,7 @@ public sealed class UtilityAgent : IInputSource
         new AttackBehavior(),
         new EvadeBehavior(),
         new ThreatDodgeBehavior(),
+        new TelegraphDodgeBehavior(),
         new SpacingBehavior(),
     };
 
@@ -556,6 +562,44 @@ public sealed class UtilityAgent : IInputSource
             {
                 scores.Jump[1] += ThreatDodgeJump;
             }
+        }
+    }
+
+    /// <summary>The opponent's WarmUp state is a telegraphed swing: if their move's arc
+    /// will reach us, hop away (jumping is the escape humans reach for — designer
+    /// request 2026-07-10). Committed swings of our own stay planted, and trades are
+    /// still taken when we can hit back.</summary>
+    private sealed class TelegraphDodgeBehavior : IUtilityBehavior
+    {
+        public void Contribute(in UtilityContext ctx, UtilityScores scores)
+        {
+            if (ctx.Opponent.State != PlayerState.WarmUp || ctx.OverPit || ctx.AnyCanHit
+                || ctx.Self.State is PlayerState.WarmUp or PlayerState.Attack)
+            {
+                return;
+            }
+            SimMove incoming = ctx.Opponent.Move; // the move they are winding up
+            var arc = new Aabb(
+                ctx.Opponent.Position + new Vec2(incoming.Offset.X * ctx.Opponent.Facing, incoming.Offset.Y),
+                new Vec2(
+                    incoming.BaseHalf.X * ctx.Opponent.WidthScalar + TelegraphDodgeMargin,
+                    incoming.BaseHalf.Y * ctx.Opponent.HeightScalar + TelegraphDodgeMargin));
+            if (!arc.Overlaps(ctx.Self.Body))
+            {
+                return;
+            }
+            if (ctx.Self.IsGrounded || !ctx.Self.JumpsExhausted)
+            {
+                scores.Jump[1] += TelegraphDodgeJump;
+            }
+            int away = -ctx.FacingToOpponent;
+            bool retreatFallsOff = ctx.Self.IsGrounded
+                && OverPit(ctx.World, ctx.Self, EdgeProbeDistance * away);
+            if (retreatFallsOff)
+            {
+                away = ctx.Self.Position.X >= 0f ? -1 : 1;
+            }
+            scores.Horizontal[away > 0 ? 2 : 0] += TelegraphDodgeMove;
         }
     }
 

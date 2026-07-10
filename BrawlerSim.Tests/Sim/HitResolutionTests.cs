@@ -55,7 +55,14 @@ public class HitResolutionTests
     [Fact]
     public void HitLaunchesVictimAndAppliesScaledHitstun()
     {
-        SimWorld world = ArrangeDuel(out _, out SimPlayer victim);
+        // Uncapped config: this test pins the SCALING FORMULA; the 0.25 s default cap
+        // (2026-07-10) is covered by StandardFitnessV3Tests.StunCapClampsHitstun.
+        var world = new SimWorld(TestGames.FlatArena(),
+            MatchConfig.Default with { MaxStunSeconds = float.PositiveInfinity });
+        SimPlayer victim = world.Players[1];
+        world.Players[0].Position = new Vec2(-4f, -1.4f);
+        victim.Position = new Vec2(-3f, -1.4f);
+        Settle(world, world.Players[0], victim);
 
         bool sawStun = false;
         int stunTicksObserved = 0;

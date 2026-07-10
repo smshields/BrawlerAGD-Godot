@@ -151,6 +151,56 @@ public class StandardFitnessV3Tests
     }
 
     [Fact]
+    public void StunLockPenaltyPricesChainsAboveTolerance()
+    {
+        // 3600-tick match; tolerance 15%. 26% stunned -> -5x100x0.11 = -55;
+        // 46% -> -155; 10% -> 0.
+        float Term(int stunTicks)
+        {
+            var p = new PlayerStats(0f, 0, 3, 0, new[] { 0f }, new[] { 1, 1 }, stunTicks);
+            var other = new PlayerStats(0f, 0, 3, 0, new[] { 0f }, new[] { 1, 1 });
+            var match = new MatchResult(new[] { p, other }, 0, 3600, 60f, 0, null);
+            return Fitness.Breakdown(match).First(t => t.Name == "stunLock").Value;
+        }
+        Assert.Equal(0f, Term((int)(0.10f * 3600)), 0.01f);
+        Assert.Equal(-55f, Term((int)(0.26f * 3600)), 0.5f);
+        Assert.Equal(-155f, Term((int)(0.46f * 3600)), 0.5f);
+    }
+
+    [Fact]
+    public void JumpRewardSaturates()
+    {
+        float Term(int j0, int j1)
+        {
+            var a = new PlayerStats(0f, 0, 3, 0, new[] { 0f }, new[] { 1, 1 }, 0, j0);
+            var b = new PlayerStats(0f, 0, 3, 0, new[] { 0f }, new[] { 1, 1 }, 0, j1);
+            var match = new MatchResult(new[] { a, b }, 0, 3600, 60f, 0, null);
+            return Fitness.Breakdown(match).First(t => t.Name == "jumps").Value;
+        }
+        Assert.Equal(0f, Term(0, 0), 0.001f);
+        Assert.Equal(5f, Term(10, 10), 0.001f);   // 20/40 x 10
+        Assert.Equal(10f, Term(20, 20), 0.001f);  // saturated
+        Assert.Equal(10f, Term(200, 200), 0.001f); // spam earns nothing extra
+    }
+
+    [Fact]
+    public void JumpsAreCounted()
+    {
+        var world = new SimWorld(TestGames.FlatArena());
+        world.Players[0].Position = new Vec2(-4f, -1.4f);
+        world.Players[1].Position = new Vec2(6f, -1.4f);
+        for (int i = 0; i < 120 && !world.Players[0].IsGrounded; i++)
+        {
+            world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
+        }
+        // Ground jump, then air jump two ticks later.
+        world.Tick(stackalloc[] { new InputFrame(0f, 0f, true, 0), InputFrame.Neutral });
+        world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
+        world.Tick(stackalloc[] { new InputFrame(0f, 0f, true, 0), InputFrame.Neutral });
+        Assert.Equal(2, world.Players[0].Jumps);
+    }
+
+    [Fact]
     public void RegistryCreatesBothVersionsAndRejectsUnknown()
     {
         Assert.Equal("standard-v2", FitnessRegistry.Create("standard-v2", 45f, 60f).Name);

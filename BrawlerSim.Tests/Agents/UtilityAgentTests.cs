@@ -152,6 +152,23 @@ public class UtilityAgentTests
     }
 
     [Fact]
+    public void TelegraphedSwingsAreDodgedWithAJump()
+    {
+        // Opponent winds up (WarmUp) in range; we can't hit back yet -> hop away
+        // (2026-07-10 designer request: agents should use jumps to escape attacks).
+        SimWorld world = SettledWorld(TestGames.FlatArena(), new Vec2(-1.2f, -1.4f), new Vec2(0.8f, -1.4f));
+        // Face the opponent toward us (one tick of leftward input), then wind up.
+        world.Tick(stackalloc[] { InputFrame.Neutral, new InputFrame(-1f, 0f, false, 0) });
+        world.Tick(stackalloc[] { InputFrame.Neutral, new InputFrame(0f, 0f, false, InputFrame.ActionBit(0)) });
+        Assert.Equal(PlayerState.WarmUp, world.Players[1].State);
+        Assert.Equal(-1, world.Players[1].Facing);
+
+        var agent = new UtilityAgent(new Pcg32(1), Greedy);
+        InputFrame input = agent.GetInput(world, 0);
+        Assert.True(input.Jump, "agent did not hop out of the telegraphed swing");
+    }
+
+    [Fact]
     public void CommitmentWindowHoldsMovementAndEdgesActions()
     {
         // Interval 10, quiet world: horizontal persists between decisions; jump/attack
@@ -237,9 +254,9 @@ public class UtilityAgentTests
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 0)),
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 1)),
         });
-        // Re-pinned 2026-07-10 (2nd): MaxStunSeconds default 0.75 s (stun-cap
-        // experiment). Prior pins: 3417322836374644188 (2026-07-10, FlankBehavior),
-        // 15992591370472251803 (2026-07-09, initial utility instrument).
-        Assert.Equal(8169156236120396373UL, result.FinalHash);
+        // Re-pinned 2026-07-10 (3rd): MaxStunSeconds 0.75 → 0.25 s (second stun-cap
+        // sweep — chains survived 0.75 s). Prior pins: 8169156236120396373 (0.75 s),
+        // 3417322836374644188 (FlankBehavior), 15992591370472251803 (initial).
+        Assert.Equal(4239894947699402948UL, result.FinalHash);
     }
 }
