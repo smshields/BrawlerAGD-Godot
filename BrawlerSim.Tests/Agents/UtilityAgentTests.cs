@@ -254,9 +254,10 @@ public class UtilityAgentTests
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 0)),
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 1)),
         });
-        // Re-pinned 2026-07-10 (3rd): MaxStunSeconds 0.75 → 0.25 s (second stun-cap
-        // sweep — chains survived 0.75 s). Prior pins: 8169156236120396373 (0.75 s),
+        // Re-pinned 2026-07-10 (4th): platform-graph traversal (TraverseBehavior +
+        // directional recovery) — agents now chase across platforms. Prior pins:
+        // 4239894947699402948 (0.25 s stun cap), 8169156236120396373 (0.75 s cap),
         // 3417322836374644188 (FlankBehavior), 15992591370472251803 (initial).
-        Assert.Equal(4239894947699402948UL, result.FinalHash);
+        Assert.Equal(13063472053697347474UL, result.FinalHash);
     }
 }

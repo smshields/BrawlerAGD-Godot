@@ -56,9 +56,16 @@ public sealed class UtilityAgent : IInputSource
     private const float TelegraphDodgeJump = 2.0f;
     private const float TelegraphDodgeMove = 1.0f;
     private const float TelegraphDodgeMargin = 1.0f; // how far past their reach we react
+    // Traversal (2026-07-10 designer design: platform-graph next-hop table): when the
+    // opponent stands on a different platform, head for the launch edge of the next
+    // platform on the route and hop.
+    private const float TraverseMove = 2.0f;      // above Approach (1.5), below Flank (2.5)
+    private const float TraverseJump = 2.5f;
+    private const float TraverseLaunchSlack = 0.6f;
 
     private readonly Pcg32 _rng;
     private readonly AgentConfig _config;
+    private PlatformGraph? _graph; // per-match, built lazily on first GetInput
 
     // Committed decision, held until the window expires or a salient event fires.
     private float _heldHorizontal;
@@ -84,7 +91,8 @@ public sealed class UtilityAgent : IInputSource
     {
         SimPlayer self = world.Players[playerIndex];
         SimPlayer opponent = world.Players[1 - playerIndex];
-        UtilityContext ctx = BuildContext(world, self, opponent);
+        _graph ??= new PlatformGraph(world.Platforms, self, world.Config.Gravity);
+        UtilityContext ctx = BuildContext(world, self, opponent, _graph);
 
         if (ctx.OverPit)
         {
@@ -173,15 +181,17 @@ public sealed class UtilityAgent : IInputSource
 
     // ── Context ────────────────────────────────────────────────────────────────
 
-    private static UtilityContext BuildContext(SimWorld world, SimPlayer self, SimPlayer opponent)
+    private static UtilityContext BuildContext(SimWorld world, SimPlayer self, SimPlayer opponent, PlatformGraph graph)
     {
         bool overPit = OverPit(world, self, 0f);
         Vec2 recoverTarget = Vec2.Zero;
         bool targetSensed = false, reachable = false;
         if (overPit)
         {
-            targetSensed = TryClosestSensedPlatformPoint(world, self, out recoverTarget);
-            reachable = targetSensed && EstimateReachable(world, self, recoverTarget);
+            // Directional recovery (2026-07-10 traversal fix): among REACHABLE sensed
+            // platforms, prefer the one closest to the OPPONENT — mid-hop recovery
+            // continues the chase instead of pulling back to the platform just left.
+            targetSensed = TrySensedRecoverTarget(world, self, opponent, out recoverTarget, out reachable);
         }
 
         int facingToOpponent = opponent.Position.X >= self.Position.X ? 1 : -1;
@@ -236,13 +246,33 @@ public sealed class UtilityAgent : IInputSource
 
         (int flankDirection, bool flankSafe) = ComputeFlank(world, self, opponent);
 
+        // Traversal: next hop toward the opponent's platform via the per-match graph.
+        bool hasTraversal = false;
+        Vec2 traversalLaunch = Vec2.Zero;
+        int traversalDirection = 0;
+        bool traversalNeedsJump = false;
+        int myPlatform = graph.PlatformAt(self.Position);
+        int theirPlatform = graph.PlatformAt(opponent.Position);
+        if (myPlatform >= 0 && theirPlatform >= 0 && myPlatform != theirPlatform
+            && graph.TryRoute(myPlatform, theirPlatform, out int nextPlatform))
+        {
+            Aabb mine = graph.Platform(myPlatform);
+            Aabb next = graph.Platform(nextPlatform);
+            float launchX = next.Center.X >= mine.Center.X ? mine.Right : mine.Left;
+            hasTraversal = true;
+            traversalLaunch = new Vec2(launchX, mine.Top);
+            traversalDirection = next.Center.X >= mine.Center.X ? 1 : -1;
+            traversalNeedsJump = next.Top >= mine.Top - 0.5f;
+        }
+
         return new UtilityContext(
             world, self, opponent, overPit,
             Doomed: overPit && !reachable,
             recoverTarget, targetSensed && reachable,
             Distance: (opponent.Position - self.Position).Length(),
             canHit, anyCanHit, facingToOpponent, attackTarget, underThreat,
-            flankDirection, flankSafe);
+            flankDirection, flankSafe,
+            hasTraversal, traversalLaunch, traversalDirection, traversalNeedsJump);
     }
 
     /// <summary>
@@ -302,14 +332,20 @@ public sealed class UtilityAgent : IInputSource
         return true;
     }
 
-    private static bool TryClosestSensedPlatformPoint(SimWorld world, SimPlayer self, out Vec2 nearest)
+    /// <summary>Recovery target among sensed platforms: the REACHABLE one whose
+    /// closest point is nearest to the opponent (chase-preserving); when none is
+    /// reachable, the nearest-to-self sensed point (the Doomed check's subject).</summary>
+    private static bool TrySensedRecoverTarget(
+        SimWorld world, SimPlayer self, SimPlayer opponent, out Vec2 target, out bool reachable)
     {
         var sense = new Aabb(
             self.Position,
             new Vec2(world.Config.PlatformSenseHalfWidth, world.Config.PlatformSenseHalfHeight));
-        nearest = Vec2.Zero;
-        float best = float.PositiveInfinity;
+        target = Vec2.Zero;
+        reachable = false;
         bool found = false;
+        float bestReachable = float.PositiveInfinity, bestFallback = float.PositiveInfinity;
+        Vec2 fallback = Vec2.Zero;
         foreach (Aabb platform in world.Platforms)
         {
             if (!sense.Overlaps(platform))
@@ -317,13 +353,27 @@ public sealed class UtilityAgent : IInputSource
                 continue;
             }
             Vec2 point = platform.ClosestPoint(self.Position);
-            float distance = (point - self.Position).Length();
-            if (distance < best)
+            found = true;
+            float toSelf = (point - self.Position).Length();
+            if (toSelf < bestFallback)
             {
-                best = distance;
-                nearest = point;
-                found = true;
+                bestFallback = toSelf;
+                fallback = point;
             }
+            if (EstimateReachable(world, self, point))
+            {
+                float toOpponent = (point - opponent.Position).Length();
+                if (toOpponent < bestReachable)
+                {
+                    bestReachable = toOpponent;
+                    target = point;
+                    reachable = true;
+                }
+            }
+        }
+        if (!reachable)
+        {
+            target = fallback;
         }
         return found;
     }
@@ -376,6 +426,7 @@ public sealed class UtilityAgent : IInputSource
         new RecoverBehavior(),
         new DoomedBehavior(),
         new ApproachBehavior(),
+        new TraverseBehavior(),
         new FlankBehavior(),
         new AttackBehavior(),
         new EvadeBehavior(),
@@ -474,6 +525,32 @@ public sealed class UtilityAgent : IInputSource
             if (jumpAvailable && (targetAbove || runningOffEdge))
             {
                 scores.Jump[1] += ApproachJump;
+            }
+        }
+    }
+
+    /// <summary>Different platforms → follow the per-match next-hop route: walk to the
+    /// launch edge, then hop toward the next platform (no jump for drop-downs).
+    /// Designer's platform-graph design, 2026-07-10.</summary>
+    private sealed class TraverseBehavior : IUtilityBehavior
+    {
+        public void Contribute(in UtilityContext ctx, UtilityScores scores)
+        {
+            if (!ctx.HasTraversal || ctx.OverPit)
+            {
+                return;
+            }
+            float dx = ctx.TraversalLaunch.X - ctx.Self.Position.X;
+            if (MathF.Abs(dx) > TraverseLaunchSlack)
+            {
+                scores.Horizontal[dx > 0f ? 2 : 0] += TraverseMove;
+                return;
+            }
+            // At the launch edge: commit to the hop.
+            scores.Horizontal[ctx.TraversalDirection > 0 ? 2 : 0] += TraverseMove;
+            if (ctx.TraversalNeedsJump && (ctx.Self.IsGrounded || !ctx.Self.JumpsExhausted))
+            {
+                scores.Jump[1] += TraverseJump;
             }
         }
     }
@@ -635,7 +712,11 @@ public readonly record struct UtilityContext(
     Vec2 AttackTarget,
     bool UnderThreat,
     int FlankDirection,
-    bool FlankSafe);
+    bool FlankSafe,
+    bool HasTraversal,
+    Vec2 TraversalLaunch,
+    int TraversalDirection,
+    bool TraversalNeedsJump);
 
 /// <summary>
 /// The per-decision score sheet. Horizontal = {left, neutral, right}; Jump = {no, yes};
