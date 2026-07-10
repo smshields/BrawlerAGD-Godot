@@ -51,6 +51,8 @@ public static class RunStore
             Agent = config.Agent.Kind.ToString(),
             AgentRandomness = config.Agent.Randomness,
             AgentDecisionIntervalTicks = config.Agent.DecisionIntervalTicks,
+            MaxMatchSeconds = config.Match.MaxMatchSeconds,
+            DiversityWeight = config.DiversityWeight,
             GenerationsCompleted = engine.GenerationsCompleted,
             RngState = state,
             RngInc = inc,
@@ -98,6 +100,8 @@ public static class RunStore
                 DecisionIntervalTicks =
                     manifest.AgentDecisionIntervalTicks ?? Agents.AgentConfig.Default.DecisionIntervalTicks,
             },
+            Match = Sim.MatchConfig.Default with { MaxMatchSeconds = manifest.MaxMatchSeconds ?? 60f },
+            DiversityWeight = manifest.DiversityWeight ?? 0f,
         };
 
         var population = new List<GameGenome>(manifest.PopulationSize);
@@ -131,6 +135,8 @@ public static class RunStore
         public string? Agent { get; set; }
         public float? AgentRandomness { get; set; }
         public int? AgentDecisionIntervalTicks { get; set; }
+        public float? MaxMatchSeconds { get; set; }
+        public float? DiversityWeight { get; set; }
         public int GenerationsCompleted { get; set; }
         public ulong RngState { get; set; }
         public ulong RngInc { get; set; }

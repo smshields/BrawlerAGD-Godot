@@ -34,6 +34,15 @@ public sealed record EvolutionConfig
     /// <summary>The playtesting instrument (recorded in run.json — part of what a
     /// fitness score MEANS). Utility by default since 2026-07-09.</summary>
     public AgentConfig Agent { get; init; } = AgentConfig.Default;
+
+    /// <summary>
+    /// Optional fitness-sharing bonus (2026-07-09 noise study): when &gt; 0, each
+    /// individual's SELECTION score is fitness + weight × (mean normalized genome
+    /// distance to the rest of the population — see GenomeDistance). Recorded stats
+    /// stay raw fitness. 0 (default) = exact legacy selection. Distances are ~[0,1],
+    /// fitness ~±100, so weights of 10–50 are meaningful.
+    /// </summary>
+    public float DiversityWeight { get; init; }
 }
 
 /// <summary>One generation's summary, recorded in the run manifest.</summary>

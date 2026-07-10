@@ -27,7 +27,71 @@ internal static class Commands
         Console.WriteLine("  replay   --game <game.json> --trace <trace.json>");
         Console.WriteLine("  import   --unity-dir <GameX folder> --out <game.json>");
         Console.WriteLine("  bench    <unity game folder>");
+        Console.WriteLine("  noise    --games <g1.json,g2.json,...> [--reps 20] [--rounds 5] [--aggregate median|mean]");
+        Console.WriteLine("           [--max-seconds 60] [--target-seconds 45] [--seed 1] [--agent ...] — fitness noise per genome (CSV)");
+        Console.WriteLine("  popdiv   --run <run dir> — mean pairwise normalized genome distance of the population");
         return 1;
+    }
+
+    /// <summary>
+    /// Fitness-noise measurement (2026-07-09 noise study): evaluates each genome
+    /// `reps` times with independent seed streams under one evaluation config and
+    /// reports the spread. CSV: game, config, mean, std, min, max, drawRate.
+    /// </summary>
+    public static int Noise(string[] args)
+    {
+        var opts = ParseOptions(args);
+        string[] games = Require(opts, "games").Split(',');
+        int reps = GetInt(opts, "reps", 20);
+        int rounds = GetInt(opts, "rounds", 5);
+        bool median = opts.GetValueOrDefault("aggregate", "median") == "median";
+        float maxSeconds = GetFloat(opts, "max-seconds", 60f);
+        float targetSeconds = GetFloat(opts, "target-seconds", 45f);
+        ulong seed = (ulong)GetInt(opts, "seed", 1);
+        AgentConfig agent = ParseAgent(opts);
+        var match = MatchConfig.Default with { MaxMatchSeconds = maxSeconds };
+        var fitness = new StandardFitness(targetSeconds, maxSeconds);
+        string config = $"r{rounds}-{(median ? "med" : "mean")}-{maxSeconds:F0}s-t{targetSeconds:F0}";
+
+        Console.WriteLine("game,config,reps,mean,std,min,max,drawRate");
+        foreach (string path in games)
+        {
+            GameRecord record = GameGenomeJson.Load(path);
+            var scores = new double[reps];
+            int draws = 0, matches = 0;
+            for (int rep = 0; rep < reps; rep++)
+            {
+                var roundScores = new List<float>(rounds);
+                for (int round = 0; round < rounds; round++)
+                {
+                    ulong matchSeed = SeedMix.MatchSeed(seed, rep, 0, round);
+                    MatchResult result = MatchRunner.Run(record.Genome, AiSources(matchSeed, agent), match);
+                    roundScores.Add(fitness.Evaluate(result));
+                    matches++;
+                    if (result.LoserIndex < 0)
+                    {
+                        draws++;
+                    }
+                }
+                roundScores.Sort();
+                scores[rep] = median ? roundScores[rounds / 2] : roundScores.Average();
+            }
+            double mean = scores.Average();
+            double std = Math.Sqrt(scores.Select(v => (v - mean) * (v - mean)).Sum() / (reps - 1));
+            Console.WriteLine(FormattableString.Invariant(
+                $"{record.Name},{config},{reps},{mean:F2},{std:F2},{scores.Min():F2},{scores.Max():F2},{draws / (double)matches:F3}"));
+        }
+        return 0;
+    }
+
+    public static int PopDiv(string[] args)
+    {
+        var opts = ParseOptions(args);
+        (EvolutionEngine engine, EvolutionConfig config, _) = RunStore.Load(Require(opts, "run"));
+        float diversity = GenomeDistance.MeanPairwise(engine.Population, config.Generation);
+        Console.WriteLine(FormattableString.Invariant(
+            $"{opts["run"]},gen{engine.GenerationsCompleted},popdiv,{diversity:F4}"));
+        return 0;
     }
 
     public static int Evolve(string[] args)
@@ -54,6 +118,9 @@ internal static class Commands
                 DropoutRate = GetFloat(opts, "dropout", 0.5f),
                 MutationRate = GetFloat(opts, "mutation", 0.4f),
                 Agent = ParseAgent(opts),
+                TargetGameLengthSeconds = GetFloat(opts, "target-seconds", 45f),
+                Match = MatchConfig.Default with { MaxMatchSeconds = GetFloat(opts, "max-seconds", 60f) },
+                DiversityWeight = GetFloat(opts, "diversity-weight", 0f),
             };
             engine = new EvolutionEngine(config);
             history = new List<GenerationStats>();

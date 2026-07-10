@@ -82,9 +82,31 @@ public sealed class EvolutionEngine
         int generation = GenerationsCompleted;
         EvaluateAll(generation, _lastFitness);
 
-        // Stable ascending sort by fitness (ties keep index order → deterministic).
+        // Optional fitness sharing: selection ranks fitness + diversity bonus while
+        // _lastFitness (and all recorded stats) stay raw. Deterministic and
+        // order-independent — distances are computed from the fixed population.
+        float[] selectionScore = _lastFitness;
+        if (_config.DiversityWeight > 0f)
+        {
+            selectionScore = new float[_population.Length];
+            for (int i = 0; i < _population.Length; i++)
+            {
+                double distance = 0;
+                for (int j = 0; j < _population.Length; j++)
+                {
+                    if (j != i)
+                    {
+                        distance += GenomeDistance.Normalized(_population[i], _population[j], _config.Generation);
+                    }
+                }
+                selectionScore[i] = _lastFitness[i]
+                    + _config.DiversityWeight * (float)(distance / (_population.Length - 1));
+            }
+        }
+
+        // Stable ascending sort by selection score (ties keep index order → deterministic).
         int[] order = Enumerable.Range(0, _population.Length)
-            .OrderBy(i => _lastFitness[i])
+            .OrderBy(i => selectionScore[i])
             .ToArray();
 
         int cut = (int)(_population.Length * _config.DropoutRate);
@@ -100,7 +122,17 @@ public sealed class EvolutionEngine
                 survivorTotal += fitness;
             }
         }
-        int bestIndex = order[^1];
+        // The reported champion is best by RAW fitness — the diversity bonus shapes
+        // survival, never what we call the best game. >= keeps the legacy tie-break
+        // (stable ascending sort's last element = largest index among ties).
+        int bestIndex = 0;
+        for (int i = 1; i < _population.Length; i++)
+        {
+            if (_lastFitness[i] >= _lastFitness[bestIndex])
+            {
+                bestIndex = i;
+            }
+        }
         var stats = new GenerationStats(
             generation,
             _lastFitness[bestIndex],

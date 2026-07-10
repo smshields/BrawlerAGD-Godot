@@ -9,5 +9,7 @@ return args.Length == 0
         "replay" => Commands.Replay(args),
         "import" => Commands.Import(args),
         "bench" => Commands.BenchCommand(args),
+        "noise" => Commands.Noise(args),
+        "popdiv" => Commands.PopDiv(args),
         _ => Commands.Usage(),
     };
