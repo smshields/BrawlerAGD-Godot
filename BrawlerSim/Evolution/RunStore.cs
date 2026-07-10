@@ -53,6 +53,7 @@ public static class RunStore
             AgentDecisionIntervalTicks = config.Agent.DecisionIntervalTicks,
             MaxMatchSeconds = config.Match.MaxMatchSeconds,
             DiversityWeight = config.DiversityWeight,
+            FitnessCollisionScalar = config.FitnessCollisionScalar,
             GenerationsCompleted = engine.GenerationsCompleted,
             RngState = state,
             RngInc = inc,
@@ -87,6 +88,7 @@ public static class RunStore
             // Pre-v3 manifests recorded "standard-v2"; honoring the recorded name means
             // resumed runs keep the fitness that produced their history.
             FitnessName = manifest.FitnessName ?? "standard-v2",
+            FitnessCollisionScalar = manifest.FitnessCollisionScalar,
             Seed = manifest.Seed,
             PopulationSize = manifest.PopulationSize,
             DropoutRate = manifest.DropoutRate,
@@ -140,6 +142,7 @@ public static class RunStore
         public int? AgentDecisionIntervalTicks { get; set; }
         public float? MaxMatchSeconds { get; set; }
         public float? DiversityWeight { get; set; }
+        public float? FitnessCollisionScalar { get; set; }
         public int GenerationsCompleted { get; set; }
         public ulong RngState { get; set; }
         public ulong RngInc { get; set; }

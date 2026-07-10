@@ -34,10 +34,11 @@ public class StandardFitnessV3Tests
     {
         // 45 s → time 0. P1 stocks [100,50] (counted 150, no excess), P2 [400]
         // (counted 400, excess 100). damage (150+400)/10 = 55; farmPenalty −100;
-        // collisions 10+5 = 15; damageFairness −|150−400|/10 = −25; stockFairness
-        // 3−|2−3| = 2. Total = 0+55−100+15−25+2 = −53.
+        // collisions 0.5×(10+5) = 7.5 (scalar re-tuned to 0.5 on 2026-07-10);
+        // damageFairness −|150−400|/10 = −25; stockFairness 3−|2−3| = 2.
+        // Total = 0+55−100+7.5−25+2 = −60.5.
         MatchResult result = Result(45f, (new[] { 100f, 50f }, 10, 2), (new[] { 400f }, 5, 3));
-        Assert.Equal(-53f, Fitness.Evaluate(result), 0.001f);
+        Assert.Equal(-60.5f, Fitness.Evaluate(result), 0.001f);
     }
 
     [Fact]

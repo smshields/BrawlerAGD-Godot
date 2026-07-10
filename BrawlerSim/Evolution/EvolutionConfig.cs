@@ -29,6 +29,10 @@ public sealed record EvolutionConfig
     /// run.json; resuming honors the recorded name, so old runs keep standard-v2.</summary>
     public string FitnessName { get; init; } = Fitness.FitnessRegistry.DefaultName;
 
+    /// <summary>Per-hit reward weight for standard-v3 (recorded in run.json). Null =
+    /// the version's default.</summary>
+    public float? FitnessCollisionScalar { get; init; }
+
     /// <summary>Evaluation threads; 0 = one per processor. Results are identical at any value.</summary>
     public int Parallelism { get; init; }
 

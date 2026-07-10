@@ -95,23 +95,37 @@ public class GenomeDiversityTests
     }
 
     [Fact]
-    public void DiversityWeightPreservesMorePopulationSpread()
+    public void DiversityBonusKeepsDistantGenomesInTheSurvivorSet()
     {
-        // The property the knob exists for: after some generations, the shared-fitness
-        // population keeps a higher mean pairwise distance than the raw one (same seed).
-        var raw = new EvolutionConfig { Seed = 79, PopulationSize = 16, RoundsPerIndividual = 1 };
-        var shared = raw with { DiversityWeight = 60f };
-
-        var a = new EvolutionEngine(raw);
-        var b = new EvolutionEngine(shared);
-        for (int gen = 0; gen < 12; gen++)
+        // Deterministic mechanism test (a trajectory-comparison version was retired
+        // 2026-07-10: at test scale it measured evaluation noise, not the knob). A
+        // population of 12 mechanical clones + 4 genomes at design-space corners, with
+        // a weight that swamps any possible fitness spread: the 4 distant genomes MUST
+        // survive selection, clone luck notwithstanding.
+        var population = new List<GameGenome>();
+        for (int i = 0; i < 12; i++)
         {
-            a.Step();
-            b.Step();
+            population.Add(Arena());
         }
-        float rawDiv = GenomeDistance.MeanPairwise(a.Population, GenerationConfig.Default);
-        float sharedDiv = GenomeDistance.MeanPairwise(b.Population, GenerationConfig.Default);
-        Assert.True(sharedDiv > rawDiv,
-            $"diversity bonus did not preserve spread: raw {rawDiv:F4} vs shared {sharedDiv:F4}");
+        var corners = new[]
+        {
+            Arena((CharacterParams.MaxGroundSpeed, 10f), (CharacterParams.Mass, 2.5f)),
+            Arena((CharacterParams.MaxGroundSpeed, 2f), (CharacterParams.Mass, 0.5f)),
+            Arena((CharacterParams.GroundJumpForce, 15f), (CharacterParams.Drag, 6f)),
+            Arena((CharacterParams.GroundJumpForce, 1f), (CharacterParams.Drag, 1f)),
+        };
+        population.AddRange(corners);
+
+        var config = new EvolutionConfig
+        {
+            Seed = 82, PopulationSize = 16, RoundsPerIndividual = 1, DiversityWeight = 1e6f,
+        };
+        var engine = new EvolutionEngine(config, population, new Pcg32(82).Snapshot(), 0);
+        engine.Step(); // replaces the bottom half; survivors keep their object identity
+
+        foreach (GameGenome corner in corners)
+        {
+            Assert.Contains(engine.Population, p => ReferenceEquals(p, corner));
+        }
     }
 }

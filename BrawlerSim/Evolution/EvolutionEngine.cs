@@ -38,7 +38,8 @@ public sealed class EvolutionEngine
     {
         _config = config;
         _fitness = fitness ?? FitnessRegistry.Create(
-            config.FitnessName, config.TargetGameLengthSeconds, config.Match.MaxMatchSeconds);
+            config.FitnessName, config.TargetGameLengthSeconds, config.Match.MaxMatchSeconds,
+            config.FitnessCollisionScalar);
         _rng = new Pcg32(config.Seed);
         _population = new GameGenome[config.PopulationSize];
         _lastFitness = new float[config.PopulationSize];
@@ -63,7 +64,8 @@ public sealed class EvolutionEngine
         }
         _config = config;
         _fitness = fitness ?? FitnessRegistry.Create(
-            config.FitnessName, config.TargetGameLengthSeconds, config.Match.MaxMatchSeconds);
+            config.FitnessName, config.TargetGameLengthSeconds, config.Match.MaxMatchSeconds,
+            config.FitnessCollisionScalar);
         _rng = Pcg32.Resume(rngState.State, rngState.Inc);
         _population = population.ToArray();
         _lastFitness = new float[config.PopulationSize];

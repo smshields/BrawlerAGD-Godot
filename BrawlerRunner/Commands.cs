@@ -52,8 +52,12 @@ internal static class Commands
         AgentConfig agent = ParseAgent(opts);
         var match = MatchConfig.Default with { MaxMatchSeconds = maxSeconds };
         IFitnessFunction fitness = FitnessRegistry.Create(
-            opts.GetValueOrDefault("fitness", FitnessRegistry.DefaultName), targetSeconds, maxSeconds);
-        string config = $"r{rounds}-{(median ? "med" : "mean")}-{maxSeconds:F0}s-t{targetSeconds:F0}-{fitness.Name}";
+            opts.GetValueOrDefault("fitness", FitnessRegistry.DefaultName), targetSeconds, maxSeconds,
+            opts.ContainsKey("collision-scalar") ? GetFloat(opts, "collision-scalar", 0f) : null);
+        string config = $"r{rounds}-{(median ? "med" : "mean")}-{maxSeconds:F0}s-t{targetSeconds:F0}-{fitness.Name}"
+            + (opts.ContainsKey("collision-scalar")
+                ? FormattableString.Invariant($"-cs{GetFloat(opts, "collision-scalar", 0f):0.##}")
+                : "");
 
         Console.WriteLine("game,config,reps,mean,std,min,max,drawRate");
         foreach (string path in games)
@@ -124,6 +128,8 @@ internal static class Commands
                 Match = MatchConfig.Default with { MaxMatchSeconds = GetFloat(opts, "max-seconds", 60f) },
                 DiversityWeight = GetFloat(opts, "diversity-weight", 0f),
                 FitnessName = opts.GetValueOrDefault("fitness", FitnessRegistry.DefaultName),
+                FitnessCollisionScalar = opts.ContainsKey("collision-scalar")
+                    ? GetFloat(opts, "collision-scalar", 0f) : null,
             };
             engine = new EvolutionEngine(config);
             history = new List<GenerationStats>();
@@ -165,7 +171,8 @@ internal static class Commands
         var matchConfig = MatchConfig.Default with { MaxMatchSeconds = maxSeconds };
         IFitnessFunction fitness = FitnessRegistry.Create(
             opts.GetValueOrDefault("fitness", FitnessRegistry.DefaultName),
-            GetFloat(opts, "target-seconds", 45f), maxSeconds);
+            GetFloat(opts, "target-seconds", 45f), maxSeconds,
+            opts.ContainsKey("collision-scalar") ? GetFloat(opts, "collision-scalar", 0f) : null);
         bool breakdown = opts.ContainsKey("breakdown");
 
         Console.WriteLine(

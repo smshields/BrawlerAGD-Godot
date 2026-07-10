@@ -29,6 +29,17 @@ public sealed class StandardFitnessV3 : IFitnessFunction
     public const float DefaultStockDamageCap = 600f;
     public const float DefaultPunishSlope = 1f;
 
+    /// <summary>
+    /// Per-hit reward weight (2026-07-10 designer tuning, same-day pre-gate amendment
+    /// of v3). At v2's implicit 1.0, a 191-hit farmed stock recouped 65% of its −300
+    /// farm penalty through the collisions term, and healthy matches double-counted
+    /// hits (collisions ≈ 1.5× the damage term, since a hit averages ~6.5 damage).
+    /// 0.5 is the measured "even" point: in healthy champion rounds collisions ≈ the
+    /// damage term (29≈34, 46≈52, 37≈38 across the tuning battery), and farm recoup
+    /// falls to 32% (farmed GameC round: −148.6 → −245.6 net).
+    /// </summary>
+    public const float DefaultCollisionScalar = 0.5f;
+
     private readonly ComposedFitness _composed;
 
     public StandardFitnessV3(
@@ -37,7 +48,8 @@ public sealed class StandardFitnessV3 : IFitnessFunction
         float damageScalar = 10f,
         float punishStartDamage = DefaultPunishStartDamage,
         float stockDamageCap = DefaultStockDamageCap,
-        float punishSlope = DefaultPunishSlope)
+        float punishSlope = DefaultPunishSlope,
+        float collisionScalar = DefaultCollisionScalar)
     {
         _composed = new ComposedFitness("standard-v3", new ComposedFitness.Term[]
         {
@@ -51,7 +63,7 @@ public sealed class StandardFitnessV3 : IFitnessFunction
                 -punishSlope * (Excess(r.Players[0], punishStartDamage, stockDamageCap)
                               + Excess(r.Players[1], punishStartDamage, stockDamageCap))),
             new("collisions", r =>
-                r.Players[0].TotalHitsReceived + r.Players[1].TotalHitsReceived),
+                collisionScalar * (r.Players[0].TotalHitsReceived + r.Players[1].TotalHitsReceived)),
             new("damageFairness", r =>
                 -DetMath.Abs(CountedDamage(r.Players[0], stockDamageCap)
                            - CountedDamage(r.Players[1], stockDamageCap)) / damageScalar),

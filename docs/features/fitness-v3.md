@@ -44,10 +44,37 @@ matches.
   19→186; under v3, 90 s ≈ 60 s noise (std 33 vs 30) and draw rates DROP (GameF
   47%→19%, utility champion 4%→0%) — stalling no longer digs a deeper hole, and
   matches that need extra time finish.
-- Known interaction, watch in future runs: the collisions term (+1/hit, v2-verbatim)
-  partially offsets the farm penalty (+194 for a 191-hit farm). Net remains decisively
-  negative; if farms ever become competitive under evolution, cap per-stock hit
-  rewards in a v4.
+- ~~Known interaction, watch in future runs: the collisions term (+1/hit, v2-verbatim)
+  partially offsets the farm penalty (+194 for a 191-hit farm).~~ **Closed by the
+  2026-07-10 collision-scalar amendment below.**
+
+## Amendment 2026-07-10: tunable collision scalar (designer-directed)
+
+Same-day, pre-designer-gate amendment of v3 (no published results depended on the
+1.0 default; the pre-amendment sanity runs remain on disk as `runs/v3-r9-*` for
+comparison). New `collisionScalar` on `StandardFitnessV3` (+ `--collision-scalar` on
+evolve/evaluate/noise, recorded in run.json — a run stays self-describing).
+
+**Tuned default: 0.5**, picked from breakdown data, not taste:
+- At 1.0, hits were double-counted — a hit averages ~6.5 damage, so it earned ~0.65
+  via the damage term plus 1.0 via collisions — and a 191-hit farmed stock recouped
+  65% of its −300 farm penalty.
+- At 0.5, healthy champion rounds show collisions ≈ damage term (29≈34, 46≈52,
+  37≈38 — the "even" point), and farm recoup drops to 32% (farmed GameC round net:
+  −148.6 → −245.6).
+
+Measured consequences (charts: runs/media/charts/v3-collision-scalar-trajectories.png):
+- Noise: neutral-to-better at 9 rounds (champion std 11.0 → 7.2 — hit counts are a
+  noisy quantity and now weigh half). Study-game stds within ±1.
+- Evolution (2 seeds × 300 gens, r9): same trajectory shape; curves sit ~15 pts lower
+  purely from the reward re-denomination. Diversity unchanged (popdiv 0.054/0.062).
+  Champions evolved under 0.5 score 60.0/113.3 (median, fresh seed) under the tuned
+  measure vs 48.6/43.5 for champions evolved under 1.0 — the tuned fitness selects
+  what it now values. The seed-402 champion (clip:
+  runs/media/v3cs05_402_best.mp4) is the strongest game any config has produced:
+  425/565 mutual damage across all stocks, zero farm penalty, 50 s.
+- Scores across scalar values are NOT comparable (the denomination changed);
+  cross-config comparisons must re-evaluate under one scalar.
 
 ## Evolution sanity under v3 (pop 100 · 9 rounds · median · 300 gens)
 
