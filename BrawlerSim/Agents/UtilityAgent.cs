@@ -44,6 +44,12 @@ public sealed class UtilityAgent : IInputSource
     private const float ThreatDodgeJump = 1.5f;
     private const float SpacingMove = 1.0f;       // too close but can't hit → make room
     private const float SpacingDistance = 1.5f;
+    // Flanking (2026-07-10 designer-reported stall): a platform between two vertically
+    // separated characters blocks the direct route — route around its edge.
+    private const float FlankMove = 2.5f;         // must beat Approach's max 1.5
+    private const float FlankUnsafeScale = 0.5f;  // no ground beyond either edge → tepid
+    private const float VerticalBlockThreshold = 1.5f;
+    private const float FlankEdgeProbe = 0.75f;   // how far beyond the edge safety looks
 
     private readonly Pcg32 _rng;
     private readonly AgentConfig _config;
@@ -222,12 +228,58 @@ public sealed class UtilityAgent : IInputSource
             underThreat = theirHitbox.Overlaps(self.Body);
         }
 
+        (int flankDirection, bool flankSafe) = ComputeFlank(world, self, opponent);
+
         return new UtilityContext(
             world, self, opponent, overPit,
             Doomed: overPit && !reachable,
             recoverTarget, targetSensed && reachable,
             Distance: (opponent.Position - self.Position).Length(),
-            canHit, anyCanHit, facingToOpponent, attackTarget, underThreat);
+            canHit, anyCanHit, facingToOpponent, attackTarget, underThreat,
+            flankDirection, flankSafe);
+    }
+
+    /// <summary>
+    /// Flank detection (2026-07-10, designer-reported stall): when the opponent is
+    /// meaningfully above/below AND a platform's surface lies between the two heights
+    /// across the horizontal span between them, the direct route is blocked — the
+    /// approach target's X flips sign around the opponent and the character paces in
+    /// place. Returns the horizontal direction toward the blocking platform's edge,
+    /// preferring an edge with ground beyond it (self-preservation: flanking must not
+    /// become a self-destruct); 0 when unblocked.
+    /// </summary>
+    private static (int Direction, bool Safe) ComputeFlank(SimWorld world, SimPlayer self, SimPlayer opponent)
+    {
+        float dy = opponent.Position.Y - self.Position.Y;
+        if (MathF.Abs(dy) < VerticalBlockThreshold)
+        {
+            return (0, false);
+        }
+        float lowY = MathF.Min(self.Position.Y, opponent.Position.Y);
+        float highY = MathF.Max(self.Position.Y, opponent.Position.Y);
+        float leftX = MathF.Min(self.Position.X, opponent.Position.X);
+        float rightX = MathF.Max(self.Position.X, opponent.Position.X);
+
+        foreach (Aabb platform in world.Platforms) // fixed order → deterministic pick
+        {
+            if (platform.Top <= lowY || platform.Top >= highY
+                || platform.Right < leftX || platform.Left > rightX)
+            {
+                continue;
+            }
+            // Blocked by this platform. Probe just beyond each edge for ground below.
+            bool leftSafe = !OverPit(world, self, platform.Left - FlankEdgeProbe - self.Position.X);
+            bool rightSafe = !OverPit(world, self, platform.Right + FlankEdgeProbe - self.Position.X);
+            float leftDist = MathF.Abs(self.Position.X - platform.Left);
+            float rightDist = MathF.Abs(platform.Right - self.Position.X);
+
+            if (leftSafe != rightSafe)
+            {
+                return (leftSafe ? -1 : 1, true); // the safe edge wins regardless of distance
+            }
+            return (leftDist <= rightDist ? -1 : 1, leftSafe); // nearest edge; Safe=false halves the urge
+        }
+        return (0, false);
     }
 
     /// <summary>No platform anywhere below the sample point (same test as the DT used).</summary>
@@ -318,6 +370,7 @@ public sealed class UtilityAgent : IInputSource
         new RecoverBehavior(),
         new DoomedBehavior(),
         new ApproachBehavior(),
+        new FlankBehavior(),
         new AttackBehavior(),
         new EvadeBehavior(),
         new ThreatDodgeBehavior(),
@@ -405,14 +458,32 @@ public sealed class UtilityAgent : IInputSource
             }
 
             bool jumpAvailable = ctx.Self.IsGrounded || !ctx.Self.JumpsExhausted;
-            bool targetAbove =
-                ctx.AttackTarget.Y - ctx.Self.Position.Y > OpponentAboveThreshold;
+            // While a platform blocks the vertical route, jumping at the target just
+            // bonks the underside — the flank behavior owns the route instead.
+            bool targetAbove = ctx.FlankDirection == 0
+                && ctx.AttackTarget.Y - ctx.Self.Position.Y > OpponentAboveThreshold;
             bool runningOffEdge = ctx.Self.IsGrounded
                 && OverPit(ctx.World, ctx.Self, EdgeProbeDistance * ctx.FacingToOpponent);
             if (jumpAvailable && (targetAbove || runningOffEdge))
             {
                 scores.Jump[1] += ApproachJump;
             }
+        }
+    }
+
+    /// <summary>Vertical separation blocked by a platform → head for its edge (the
+    /// safe one when only one has ground beyond it) instead of pacing under/over the
+    /// opponent. Designer-reported stall, 2026-07-10.</summary>
+    private sealed class FlankBehavior : IUtilityBehavior
+    {
+        public void Contribute(in UtilityContext ctx, UtilityScores scores)
+        {
+            if (ctx.FlankDirection == 0 || ctx.OverPit)
+            {
+                return;
+            }
+            float weight = FlankMove * (ctx.FlankSafe ? 1f : FlankUnsafeScale);
+            scores.Horizontal[ctx.FlankDirection > 0 ? 2 : 0] += weight;
         }
     }
 
@@ -513,7 +584,9 @@ public readonly record struct UtilityContext(
     bool AnyCanHit,
     int FacingToOpponent,
     Vec2 AttackTarget,
-    bool UnderThreat);
+    bool UnderThreat,
+    int FlankDirection,
+    bool FlankSafe);
 
 /// <summary>
 /// The per-decision score sheet. Horizontal = {left, neutral, right}; Jump = {no, yes};

@@ -216,7 +216,9 @@ public class UtilityAgentTests
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 0)),
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 1)),
         });
-        // Pinned 2026-07-09: initial utility-agent instrument (v1 weights).
-        Assert.Equal(15992591370472251803UL, result.FinalHash);
+        // Re-pinned 2026-07-10: FlankBehavior added (designer-reported vertical-stall
+        // fix — characters route around platforms that block the vertical path).
+        // Previous pin: 15992591370472251803 (2026-07-09, initial utility instrument).
+        Assert.Equal(3417322836374644188UL, result.FinalHash);
     }
 }

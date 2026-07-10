@@ -127,9 +127,21 @@ These weights are v1 calibration targets — the comparison study is the feedbac
   Baseline, Recover (reachability-gated), Doomed, Approach (attack-position seeking),
   Attack (per-distinct-move), Evade (damage-scaled), ThreatDodge (with trade
   commitment), Spacing. Weights are documented constants in `UtilityAgent`.
-- 12 new tests + utility golden hash 15992591370472251803 (GameC, seeds 20260709/0-1,
-  macOS ARM64); 127 tests green; engine determinism suite passes under the new
-  default.
+- 12 new tests + utility golden hash (GameC, seeds 20260709/0-1, macOS ARM64);
+  127 tests green at ship; engine determinism suite passes under the new default.
+
+### Behavior log (post-ship instrument changes — each re-pins the utility golden)
+
+- **2026-07-10 FlankBehavior** (designer-reported stall): characters separated
+  vertically by a platform paced back and forth — the approach target's X flips sign
+  around the opponent while the route is blocked, and the below character wasted jumps
+  on the platform's underside. Now: when |Δy| > 1.5 and a platform surface lies
+  between the two heights across their horizontal span, the agent heads for that
+  platform's edge (weight 2.5 > approach's 1.5), preferring an edge with ground
+  beyond it (probe 0.75 past the edge; an unsafe-only flank runs at half weight —
+  the designer's stay-recoverable constraint), and approach's jump-at-target is
+  suppressed while blocked. Regression tests: UtilityAgentFlankTests (stall
+  reproduced pre-fix). Golden re-pinned 3417322836374644188.
 - Comparison study delivered: docs/reports/2026-07-09-utility-agent-comparison.md
   (+ battery CSV, runs/compare-*, clips in runs/media/).
 - DEVIATIONS.md #18. DT archival deferred until designer confirmation.
