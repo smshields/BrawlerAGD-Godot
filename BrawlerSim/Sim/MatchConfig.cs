@@ -41,6 +41,17 @@ public sealed record MatchConfig
     public int InvincibilityTicks { get; init; } = 6;
 
     /// <summary>
+    /// Upper bound on a single hit's stun (2026-07-10, docs/features/second-move.md):
+    /// stun scales with victim damage, so uncapped it grows into multi-second locks
+    /// that high-scoring genomes exploit. PositiveInfinity = uncapped (Unity parity);
+    /// the shipped default comes from the stun-cap experiment in that doc:
+    /// 0.75 s (2026-07-10) — bounds single-hit locks while stun chains keep the
+    /// mechanic alive; uncapped runs let a 46%-stunned near-single-move exploiter top
+    /// the fitness table, 0.75 s produced the healthiest champions across seeds.
+    /// </summary>
+    public float MaxStunSeconds { get; init; } = 0.75f;
+
+    /// <summary>
     /// Half extents of the AI's platform-sensing box (Unity: 20×15 BoxCollider2D on the
     /// OverlapDetector child, used by GetClosestPlatformDirection).
     /// </summary>

@@ -68,7 +68,7 @@ public static class GameGenomeOps
                 buttonMoves[b] = rng.NextInt(character.Moves.Count);
             }
         }
-        return buttonMoves;
+        return CharacterGenome.EnsureButtonCoverage(buttonMoves, character.Moves.Count);
     }
 
     /// <summary>Crossover followed by the single all-or-none mutation roll.</summary>
@@ -108,6 +108,7 @@ public static class GameGenomeOps
                 buttonMoves[btn] = rng.NextInt(2) == 0 ? a.ButtonMoves[btn] : b.ButtonMoves[btn];
             }
         }
-        return new CharacterGenome(a.Name, a.Stocks, spriteIndex, childParams, moves, buttonMoves);
+        return new CharacterGenome(a.Name, a.Stocks, spriteIndex, childParams, moves,
+            CharacterGenome.EnsureButtonCoverage(buttonMoves, a.Moves.Count));
     }
 }

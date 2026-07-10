@@ -23,7 +23,8 @@ public class GameGenomeOpsTests
         Assert.Equal(2, a.Characters.Count);
         Assert.Equal("Player 1", a.Characters[0].Name);
         Assert.Equal(3, a.Characters[0].Stocks);
-        Assert.Single(a.Characters[0].Moves);
+        // Two moves per character since 2026-07-10 (docs/features/second-move.md).
+        Assert.Equal(2, a.Characters[0].Moves.Count);
     }
 
     [Fact]

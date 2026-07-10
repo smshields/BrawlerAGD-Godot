@@ -85,7 +85,47 @@ public sealed class CharacterGenome
                 buttonMoves[b] = rng.NextInt(config.MovesPerCharacter);
             }
         }
-        return new CharacterGenome(name, config.Stocks, spriteIndex, @params, moves, buttonMoves);
+        return new CharacterGenome(name, config.Stocks, spriteIndex, @params, moves,
+            EnsureButtonCoverage(buttonMoves, moves.Count));
+    }
+
+    /// <summary>
+    /// Coverage guarantee (2026-07-10, docs/features/second-move.md): every move must
+    /// be reachable from at least one button. Each unmapped move (ascending) takes the
+    /// FIRST button whose move is mapped elsewhere too (a duplicate) — by pigeonhole
+    /// such a button exists whenever moves ≤ buttons, and overwriting it can never
+    /// unmap anything. Deterministic and RNG-free; a no-op for covering mappings.
+    /// </summary>
+    public static int[] EnsureButtonCoverage(int[] buttonMoves, int moveCount)
+    {
+        if (moveCount > buttonMoves.Length)
+        {
+            throw new ArgumentException(
+                $"{moveCount} moves cannot all be mapped onto {buttonMoves.Length} buttons.");
+        }
+        Span<int> uses = stackalloc int[moveCount];
+        foreach (int assigned in buttonMoves)
+        {
+            uses[assigned]++;
+        }
+        for (int m = 0; m < moveCount; m++)
+        {
+            if (uses[m] > 0)
+            {
+                continue;
+            }
+            for (int b = 0; b < buttonMoves.Length; b++)
+            {
+                if (uses[buttonMoves[b]] > 1)
+                {
+                    uses[buttonMoves[b]]--;
+                    buttonMoves[b] = m;
+                    uses[m] = 1;
+                    break;
+                }
+            }
+        }
+        return buttonMoves;
     }
 }
 

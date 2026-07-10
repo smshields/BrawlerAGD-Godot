@@ -52,6 +52,8 @@ public static class RunStore
             AgentRandomness = config.Agent.Randomness,
             AgentDecisionIntervalTicks = config.Agent.DecisionIntervalTicks,
             MaxMatchSeconds = config.Match.MaxMatchSeconds,
+            MaxStunSeconds = float.IsPositiveInfinity(config.Match.MaxStunSeconds)
+                ? null : config.Match.MaxStunSeconds,
             DiversityWeight = config.DiversityWeight,
             FitnessCollisionScalar = config.FitnessCollisionScalar,
             GenerationsCompleted = engine.GenerationsCompleted,
@@ -105,7 +107,11 @@ public static class RunStore
                 DecisionIntervalTicks =
                     manifest.AgentDecisionIntervalTicks ?? Agents.AgentConfig.Default.DecisionIntervalTicks,
             },
-            Match = Sim.MatchConfig.Default with { MaxMatchSeconds = manifest.MaxMatchSeconds ?? 60f },
+            Match = Sim.MatchConfig.Default with
+            {
+                MaxMatchSeconds = manifest.MaxMatchSeconds ?? 60f,
+                MaxStunSeconds = manifest.MaxStunSeconds ?? float.PositiveInfinity,
+            },
             DiversityWeight = manifest.DiversityWeight ?? 0f,
         };
 
@@ -141,6 +147,7 @@ public static class RunStore
         public float? AgentRandomness { get; set; }
         public int? AgentDecisionIntervalTicks { get; set; }
         public float? MaxMatchSeconds { get; set; }
+        public float? MaxStunSeconds { get; set; }
         public float? DiversityWeight { get; set; }
         public float? FitnessCollisionScalar { get; set; }
         public int GenerationsCompleted { get; set; }

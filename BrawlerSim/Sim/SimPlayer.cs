@@ -78,12 +78,19 @@ public sealed class SimPlayer
     /// stock's running damage is `Damage`; BuildResult appends it non-mutatingly.</summary>
     public readonly List<float> CompletedStockDamage = new();
 
+    /// <summary>How many times each move was started (2026-07-10, second-move stats).</summary>
+    public readonly int[] MoveUses;
+
+    /// <summary>Total ticks spent in Stun (2026-07-10, stun-cap research stat).</summary>
+    public int StunTicks;
+
     public SimPlayer(int index, CharacterGenome genome, Vec2 spawn, MatchConfig config)
     {
         Index = index;
         Name = genome.Name;
         _moves = genome.Moves.Select(m => new SimMove(m, config)).ToArray();
         _buttonMoves = genome.ButtonMoves.ToArray();
+        MoveUses = new int[_moves.Length];
 
         ParamSet p = genome.Params;
         MaxGroundSpeed = p.Get(CharacterParams.MaxGroundSpeed);
@@ -126,6 +133,7 @@ public sealed class SimPlayer
         switch (State)
         {
             case PlayerState.Stun:
+                StunTicks++;
                 if (--PhaseTicksLeft <= 0) ResolveNeutralState();
                 return; // no control in stun
 
@@ -227,6 +235,7 @@ public sealed class SimPlayer
     private void StartMove(int moveIndex)
     {
         CurrentMoveIndex = moveIndex;
+        MoveUses[moveIndex]++;
         State = PlayerState.WarmUp;
         PhaseTicksLeft = Move.WarmUpTicks;
     }

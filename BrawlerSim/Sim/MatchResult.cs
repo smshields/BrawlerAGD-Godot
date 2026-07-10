@@ -11,7 +11,9 @@ public sealed record PlayerStats(
     int TotalHitsReceived,
     int RemainingStocks,
     int RecoveryTicks,
-    IReadOnlyList<float>? DamagePerStock = null);
+    IReadOnlyList<float>? DamagePerStock = null,
+    IReadOnlyList<int>? MoveUses = null,
+    int StunTicks = 0);
 
 /// <summary>
 /// Outcome of one simulated match. LoserIndex is -1 for a timeout draw. FinalHash

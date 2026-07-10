@@ -50,7 +50,11 @@ internal static class Commands
         float targetSeconds = GetFloat(opts, "target-seconds", 45f);
         ulong seed = (ulong)GetInt(opts, "seed", 1);
         AgentConfig agent = ParseAgent(opts);
-        var match = MatchConfig.Default with { MaxMatchSeconds = maxSeconds };
+        var match = MatchConfig.Default with
+        {
+            MaxMatchSeconds = maxSeconds,
+            MaxStunSeconds = GetFloat(opts, "max-stun", float.PositiveInfinity),
+        };
         IFitnessFunction fitness = FitnessRegistry.Create(
             opts.GetValueOrDefault("fitness", FitnessRegistry.DefaultName), targetSeconds, maxSeconds,
             opts.ContainsKey("collision-scalar") ? GetFloat(opts, "collision-scalar", 0f) : null);
@@ -125,7 +129,11 @@ internal static class Commands
                 MutationRate = GetFloat(opts, "mutation", 0.4f),
                 Agent = ParseAgent(opts),
                 TargetGameLengthSeconds = GetFloat(opts, "target-seconds", 45f),
-                Match = MatchConfig.Default with { MaxMatchSeconds = GetFloat(opts, "max-seconds", 60f) },
+                Match = MatchConfig.Default with
+                {
+                    MaxMatchSeconds = GetFloat(opts, "max-seconds", 60f),
+                    MaxStunSeconds = GetFloat(opts, "max-stun", float.PositiveInfinity),
+                },
                 DiversityWeight = GetFloat(opts, "diversity-weight", 0f),
                 FitnessName = opts.GetValueOrDefault("fitness", FitnessRegistry.DefaultName),
                 FitnessCollisionScalar = opts.ContainsKey("collision-scalar")
@@ -168,7 +176,11 @@ internal static class Commands
         int rounds = GetInt(opts, "rounds", 5);
         AgentConfig agent = ParseAgent(opts);
         float maxSeconds = GetFloat(opts, "max-seconds", 60f);
-        var matchConfig = MatchConfig.Default with { MaxMatchSeconds = maxSeconds };
+        var matchConfig = MatchConfig.Default with
+        {
+            MaxMatchSeconds = maxSeconds,
+            MaxStunSeconds = GetFloat(opts, "max-stun", float.PositiveInfinity),
+        };
         IFitnessFunction fitness = FitnessRegistry.Create(
             opts.GetValueOrDefault("fitness", FitnessRegistry.DefaultName),
             GetFloat(opts, "target-seconds", 45f), maxSeconds,
@@ -190,7 +202,9 @@ internal static class Commands
                 $"loser {(result.LoserIndex < 0 ? "draw" : result.LoserIndex.ToString())}  " +
                 $"dmg {result.Players[0].TotalDamageTaken:F0}/{result.Players[1].TotalDamageTaken:F0}  " +
                 $"hits {result.Players[0].TotalHitsReceived}/{result.Players[1].TotalHitsReceived}  " +
-                $"stocks {result.Players[0].RemainingStocks}/{result.Players[1].RemainingStocks}");
+                $"stocks {result.Players[0].RemainingStocks}/{result.Players[1].RemainingStocks}  " +
+                $"stun {100f * result.Players[0].StunTicks / result.Ticks:F0}%/{100f * result.Players[1].StunTicks / result.Ticks:F0}%  " +
+                $"uses {string.Join("+", result.Players[0].MoveUses ?? Array.Empty<int>())}/{string.Join("+", result.Players[1].MoveUses ?? Array.Empty<int>())}");
             if (breakdown && fitness is ComposedFitness composed)
             {
                 Console.WriteLine("           " + string.Join("  ",

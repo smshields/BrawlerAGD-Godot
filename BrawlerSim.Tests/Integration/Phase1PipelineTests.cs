@@ -70,10 +70,10 @@ public class Phase1PipelineTests
     [Fact]
     public void PopulationFingerprintMatchesGoldenValue()
     {
-        // Re-pinned 2026-07-09: multi-move controls changed the SERIALIZED form only
-        // (formatVersion 2 + buttonMoves in game.json). The underlying RNG streams are
-        // unchanged — proven by diffing every generated param/sprite/stage value of this
-        // exact pipeline against a pre-feature build (identical output, 200 genomes).
-        Assert.Equal(13551893661434631362UL, RunPipeline(20260707));
+        // Re-pinned 2026-07-10: MovesPerCharacter default 1 → 2 (second-move feature)
+        // — generation now draws RNG for the second move and the button genes, a REAL
+        // design-space change, unlike the 2026-07-09 format-only re-pin
+        // (13551893661434631362; original single-move pin 9300943650238635838).
+        Assert.Equal(5432710911100783110UL, RunPipeline(20260707));
     }
 }

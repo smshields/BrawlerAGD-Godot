@@ -1,3 +1,4 @@
+using System.Linq;
 using Godot;
 using BrawlerSim.Agents;
 using BrawlerSim.Determinism;
@@ -54,7 +55,8 @@ public partial class ArenaView : Node2D
             var view = new PlayerView();
             AddChild(view);
             var character = MatchSession.Game.Genome.Characters[i];
-            view.Setup(_world.Players[i], character.SpriteIndex, character.Moves[0].SpriteIndex, Ppu);
+            view.Setup(_world.Players[i], character.SpriteIndex,
+                character.Moves.Select(m => m.SpriteIndex).ToArray(), Ppu);
             view.Sync();
             _views[i] = view;
         }

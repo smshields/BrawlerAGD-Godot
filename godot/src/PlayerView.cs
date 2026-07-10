@@ -12,15 +12,21 @@ namespace BrawlerGodot;
 public partial class PlayerView : Node2D
 {
     private SimPlayer _player = null!;
+    private Texture2D[] _moveTextures = System.Array.Empty<Texture2D>();
     private Sprite2D _body = null!;
     private Sprite2D _move = null!;
     private Label _name = null!;
     private float _ppu;
 
-    public void Setup(SimPlayer player, int spriteIndex, int moveSpriteIndex, float ppu)
+    public void Setup(SimPlayer player, int spriteIndex, int[] moveSpriteIndices, float ppu)
     {
         _player = player;
         _ppu = ppu;
+        _moveTextures = new Texture2D[moveSpriteIndices.Length];
+        for (int m = 0; m < moveSpriteIndices.Length; m++)
+        {
+            _moveTextures[m] = SpriteBank.Move(moveSpriteIndices[m]);
+        }
 
         _body = new Sprite2D
         {
@@ -32,7 +38,7 @@ public partial class PlayerView : Node2D
 
         _move = new Sprite2D
         {
-            Texture = SpriteBank.Move(moveSpriteIndex),
+            Texture = _moveTextures[0],
             TextureFilter = TextureFilterEnum.Nearest,
             Visible = false,
         };
@@ -62,6 +68,9 @@ public partial class PlayerView : Node2D
         _move.Visible = _player.HitboxActive;
         if (_player.HitboxActive)
         {
+            // Each move renders with its own sprite gene — the second attack must be
+            // visually distinct from the first (second-move feature, readability Q10).
+            _move.Texture = _moveTextures[_player.CurrentMoveIndex];
             SimAabb hitbox = _player.Hitbox;
             _move.Position = new Vector2(
                 (hitbox.Center.X - _player.Position.X) * _ppu,

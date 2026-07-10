@@ -75,6 +75,27 @@ public class UtilityAgentTests
     }
 
     [Fact]
+    public void TheStrongestMoveThatCanHitWins()
+    {
+        // Second-move feature: both moves reach the opponent; move 1 deals more
+        // damage -> its button (1 under the [0,1,0,1] mapping) must be pressed.
+        var moves = new[]
+        {
+            new MoveGenome(TestGames.Move((MoveParams.DamageFactor, 2f)), 0),
+            new MoveGenome(TestGames.Move((MoveParams.DamageFactor, 9f)), 0),
+        };
+        CharacterGenome Make(string name) =>
+            new(name, 3, 0, TestGames.Character(), moves, new[] { 0, 1, 0, 1 });
+        var genome = new GameGenome(
+            new[] { Make("P1"), Make("P2") },
+            new StageGenome(new[] { new PlatformGene(-8, -3, 16, 1) }));
+
+        SimWorld world = SettledWorld(genome, new Vec2(-1f, -1.4f), new Vec2(0.2f, -1.4f));
+        var agent = new UtilityAgent(new Pcg32(1), Greedy);
+        Assert.Equal(InputFrame.ActionBit(1), agent.GetInput(world, 0).Actions);
+    }
+
+    [Fact]
     public void OverAPitTheAgentHeadsForThePlatformAndCountsRecovery()
     {
         // Req 1a: airborne over the void left of the platform → move right (toward it),
@@ -216,9 +237,9 @@ public class UtilityAgentTests
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 0)),
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 1)),
         });
-        // Re-pinned 2026-07-10: FlankBehavior added (designer-reported vertical-stall
-        // fix — characters route around platforms that block the vertical path).
-        // Previous pin: 15992591370472251803 (2026-07-09, initial utility instrument).
-        Assert.Equal(3417322836374644188UL, result.FinalHash);
+        // Re-pinned 2026-07-10 (2nd): MaxStunSeconds default 0.75 s (stun-cap
+        // experiment). Prior pins: 3417322836374644188 (2026-07-10, FlankBehavior),
+        // 15992591370472251803 (2026-07-09, initial utility instrument).
+        Assert.Equal(8169156236120396373UL, result.FinalHash);
     }
 }

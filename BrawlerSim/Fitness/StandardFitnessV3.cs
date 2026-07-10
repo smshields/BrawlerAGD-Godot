@@ -40,6 +40,15 @@ public sealed class StandardFitnessV3 : IFitnessFunction
     /// </summary>
     public const float DefaultCollisionScalar = 0.5f;
 
+    /// <summary>
+    /// Weight of the move-mix evenness term (2026-07-10 second-move amendment):
+    /// per player, weight × (moveCount × minUse / totalUses) — 1.0 when every move is
+    /// used equally, 0 when any move is never used. Deliberately a NUDGE (max +10 vs
+    /// the ±100 fitness scale): the designer wants even usage rewarded but NOT
+    /// opinionated builds ruled out.
+    /// </summary>
+    public const float DefaultMoveMixWeight = 5f;
+
     private readonly ComposedFitness _composed;
 
     public StandardFitnessV3(
@@ -49,7 +58,8 @@ public sealed class StandardFitnessV3 : IFitnessFunction
         float punishStartDamage = DefaultPunishStartDamage,
         float stockDamageCap = DefaultStockDamageCap,
         float punishSlope = DefaultPunishSlope,
-        float collisionScalar = DefaultCollisionScalar)
+        float collisionScalar = DefaultCollisionScalar,
+        float moveMixWeight = DefaultMoveMixWeight)
     {
         _composed = new ComposedFitness("standard-v3", new ComposedFitness.Term[]
         {
@@ -69,6 +79,8 @@ public sealed class StandardFitnessV3 : IFitnessFunction
                            - CountedDamage(r.Players[1], stockDamageCap)) / damageScalar),
             new("stockFairness", r =>
                 3f - DetMath.Abs(r.Players[0].RemainingStocks - r.Players[1].RemainingStocks)),
+            new("moveMix", r =>
+                moveMixWeight * (MoveEvenness(r.Players[0]) + MoveEvenness(r.Players[1]))),
         });
     }
 
@@ -93,6 +105,24 @@ public sealed class StandardFitnessV3 : IFitnessFunction
             sum += MathF.Min(d, cap);
         }
         return sum;
+    }
+
+    /// <summary>moveCount × minUse / totalUses ∈ [0,1]: 1 = perfectly even usage of
+    /// every available move, 0 = some move never used (or no attacks at all). Legacy
+    /// fixtures without MoveUses score 0 — the term is inert for them.</summary>
+    private static float MoveEvenness(PlayerStats player)
+    {
+        if (player.MoveUses is null || player.MoveUses.Count == 0)
+        {
+            return 0f;
+        }
+        int total = 0, min = int.MaxValue;
+        foreach (int uses in player.MoveUses)
+        {
+            total += uses;
+            min = Math.Min(min, uses);
+        }
+        return total == 0 ? 0f : player.MoveUses.Count * min / (float)total;
     }
 
     /// <summary>Σ per-stock damage beyond the punishment threshold (each stock's excess

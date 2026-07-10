@@ -127,6 +127,10 @@ public sealed class SimWorld
 
         int stunTicks = Config.ToTicks(
             attacker.Move.HitstunDuration * damageAfterHit * victim.HitstunDamageScalar);
+        if (!float.IsPositiveInfinity(Config.MaxStunSeconds))
+        {
+            stunTicks = Math.Min(stunTicks, Config.ToTicks(Config.MaxStunSeconds));
+        }
 
         victim.ApplyHit(attacker.Move.DamageGiven, knockback, stunTicks);
         victim.InvincibleTicksLeft = Config.InvincibilityTicks;
@@ -179,7 +183,8 @@ public sealed class SimWorld
         new(
             _players.Select(p => new PlayerStats(
                 p.TotalDamageTaken, p.TotalHitsReceived, p.Stocks, p.RecoveryTicks,
-                p.CompletedStockDamage.Append(p.Damage).ToArray())).ToArray(),
+                p.CompletedStockDamage.Append(p.Damage).ToArray(),
+                p.MoveUses.ToArray(), p.StunTicks)).ToArray(),
             LoserIndex,
             TickCount,
             TickCount / (float)Config.TicksPerSecond,

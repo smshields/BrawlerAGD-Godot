@@ -2,8 +2,11 @@ using BrawlerSim.Agents;
 using BrawlerSim.Determinism;
 using BrawlerSim.Evolution;
 using BrawlerSim.Fitness;
+using BrawlerSim.Genome;
+using BrawlerSim.Params;
 using BrawlerSim.Serialization;
 using BrawlerSim.Sim;
+using BrawlerSim.Tests.Support;
 using Xunit;
 
 namespace BrawlerSim.Tests.Fitness;
@@ -100,6 +103,51 @@ public class StandardFitnessV3Tests
             // Lives used = completed deaths + the in-progress (or fatal) life.
             Assert.Equal(3 - player.RemainingStocks + 1, player.DamagePerStock!.Count);
         }
+    }
+
+    [Fact]
+    public void MoveMixRewardsEvenUsageAndIgnoresLegacyFixtures()
+    {
+        // evenness = moveCount x minUse / total: (5,5) -> 1; (8,2) -> 0.4; (10,0) -> 0.
+        var even = new PlayerStats(0f, 0, 3, 0, new[] { 0f }, new[] { 5, 5 });
+        var skewed = new PlayerStats(0f, 0, 3, 0, new[] { 0f }, new[] { 8, 2 });
+        var single = new PlayerStats(0f, 0, 3, 0, new[] { 0f }, new[] { 10, 0 });
+        var legacy = new PlayerStats(0f, 0, 3, 0, new[] { 0f }); // no MoveUses -> inert
+
+        MatchResult Match(PlayerStats p) =>
+            new(new[] { p, legacy }, 0, 2700, 45f, 0, null);
+        float Term(PlayerStats p) =>
+            Fitness.Breakdown(Match(p)).First(t => t.Name == "moveMix").Value;
+
+        Assert.Equal(StandardFitnessV3.DefaultMoveMixWeight * 1.0f, Term(even), 0.001f);
+        Assert.Equal(StandardFitnessV3.DefaultMoveMixWeight * 0.4f, Term(skewed), 0.001f);
+        Assert.Equal(0f, Term(single), 0.001f);
+    }
+
+    [Fact]
+    public void StunCapClampsHitstun()
+    {
+        // A high-damage victim would take multi-second stun; the cap clamps it.
+        var genome = TestGames.FlatArena(moveOverrides: new[] { (MoveParams.HitstunDuration, 1f) });
+        var world = new SimWorld(genome, MatchConfig.Default with { MaxStunSeconds = 0.5f });
+        world.Players[0].Position = new Vec2(-1f, -1.4f);
+        world.Players[1].Position = new Vec2(0.2f, -1.4f);
+        for (int i = 0; i < 120 && !world.Players[0].IsGrounded; i++)
+        {
+            world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
+        }
+        world.Players[1].Damage = 200f; // uncapped stun would be 1x(200+dmg)x0.2 > 40 s
+
+        // P0 swings (warmup 12 + execute), P1 gets hit.
+        Span<InputFrame> attack = stackalloc[]
+            { new InputFrame(0f, 0f, false, InputFrame.ActionBit(0)), InputFrame.Neutral };
+        world.Tick(attack);
+        for (int i = 0; i < 30 && world.Players[1].State != PlayerState.Stun; i++)
+        {
+            world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
+        }
+        Assert.Equal(PlayerState.Stun, world.Players[1].State);
+        Assert.InRange(world.Players[1].PhaseTicksLeft, 1, 30); // 0.5 s cap = 30 ticks
     }
 
     [Fact]

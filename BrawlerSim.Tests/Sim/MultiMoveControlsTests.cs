@@ -180,6 +180,49 @@ public class MultiMoveControlsTests
         Assert.True(sawAttack, "agents never attacked on a flat arena");
     }
 
+    [Fact]
+    public void EveryMoveIsAlwaysReachableFromSomeButton()
+    {
+        // Coverage guarantee (second-move feature): across generation and heavy
+        // breeding, no genome may carry a move that no button triggers.
+        var config = GenerationConfig.Default; // 2 moves since 2026-07-10
+        var rng = new Pcg32(123);
+        var population = new List<GameGenome>();
+        for (int i = 0; i < 20; i++)
+        {
+            population.Add(GameGenome.Generate(config, rng));
+        }
+        for (int i = 0; i < 60; i++)
+        {
+            population.Add(GameGenomeOps.Breed(
+                population[rng.NextInt(population.Count)],
+                population[rng.NextInt(population.Count)],
+                mutationRate: 1f, rng, config));
+        }
+        foreach (GameGenome g in population)
+        {
+            foreach (CharacterGenome c in g.Characters)
+            {
+                for (int m = 0; m < c.Moves.Count; m++)
+                {
+                    Assert.Contains(m, c.ButtonMoves);
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void EnsureButtonCoverageRepairsWithoutUnmappingAnything()
+    {
+        // Pigeonhole repair: fixing one unmapped move must never orphan another.
+        Assert.Equal(new[] { 1, 0, 0, 0 }, CharacterGenome.EnsureButtonCoverage(new[] { 0, 0, 0, 0 }, 2));
+        Assert.Equal(new[] { 0, 1, 1, 1 }, CharacterGenome.EnsureButtonCoverage(new[] { 1, 1, 1, 1 }, 2));
+        // 3 moves, move 0 only at a button that move 2's repair must NOT steal.
+        Assert.Equal(new[] { 2, 1, 0, 1 }, CharacterGenome.EnsureButtonCoverage(new[] { 1, 1, 0, 1 }, 3));
+        // Already covering → untouched.
+        Assert.Equal(new[] { 1, 0, 1, 0 }, CharacterGenome.EnsureButtonCoverage(new[] { 1, 0, 1, 0 }, 2));
+    }
+
     private static MatchResult RunAiMatch(GameGenome genome, ulong seed, bool recordTrace = false)
     {
         var sources = new IInputSource[]

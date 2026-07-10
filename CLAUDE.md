@@ -144,5 +144,7 @@ and awaiting the designer play-test gate. Trace format is 7 values/player (legac
 readable); game.json is formatVersion 2 (v1 readable); run.json records the agent
 config (old checkpoints resume as DT). Outstanding: first push + CI canary review
 (needs designer's GitHub auth); DT archival after designer confirms the utility pivot.
-Next after confirmation: actual multiple moves per character (schema counts + utility
-move selection).
+Feature 3 (second move: 2 moves/character default, button-coverage guarantee,
+damage-ranked agent move selection, moveMix fitness nudge, 0.75 s stun cap from the
+stun-lock experiment — docs/features/second-move.md) is implemented and awaiting the
+designer play-test gate.

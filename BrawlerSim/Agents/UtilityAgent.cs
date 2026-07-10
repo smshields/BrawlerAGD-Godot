@@ -37,6 +37,7 @@ public sealed class UtilityAgent : IInputSource
     private const float ApproachJump = 1.0f;
     private const float OpponentAboveThreshold = 1.5f;
     private const float AttackInRange = 4.0f;
+    private const float AttackDamagePreference = 0.05f; // dmg ≤ ~15 → bonus ≤ 0.75 < base 4
     private const float EvadeMove = 2.0f;         // scaled up to 2× as damage climbs
     private const float HighDamageThreshold = 80f;
     private const float EdgeProbeDistance = 1.0f; // how far ahead evade checks for a pit
@@ -487,17 +488,21 @@ public sealed class UtilityAgent : IInputSource
         }
     }
 
-    /// <summary>Req 3: any move whose hitbox reaches the opponent scores its button —
-    /// per DISTINCT move, so multi-move genomes press the right button.</summary>
+    /// <summary>Req 3 + second-move update (2026-07-10): every move whose hitbox
+    /// reaches the opponent scores its button, ranked by DAMAGE — the strongest move
+    /// that can currently hit wins the channel (argmax; ties → lower index). The
+    /// damage bonus stays below the in-range base so "some hit" always beats "none".</summary>
     private sealed class AttackBehavior : IUtilityBehavior
     {
         public void Contribute(in UtilityContext ctx, UtilityScores scores)
         {
             for (int c = 1; c < scores.Attack.Length; c++)
             {
-                if (ctx.CanHit[scores.AttackMoves[c]])
+                int move = scores.AttackMoves[c];
+                if (ctx.CanHit[move])
                 {
-                    scores.Attack[c] += AttackInRange;
+                    scores.Attack[c] += AttackInRange
+                        + AttackDamagePreference * ctx.Self.Moves[move].DamageGiven;
                 }
             }
         }
