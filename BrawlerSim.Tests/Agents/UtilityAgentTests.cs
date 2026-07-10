@@ -169,6 +169,49 @@ public class UtilityAgentTests
     }
 
     [Fact]
+    public void ExhaustedJumpersDisengageInsteadOfChasing()
+    {
+        // AirJumpsExhausted cannot attack (Unity parity), so chasing is pure exposure
+        // (designer, 2026-07-10): while exhausted mid-air near the opponent, the agent
+        // must drift AWAY and press no attack buttons.
+        SimWorld world = SettledWorld(TestGames.FlatArena(), new Vec2(-2f, -1.4f), new Vec2(1f, -1.4f));
+        SimPlayer self = world.Players[0];
+        // Burn both jumps: ground jump, then air jump.
+        world.Tick(stackalloc[] { new InputFrame(0f, 0f, true, 0), InputFrame.Neutral });
+        world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
+        world.Tick(stackalloc[] { new InputFrame(0f, 0f, true, 0), InputFrame.Neutral });
+        Assert.Equal(PlayerState.AirJumpsExhausted, self.State);
+
+        var agent = new UtilityAgent(new Pcg32(1), Greedy);
+        InputFrame input = agent.GetInput(world, 0);
+        Assert.Equal(-1f, input.Horizontal); // away from the opponent at x = 1
+        Assert.Equal<byte>(0, input.Actions); // no pointless attack presses
+
+        // Once landed (capabilities restored), the chase resumes.
+        for (int i = 0; i < 300 && self.State != PlayerState.Idle; i++)
+        {
+            world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
+        }
+        Assert.Equal(PlayerState.Idle, self.State);
+        Assert.Equal(1f, agent.GetInput(world, 0).Horizontal);
+    }
+
+    [Fact]
+    public void ExhaustedJumpersStillRecoverOverPits()
+    {
+        // Disengaging must never override survival: exhausted OVER A PIT still steers
+        // toward the reachable platform.
+        var world = new SimWorld(TestGames.FlatArena());
+        world.Players[0].Position = new Vec2(-9.5f, 1f); // left of the platform, falling
+        world.Players[0].JumpsExhausted = true;
+        world.Players[1].Position = new Vec2(-6f, -1.4f); // opponent near the left edge
+        world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
+
+        var agent = new UtilityAgent(new Pcg32(1), Greedy);
+        Assert.Equal(1f, agent.GetInput(world, 0).Horizontal); // toward the platform
+    }
+
+    [Fact]
     public void CommitmentWindowHoldsMovementAndEdgesActions()
     {
         // Interval 10, quiet world: horizontal persists between decisions; jump/attack
@@ -254,10 +297,11 @@ public class UtilityAgentTests
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 0)),
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 1)),
         });
-        // Re-pinned 2026-07-10 (4th): platform-graph traversal (TraverseBehavior +
-        // directional recovery) — agents now chase across platforms. Prior pins:
-        // 4239894947699402948 (0.25 s stun cap), 8169156236120396373 (0.75 s cap),
-        // 3417322836374644188 (FlankBehavior), 15992591370472251803 (initial).
-        Assert.Equal(13063472053697347474UL, result.FinalHash);
+        // Re-pinned 2026-07-10 (5th): exhausted-jumper disengagement (offensive
+        // behaviors gated in AirJumpsExhausted + ExhaustedCautionBehavior). Prior pins:
+        // 13063472053697347474 (traversal), 4239894947699402948 (0.25 s stun cap),
+        // 8169156236120396373 (0.75 s cap), 3417322836374644188 (FlankBehavior),
+        // 15992591370472251803 (initial).
+        Assert.Equal(2695584452249808183UL, result.FinalHash);
     }
 }

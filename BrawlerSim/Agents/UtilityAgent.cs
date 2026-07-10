@@ -62,6 +62,10 @@ public sealed class UtilityAgent : IInputSource
     private const float TraverseMove = 2.0f;      // above Approach (1.5), below Flank (2.5)
     private const float TraverseJump = 2.5f;
     private const float TraverseLaunchSlack = 0.6f;
+    // Exhausted caution (2026-07-10 designer request): AirJumpsExhausted cannot attack,
+    // so chasing is pure exposure — drift away until landing restores capability.
+    private const float ExhaustedRetreat = 1.5f;
+    private const float ExhaustedCautionRange = 4f;
 
     private readonly Pcg32 _rng;
     private readonly AgentConfig _config;
@@ -244,6 +248,7 @@ public sealed class UtilityAgent : IInputSource
             underThreat = theirHitbox.Overlaps(self.Body);
         }
 
+        bool exhausted = self.State == PlayerState.AirJumpsExhausted;
         (int flankDirection, bool flankSafe) = ComputeFlank(world, self, opponent);
 
         // Traversal: next hop toward the opponent's platform via the per-match graph.
@@ -272,7 +277,8 @@ public sealed class UtilityAgent : IInputSource
             Distance: (opponent.Position - self.Position).Length(),
             canHit, anyCanHit, facingToOpponent, attackTarget, underThreat,
             flankDirection, flankSafe,
-            hasTraversal, traversalLaunch, traversalDirection, traversalNeedsJump);
+            hasTraversal, traversalLaunch, traversalDirection, traversalNeedsJump,
+            exhausted);
     }
 
     /// <summary>
@@ -432,6 +438,7 @@ public sealed class UtilityAgent : IInputSource
         new EvadeBehavior(),
         new ThreatDodgeBehavior(),
         new TelegraphDodgeBehavior(),
+        new ExhaustedCautionBehavior(),
         new SpacingBehavior(),
     };
 
@@ -504,9 +511,9 @@ public sealed class UtilityAgent : IInputSource
     {
         public void Contribute(in UtilityContext ctx, UtilityScores scores)
         {
-            if (ctx.OverPit)
+            if (ctx.OverPit || ctx.Exhausted)
             {
-                return; // recovery/doomed own the off-stage story
+                return; // recovery/doomed own the off-stage story; exhausted disengages
             }
             float dx = ctx.AttackTarget.X - ctx.Self.Position.X;
             float urgency = MathF.Min(ctx.Distance / ApproachDistanceScale, 1f);
@@ -536,7 +543,7 @@ public sealed class UtilityAgent : IInputSource
     {
         public void Contribute(in UtilityContext ctx, UtilityScores scores)
         {
-            if (!ctx.HasTraversal || ctx.OverPit)
+            if (!ctx.HasTraversal || ctx.OverPit || ctx.Exhausted)
             {
                 return;
             }
@@ -562,7 +569,7 @@ public sealed class UtilityAgent : IInputSource
     {
         public void Contribute(in UtilityContext ctx, UtilityScores scores)
         {
-            if (ctx.FlankDirection == 0 || ctx.OverPit)
+            if (ctx.FlankDirection == 0 || ctx.OverPit || ctx.Exhausted)
             {
                 return;
             }
@@ -579,6 +586,10 @@ public sealed class UtilityAgent : IInputSource
     {
         public void Contribute(in UtilityContext ctx, UtilityScores scores)
         {
+            if (ctx.Exhausted)
+            {
+                return; // the FSM ignores attacks in AirJumpsExhausted — don't press them
+            }
             for (int c = 1; c < scores.Attack.Length; c++)
             {
                 int move = scores.AttackMoves[c];
@@ -680,6 +691,28 @@ public sealed class UtilityAgent : IInputSource
         }
     }
 
+    /// <summary>AirJumpsExhausted cannot attack (Unity parity), so proximity is pure
+    /// exposure: drift away from a nearby opponent until landing (designer,
+    /// 2026-07-10). Recovery still overrides over pits; Doomed is deliberately exempt
+    /// (off-stage death, requirement 1b).</summary>
+    private sealed class ExhaustedCautionBehavior : IUtilityBehavior
+    {
+        public void Contribute(in UtilityContext ctx, UtilityScores scores)
+        {
+            if (!ctx.Exhausted || ctx.OverPit || ctx.Distance > ExhaustedCautionRange)
+            {
+                return;
+            }
+            int away = -ctx.FacingToOpponent;
+            bool retreatFallsOff = OverPit(ctx.World, ctx.Self, EdgeProbeDistance * away);
+            if (retreatFallsOff)
+            {
+                away = ctx.Self.Position.X >= 0f ? -1 : 1;
+            }
+            scores.Horizontal[away > 0 ? 2 : 0] += ExhaustedRetreat;
+        }
+    }
+
     /// <summary>Crowding without a hit available is dead time: back off to re-approach
     /// from an angle the attack target actually favors (breaks stacked stalemates).</summary>
     private sealed class SpacingBehavior : IUtilityBehavior
@@ -716,7 +749,8 @@ public readonly record struct UtilityContext(
     bool HasTraversal,
     Vec2 TraversalLaunch,
     int TraversalDirection,
-    bool TraversalNeedsJump);
+    bool TraversalNeedsJump,
+    bool Exhausted);
 
 /// <summary>
 /// The per-decision score sheet. Horizontal = {left, neutral, right}; Jump = {no, yes};
