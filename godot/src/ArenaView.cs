@@ -188,12 +188,12 @@ public partial class ArenaView : Node2D
     {
         MatchMode.HumanVsHuman => new IInputSource[]
         {
-            new HumanInputSource(1),
-            new HumanInputSource(2),
+            new HumanInputSource(1, ShieldHoldMask(0)),
+            new HumanInputSource(2, ShieldHoldMask(1)),
         },
         MatchMode.HumanVsCpu => new IInputSource[]
         {
-            new HumanInputSource(1),
+            new HumanInputSource(1, ShieldHoldMask(0)),
             AgentConfig.Default.CreateSource(new Pcg32(MatchSession.AiSeed, 1)),
         },
         MatchMode.AiVsAi => new IInputSource[]
@@ -204,6 +204,18 @@ public partial class ArenaView : Node2D
         MatchMode.Replay => ReplaySources(),
         _ => throw new System.InvalidOperationException($"Unknown mode {MatchSession.Mode}"),
     };
+
+    /// <summary>Which of this character's buttons map to shield moves (hold semantics).</summary>
+    private bool[] ShieldHoldMask(int playerIndex)
+    {
+        var character = MatchSession.Game!.Genome.Characters[playerIndex];
+        var mask = new bool[BrawlerSim.Sim.InputFrame.ActionCount];
+        for (int b = 0; b < mask.Length; b++)
+        {
+            mask[b] = character.Moves[character.ButtonMoves[b]].Type == BrawlerSim.Genome.MoveType.Shield;
+        }
+        return mask;
+    }
 
     private static IInputSource[] ReplaySources()
     {

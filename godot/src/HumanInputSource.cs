@@ -4,10 +4,10 @@ using BrawlerSim.Sim;
 namespace BrawlerGodot;
 
 /// <summary>
-/// Samples Godot input actions into one InputFrame per sim tick. Jump and the action
-/// buttons are press EDGES (unlike the level-based AI), matching how humans played the
-/// Unity build; movement axes are levels. The sim never sees Godot types — only the
-/// InputFrame.
+/// Samples Godot input actions into one InputFrame per sim tick. Jump and attack
+/// buttons are press EDGES (matching how humans played the Unity build); movement axes
+/// are levels; SHIELD-mapped buttons are levels too (hold to shield, release to drop —
+/// 2026-07-12). The sim never sees Godot types — only the InputFrame.
 /// </summary>
 public sealed class HumanInputSource : IInputSource
 {
@@ -17,9 +17,13 @@ public sealed class HumanInputSource : IInputSource
     private readonly string _down;
     private readonly string _jump;
     private readonly string[] _actions;
+    private readonly bool[] _holdButtons;
 
-    public HumanInputSource(int playerNumber)
+    /// <param name="holdButtons">Per action button: true = level semantics (the
+    /// button's mapped move is a shield); null/absent = all edges.</param>
+    public HumanInputSource(int playerNumber, bool[]? holdButtons = null)
     {
+        _holdButtons = holdButtons ?? new bool[InputFrame.ActionCount];
         string prefix = $"p{playerNumber}_";
         _left = prefix + "left";
         _right = prefix + "right";
@@ -38,7 +42,10 @@ public sealed class HumanInputSource : IInputSource
         byte actions = 0;
         for (int b = 0; b < _actions.Length; b++)
         {
-            if (Input.IsActionJustPressed(_actions[b]))
+            bool pressed = _holdButtons[b]
+                ? Input.IsActionPressed(_actions[b])
+                : Input.IsActionJustPressed(_actions[b]);
+            if (pressed)
             {
                 actions |= InputFrame.ActionBit(b);
             }

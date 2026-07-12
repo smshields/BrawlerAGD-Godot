@@ -297,11 +297,12 @@ public class UtilityAgentTests
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 0)),
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 1)),
         });
-        // Re-pinned 2026-07-10 (5th): exhausted-jumper disengagement (offensive
-        // behaviors gated in AirJumpsExhausted + ExhaustedCautionBehavior). Prior pins:
-        // 13063472053697347474 (traversal), 4239894947699402948 (0.25 s stun cap),
-        // 8169156236120396373 (0.75 s cap), 3417322836374644188 (FlankBehavior),
-        // 15992591370472251803 (initial).
-        Assert.Equal(2695584452249808183UL, result.FinalHash);
+        // Re-pinned 2026-07-12: shield feature — StateHash format grew (shield fields)
+        // and agent RNG draw sequence shifted (shield arbitration). GameC itself is
+        // all-attack, so gameplay dynamics are unchanged in kind. Prior pins:
+        // 2695584452249808183 (exhausted disengage), 13063472053697347474 (traversal),
+        // 4239894947699402948 / 8169156236120396373 (stun caps), 3417322836374644188
+        // (flank), 15992591370472251803 (initial).
+        Assert.Equal(17369012423366605927UL, result.FinalHash);
     }
 }

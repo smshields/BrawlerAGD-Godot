@@ -205,7 +205,9 @@ internal static class Commands
                 $"stocks {result.Players[0].RemainingStocks}/{result.Players[1].RemainingStocks}  " +
                 $"stun {100f * result.Players[0].StunTicks / result.Ticks:F0}%/{100f * result.Players[1].StunTicks / result.Ticks:F0}%  " +
                 $"uses {string.Join("+", result.Players[0].MoveUses ?? Array.Empty<int>())}/{string.Join("+", result.Players[1].MoveUses ?? Array.Empty<int>())}  " +
-                $"jumps {result.Players[0].Jumps}/{result.Players[1].Jumps}");
+                $"jumps {result.Players[0].Jumps}/{result.Players[1].Jumps}  " +
+                $"shield(act/blk/brk) {result.Players[0].ShieldActivations}-{result.Players[0].BlockedHits}-{result.Players[0].ShieldBreaks}/" +
+                $"{result.Players[1].ShieldActivations}-{result.Players[1].BlockedHits}-{result.Players[1].ShieldBreaks}");
             if (breakdown && fitness is ComposedFitness composed)
             {
                 Console.WriteLine("           " + string.Join("  ",

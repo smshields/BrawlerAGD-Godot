@@ -14,7 +14,11 @@ public sealed record PlayerStats(
     IReadOnlyList<float>? DamagePerStock = null,
     IReadOnlyList<int>? MoveUses = null,
     int StunTicks = 0,
-    int Jumps = 0);
+    int Jumps = 0,
+    int ShieldActivations = 0,
+    int BlockedHits = 0,
+    int ShieldBreaks = 0,
+    int ShieldTicks = 0);
 
 /// <summary>
 /// Outcome of one simulated match. LoserIndex is -1 for a timeout draw. FinalHash

@@ -23,8 +23,9 @@ public class GameGenomeOpsTests
         Assert.Equal(2, a.Characters.Count);
         Assert.Equal("Player 1", a.Characters[0].Name);
         Assert.Equal(3, a.Characters[0].Stocks);
-        // Two moves per character since 2026-07-10 (docs/features/second-move.md).
-        Assert.Equal(2, a.Characters[0].Moves.Count);
+        // 2 attacks (2026-07-10) + 1 guaranteed shield slot (2026-07-12, shield.md).
+        Assert.Equal(3, a.Characters[0].Moves.Count);
+        Assert.Equal(MoveType.Shield, a.Characters[0].Moves[2].Type);
     }
 
     [Fact]

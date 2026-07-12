@@ -6,7 +6,7 @@ using BrawlerSim.Params;
 namespace BrawlerSim.Serialization;
 
 /// <summary>
-/// Reads and writes the single-file game.json format (formatVersion 2). Params are
+/// Reads and writes the single-file game.json format (formatVersion 3). Params are
 /// serialized by name in schema order, so files stay human-readable and diff-able and
 /// survive schema extension (unknown keys in a file are ignored; missing keys throw).
 ///
@@ -15,10 +15,12 @@ namespace BrawlerSim.Serialization;
 ///   2 — 2026-07-08 multi-move controls: characters gained "buttonMoves" (the button→
 ///       move mapping gene, 4 ints). v1 files load with all-zeros (every button = move
 ///       0), which reproduces pre-feature behavior exactly; files are written as v2.
+///   3 — 2026-07-12 shields: moves gained "type" ("attack" | "shield"); shield moves'
+///       params use the shield schema. v1/v2 moves load as attacks.
 /// </summary>
 public static class GameGenomeJson
 {
-    public const int CurrentFormatVersion = 2;
+    public const int CurrentFormatVersion = 3;
     private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = new()
@@ -44,6 +46,7 @@ public static class GameGenomeJson
                 ButtonMoves = c.ButtonMoves.ToList(),
                 Moves = c.Moves.Select(m => new MoveDoc
                 {
+                    Type = m.Type == MoveType.Shield ? "shield" : "attack",
                     SpriteIndex = m.SpriteIndex,
                     Params = m.Params.ToDictionary(),
                 }).ToList(),
@@ -79,9 +82,13 @@ public static class GameGenomeJson
             c.Stocks,
             c.SpriteIndex,
             ParamSet.FromDictionary(config.CharacterSchema, Require(c.Params, "character params")),
-            (c.Moves ?? new List<MoveDoc>()).Select(m => new MoveGenome(
-                ParamSet.FromDictionary(config.MoveSchema, Require(m.Params, "move params")),
-                m.SpriteIndex)),
+            (c.Moves ?? new List<MoveDoc>()).Select(m => m.Type == "shield"
+                ? new MoveGenome(
+                    ParamSet.FromDictionary(config.ShieldSchema, Require(m.Params, "shield params")),
+                    m.SpriteIndex, MoveType.Shield)
+                : new MoveGenome(
+                    ParamSet.FromDictionary(config.MoveSchema, Require(m.Params, "move params")),
+                    m.SpriteIndex)),
             c.ButtonMoves)); // null (v1 files) → all-zeros default in the ctor
 
         var stage = new StageGenome(doc.Stage.Platforms.Select(p => new PlatformGene(p.X, p.Y, p.XSize, p.YSize)));
@@ -123,6 +130,7 @@ public static class GameGenomeJson
 
     private sealed class MoveDoc
     {
+        public string? Type { get; set; } // null/absent (v1/v2) → attack
         public int SpriteIndex { get; set; }
         public Dictionary<string, float>? Params { get; set; }
     }

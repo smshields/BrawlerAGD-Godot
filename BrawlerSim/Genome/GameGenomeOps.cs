@@ -39,7 +39,8 @@ public static class GameGenomeOps
         foreach (CharacterGenome character in genome.Characters)
         {
             var moves = character.Moves
-                .Select(m => new MoveGenome(GenomeOps.Mutate(m.Params, rng), rng.NextInt(config.MoveSpriteCount)))
+                .Select(m => new MoveGenome(
+                    GenomeOps.Mutate(m.Params, rng), rng.NextInt(config.MoveSpriteCount), m.Type))
                 .ToList();
             mutated.Add(new CharacterGenome(
                 character.Name,
@@ -94,9 +95,18 @@ public static class GameGenomeOps
         var moves = new List<MoveGenome>(a.Moves.Count);
         for (int m = 0; m < a.Moves.Count; m++)
         {
+            if (a.Moves[m].Type != b.Moves[m].Type)
+            {
+                // Mismatched slot types (future dynamic composition): the whole move —
+                // type, params, sprite — comes from ONE parent; params of different
+                // schemas cannot cross. RNG draw happens only on mismatch, so today's
+                // fixed compositions consume no extra stream.
+                moves.Add(rng.NextInt(2) == 0 ? a.Moves[m] : b.Moves[m]);
+                continue;
+            }
             ParamSet moveParams = GenomeOps.SinglePointCrossover(a.Moves[m].Params, b.Moves[m].Params, rng);
             int moveSprite = rng.NextInt(2) == 0 ? a.Moves[m].SpriteIndex : b.Moves[m].SpriteIndex;
-            moves.Add(new MoveGenome(moveParams, moveSprite));
+            moves.Add(new MoveGenome(moveParams, moveSprite, a.Moves[m].Type));
         }
         // Per-button coin flip between parents, RNG-gated like MutateButtonMoves: with a
         // single move both parents' genes are identical zeros, so no draw is consumed.

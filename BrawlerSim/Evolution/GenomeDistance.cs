@@ -7,11 +7,12 @@ namespace BrawlerSim.Evolution;
 /// Normalized behavioral-parameter distance between two genomes, used by the optional
 /// diversity bonus (EvolutionConfig.DiversityWeight) and the popdiv research tool.
 ///
-/// Definition (v1, 2026-07-09): mean over every character param and every move param
-/// (positional pairing, matching crossover semantics) of |a−b| / generation-range
-/// width. Cosmetic genes (sprites), button mappings, and the stage are EXCLUDED — this
-/// measures the mechanics design space. Result is ~[0,1]: 0 = identical mechanics,
-/// 1 = every parameter a full generation-range apart.
+/// Definition (v1, 2026-07-09; shield-aware 2026-07-12): mean over every character
+/// param and every move param (positional pairing, matching crossover semantics) of
+/// |a−b| / generation-range width, each param set measured against ITS OWN schema
+/// (attack vs shield). Slots whose TYPES differ contribute one full-distance
+/// dimension (1.0). Cosmetic genes (sprites), button mappings, and the stage are
+/// EXCLUDED — this measures the mechanics design space. Result is ~[0,1].
 /// </summary>
 public static class GenomeDistance
 {
@@ -26,11 +27,17 @@ public static class GenomeDistance
         for (int c = 0; c < a.Characters.Count; c++)
         {
             CharacterGenome ca = a.Characters[c], cb = b.Characters[c];
-            Accumulate(config.CharacterSchema, ca.Params, cb.Params, ref sum, ref dims);
+            Accumulate(ca.Params.Schema, ca.Params, cb.Params, ref sum, ref dims);
             int moves = Math.Min(ca.Moves.Count, cb.Moves.Count);
             for (int m = 0; m < moves; m++)
             {
-                Accumulate(config.MoveSchema, ca.Moves[m].Params, cb.Moves[m].Params, ref sum, ref dims);
+                if (ca.Moves[m].Type != cb.Moves[m].Type)
+                {
+                    sum += 1f; // different move TYPES: maximally distant slot
+                    dims++;
+                    continue;
+                }
+                Accumulate(ca.Moves[m].Params.Schema, ca.Moves[m].Params, cb.Moves[m].Params, ref sum, ref dims);
             }
         }
         return dims == 0 ? 0f : sum / dims;

@@ -59,6 +59,7 @@ public partial class PlayerView : Node2D
     public void Sync()
     {
         Position = new Vector2(_player.Position.X * _ppu, -_player.Position.Y * _ppu);
+        QueueRedraw(); // shield circle tracks sim state every frame
         _body.FlipH = _player.Facing < 0;
         _body.Modulate = StateColor(_player.State) with
         {
@@ -81,9 +82,34 @@ public partial class PlayerView : Node2D
         }
     }
 
-    /// <summary>Unity SpriteRenderer state tints, verbatim.</summary>
+    /// <summary>Shield circle (2026-07-12): white outline that turns red as the shield
+    /// degrades; radius, offset, and grow/shrink animation all come from sim state.</summary>
+    public override void _Draw()
+    {
+        if (_player is null || _player.State != PlayerState.Shield)
+        {
+            return;
+        }
+        float radius = _player.ShieldRadius * _ppu;
+        if (radius <= 0f)
+        {
+            return;
+        }
+        var center = new Vector2(_player.ShieldOffset.X * _ppu, -_player.ShieldOffset.Y * _ppu);
+        SimShield? shield = _player.ActiveShield;
+        float health = shield is null || shield.InitialRadius <= 0f
+            ? 0f
+            : _player.ShieldHealths[_player.CurrentMoveIndex] / shield.InitialRadius;
+        Color color = Colors.White.Lerp(Colors.Red, Mathf.Clamp(1f - health, 0f, 1f));
+        DrawArc(center, radius, 0f, Mathf.Tau, 48, color with { A = 0.9f }, 2f, antialiased: false);
+        DrawCircle(center, radius, color with { A = 0.12f });
+    }
+
+    /// <summary>Unity SpriteRenderer state tints, verbatim — plus cyan for the Shield
+    /// state (designer tint decision, 2026-07-12).</summary>
     private static Color StateColor(PlayerState state) => state switch
     {
+        PlayerState.Shield => Colors.Cyan,
         PlayerState.Idle => Colors.White,
         PlayerState.Air => Colors.Green,
         PlayerState.AirJumpsExhausted => Colors.Gray,

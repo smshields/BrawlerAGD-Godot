@@ -66,6 +66,16 @@ public sealed class UtilityAgent : IInputSource
     // so chasing is pure exposure — drift away until landing restores capability.
     private const float ExhaustedRetreat = 1.5f;
     private const float ExhaustedCautionRange = 4f;
+    // Shield (2026-07-12, FEATURES.md agent spec): raise on a telegraphed swing,
+    // scaled by shield health (less prone near breaking); when both the dodge-jump
+    // and the shield fire, a health-weighted coin decides (the designer's
+    // weighted-random trade-off); hold while threatened, release early near break;
+    // punish an opponent's break stun with the most powerful move.
+    private const float ShieldRaise = 3.0f;
+    private const float ShieldHoldRange = 3.0f;
+    private const float ShieldReleaseHealthFraction = 0.25f;
+    private const float BreakPunishBonus = 2.0f;
+    private const float BreakPunishDamagePreference = 0.2f;
 
     private readonly Pcg32 _rng;
     private readonly AgentConfig _config;
@@ -96,6 +106,12 @@ public sealed class UtilityAgent : IInputSource
         SimPlayer self = world.Players[playerIndex];
         SimPlayer opponent = world.Players[1 - playerIndex];
         _graph ??= new PlatformGraph(world.Platforms, self, world.Config.Gravity);
+
+        if (self.State == PlayerState.Shield)
+        {
+            return ManageRaisedShield(self, opponent);
+        }
+
         UtilityContext ctx = BuildContext(world, self, opponent, _graph);
 
         if (ctx.OverPit)
@@ -130,11 +146,66 @@ public sealed class UtilityAgent : IInputSource
         int jumpChoice = Select(scores.Jump);                // 0 no, 1 yes
         int attackChoice = Select(scores.Attack);            // 0 none, else candidate
 
+        // Dodge-vs-shield arbitration (designer: weighted random): when the jump and a
+        // shield press BOTH won their channels, exactly one may act (the FSM would let
+        // the jump preempt the shield) — a health-weighted coin picks.
+        bool choseShield = attackChoice > 0
+            && ctx.Self.MoveTypeAt(scores.AttackMoves[attackChoice]) == Genome.MoveType.Shield;
+        if (choseShield && jumpChoice == 1)
+        {
+            if (_rng.NextFloat() < 0.7f * ctx.ShieldHealthFraction)
+            {
+                jumpChoice = 0; // commit to the shield
+            }
+            else
+            {
+                attackChoice = 0; // dodge instead
+            }
+        }
+
         _heldHorizontal = moveChoice - 1;
         byte actions = attackChoice > 0
             ? InputFrame.ActionBit(scores.AttackButtons[attackChoice])
             : (byte)0;
         return new InputFrame(_heldHorizontal, 0f, jumpChoice == 1, actions);
+    }
+
+    /// <summary>
+    /// Shield management runs every tick (no commitment window — shields need
+    /// responsiveness): keep holding while the opponent stays threatening and health
+    /// has margin; release early near the break threshold; aim the shield toward the
+    /// opponent when it no longer covers the whole body (the first live use of the
+    /// Vertical input axis).
+    /// </summary>
+    private InputFrame ManageRaisedShield(SimPlayer self, SimPlayer opponent)
+    {
+        float healthFraction = ShieldHealthFractionOf(self);
+        bool threatened = opponent.State is PlayerState.WarmUp or PlayerState.Attack
+            || (opponent.Position - self.Position).Length() <= ShieldHoldRange;
+        bool hold = threatened && healthFraction > ShieldReleaseHealthFraction;
+        byte actions = hold && self.ShieldButton >= 0
+            ? InputFrame.ActionBit(self.ShieldButton)
+            : (byte)0;
+
+        float aimH = 0f, aimV = 0f;
+        if (hold && self.ShieldRadius < MathF.Max(self.BodyHalf.X, self.BodyHalf.Y) * 2f)
+        {
+            aimH = MathF.Sign(opponent.Position.X - self.Position.X);
+            aimV = MathF.Sign(opponent.Position.Y - self.Position.Y);
+        }
+        return new InputFrame(aimH, aimV, false, actions);
+    }
+
+    private static float ShieldHealthFractionOf(SimPlayer self)
+    {
+        for (int slot = 0; slot < self.Shields.Count; slot++)
+        {
+            if (self.Shields[slot] is SimShield shield && self.ButtonForMove(slot) >= 0)
+            {
+                return shield.InitialRadius <= 0f ? 0f : self.ShieldHealths[slot] / shield.InitialRadius;
+            }
+        }
+        return 0f;
     }
 
     /// <summary>
@@ -205,12 +276,11 @@ public sealed class UtilityAgent : IInputSource
         float bestTravel = float.PositiveInfinity;
         for (int m = 0; m < self.Moves.Count; m++)
         {
-            if (self.ButtonForMove(m) < 0)
+            if (self.ButtonForMove(m) < 0 || self.Moves[m] is not SimMove move)
             {
-                continue;
+                continue; // shield slots have no hitbox to reach with
             }
             // Reach test with facing toward the opponent — turning is a same-tick input.
-            SimMove move = self.Moves[m];
             Vec2 offset = new(move.Offset.X * facingToOpponent, move.Offset.Y);
             var hitbox = new Aabb(
                 self.Position + offset,
@@ -237,11 +307,10 @@ public sealed class UtilityAgent : IInputSource
         int opponentFacing = -facingToOpponent;
         for (int m = 0; m < opponent.Moves.Count && !underThreat; m++)
         {
-            if (opponent.ButtonForMove(m) < 0)
+            if (opponent.ButtonForMove(m) < 0 || opponent.Moves[m] is not SimMove move)
             {
                 continue;
             }
-            SimMove move = opponent.Moves[m];
             var theirHitbox = new Aabb(
                 opponent.Position + new Vec2(move.Offset.X * opponentFacing, move.Offset.Y),
                 new Vec2(move.BaseHalf.X * opponent.WidthScalar, move.BaseHalf.Y * opponent.HeightScalar));
@@ -278,7 +347,9 @@ public sealed class UtilityAgent : IInputSource
             canHit, anyCanHit, facingToOpponent, attackTarget, underThreat,
             flankDirection, flankSafe,
             hasTraversal, traversalLaunch, traversalDirection, traversalNeedsJump,
-            exhausted);
+            exhausted,
+            ShieldHealthFractionOf(self),
+            OpponentBreakStunned: opponent.State == PlayerState.Stun && opponent.StunFromShieldBreak);
     }
 
     /// <summary>
@@ -435,6 +506,7 @@ public sealed class UtilityAgent : IInputSource
         new TraverseBehavior(),
         new FlankBehavior(),
         new AttackBehavior(),
+        new ShieldBehavior(),
         new EvadeBehavior(),
         new ThreatDodgeBehavior(),
         new TelegraphDodgeBehavior(),
@@ -593,10 +665,56 @@ public sealed class UtilityAgent : IInputSource
             for (int c = 1; c < scores.Attack.Length; c++)
             {
                 int move = scores.AttackMoves[c];
-                if (ctx.CanHit[move])
+                if (ctx.CanHit[move] && ctx.Self.Moves[move] is SimMove attack)
                 {
-                    scores.Attack[c] += AttackInRange
-                        + AttackDamagePreference * ctx.Self.Moves[move].DamageGiven;
+                    // A break-stunned opponent is the punish window: strongly prefer
+                    // the most POWERFUL move (FEATURES.md agent spec).
+                    float damagePreference = ctx.OpponentBreakStunned
+                        ? BreakPunishDamagePreference : AttackDamagePreference;
+                    float bonus = ctx.OpponentBreakStunned ? BreakPunishBonus : 0f;
+                    scores.Attack[c] += AttackInRange + bonus + damagePreference * attack.DamageGiven;
+                }
+            }
+        }
+    }
+
+    /// <summary>FEATURES.md agent spec: raise the shield when the opponent winds up in
+    /// range (same telegraph test as the dodge — the two compete via the channel
+    /// selection plus the health-weighted arbitration in GetInput). Utility scales
+    /// with shield health: near-broken shields are not worth raising.</summary>
+    private sealed class ShieldBehavior : IUtilityBehavior
+    {
+        public void Contribute(in UtilityContext ctx, UtilityScores scores)
+        {
+            if (ctx.Self.State != PlayerState.Idle || ctx.OverPit
+                || ctx.ShieldHealthFraction <= ShieldReleaseHealthFraction
+                || ctx.Opponent.State != PlayerState.WarmUp)
+            {
+                return;
+            }
+            SimMove? incoming = ctx.Opponent.Moves[ctx.Opponent.CurrentMoveIndex];
+            if (incoming is null)
+            {
+                return;
+            }
+            var arc = new Aabb(
+                ctx.Opponent.Position + new Vec2(incoming.Offset.X * ctx.Opponent.Facing, incoming.Offset.Y),
+                new Vec2(
+                    incoming.BaseHalf.X * ctx.Opponent.WidthScalar + TelegraphDodgeMargin,
+                    incoming.BaseHalf.Y * ctx.Opponent.HeightScalar + TelegraphDodgeMargin));
+            if (!arc.Overlaps(ctx.Self.Body))
+            {
+                return;
+            }
+            // Weight ramps from 0 at the release threshold to full at full health, so
+            // a nearly-broken shield never outbids the do-nothing baseline.
+            float margin = MathF.Max(0f,
+                (ctx.ShieldHealthFraction - ShieldReleaseHealthFraction) / (1f - ShieldReleaseHealthFraction));
+            for (int c = 1; c < scores.Attack.Length; c++)
+            {
+                if (ctx.Self.MoveTypeAt(scores.AttackMoves[c]) == Genome.MoveType.Shield)
+                {
+                    scores.Attack[c] += ShieldRaise * margin;
                 }
             }
         }
@@ -750,7 +868,9 @@ public readonly record struct UtilityContext(
     Vec2 TraversalLaunch,
     int TraversalDirection,
     bool TraversalNeedsJump,
-    bool Exhausted);
+    bool Exhausted,
+    float ShieldHealthFraction,
+    bool OpponentBreakStunned);
 
 /// <summary>
 /// The per-decision score sheet. Horizontal = {left, neutral, right}; Jump = {no, yes};

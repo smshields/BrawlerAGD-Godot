@@ -62,8 +62,14 @@ public sealed class SimWorld
             SimPhysics.Step(_players[i], _players[1 - i], Platforms, Config);
         }
 
-        // 3. Body-vs-body contact.
+        // 3. Body-vs-body contact, then shield spacing (2026-07-12: a raised shield
+        //    expels the opponent — fixed player order, positional push capped per tick
+        //    plus a low outward velocity floor; FEATURES.md "never enough to kill").
         SimPhysics.ResolvePlayerContact(_players[0], _players[1], Config);
+        for (int i = 0; i < _players.Length; i++)
+        {
+            PushWithShield(shielder: _players[i], opponent: _players[1 - i]);
+        }
 
         // 4. Hit detection, fixed attacker order.
         for (int i = 0; i < _players.Length; i++)
@@ -103,10 +109,49 @@ public sealed class SimWorld
         }
     }
 
+    private void PushWithShield(SimPlayer shielder, SimPlayer opponent)
+    {
+        SimShield? shield = shielder.ActiveShield;
+        float radius = shielder.ShieldRadius;
+        if (shield is null || radius <= 0f)
+        {
+            return;
+        }
+        Vec2 center = shielder.Position + shielder.ShieldOffset;
+        Vec2 closest = opponent.Body.ClosestPoint(center);
+        Vec2 toClosest = closest - center;
+        if (toClosest.Length() >= radius)
+        {
+            return;
+        }
+        // Push direction: radially from the shield center through the opponent's
+        // center (facing fallback for the degenerate concentric case).
+        Vec2 direction = opponent.Position - center;
+        float length = direction.Length();
+        direction = length > 0.0001f ? direction * (1f / length) : new Vec2(shielder.Facing, 0f);
+
+        // Positional: expel toward the circle edge, capped per tick (no teleports).
+        float penetration = radius - toClosest.Length();
+        float step = MathF.Min(penetration, Config.ShieldPushMaxPerTick);
+        opponent.Position += direction * step;
+
+        // Velocity floor: the opponent leaves at least at the shield's spacing push.
+        float radial = opponent.Velocity.X * direction.X + opponent.Velocity.Y * direction.Y;
+        if (radial < shield.SpacingPush)
+        {
+            opponent.Velocity += direction * (shield.SpacingPush - radial);
+        }
+    }
+
     /// <summary>
     /// Unity hit semantics (single clean path — the Enter/Stay/Exit duplication is not
     /// ported): damage first, then knockback = (victim − hitbox center + unit knockback
     /// direction) · scalar · (victim damage · 0.1), then hitstun scaled by victim damage.
+    /// Shield interception (2026-07-12): a hit is BLOCKED iff the overlap region between
+    /// the attack hitbox and the victim's body lies entirely inside the shield circle —
+    /// partial cover is still a clean hit ("a shield only protects where it covers").
+    /// Blocked: zero damage/stun, knockback scaled by (1 − reduction), shield health
+    /// loses damage × hitDegradationScalar (break applies immediately).
     /// </summary>
     private void TryHit(SimPlayer attacker, SimPlayer victim)
     {
@@ -117,6 +162,27 @@ public sealed class SimWorld
         Aabb hitbox = attacker.Hitbox;
         if (!hitbox.Overlaps(victim.Body))
         {
+            return;
+        }
+
+        SimShield? shield = victim.ActiveShield;
+        if (shield is not null && victim.ShieldRadius > 0f
+            && OverlapFullyInsideShield(hitbox, victim.Body,
+                victim.Position + victim.ShieldOffset, victim.ShieldRadius))
+        {
+            float blockedDamageAfter = victim.Damage + attacker.Move.DamageGiven;
+            Vec2 blockedKnockback = ComputeKnockback(
+                victim.Position, hitbox.Center, attacker.Move.KnockbackDirection,
+                attacker.Facing, attacker.Move.KnockbackScalar, blockedDamageAfter);
+            victim.Velocity += blockedKnockback * (1f - shield.KnockbackReduction);
+            victim.BlockedHits++;
+            victim.InvincibleTicksLeft = Config.InvincibilityTicks;
+            victim.ShieldHealths[victim.CurrentMoveIndex] -=
+                attacker.Move.DamageGiven * shield.HitDegradationScalar;
+            if (victim.ShieldHealths[victim.CurrentMoveIndex] <= victim.ShieldBreakRadius)
+            {
+                victim.BreakShield();
+            }
             return;
         }
 
@@ -154,6 +220,26 @@ public sealed class SimWorld
             * (damageAfterHit * 0.1f);
     }
 
+    /// <summary>The rect where the hitbox meets the body, tested against the shield
+    /// circle. A rect is inside a circle iff all four corners are (convexity) — exact,
+    /// not approximate.</summary>
+    private static bool OverlapFullyInsideShield(Aabb hitbox, Aabb body, Vec2 center, float radius)
+    {
+        float left = MathF.Max(hitbox.Left, body.Left);
+        float right = MathF.Min(hitbox.Right, body.Right);
+        float bottom = MathF.Max(hitbox.Bottom, body.Bottom);
+        float top = MathF.Min(hitbox.Top, body.Top);
+        float r2 = radius * radius;
+        return Inside(left, bottom) && Inside(left, top) && Inside(right, bottom) && Inside(right, top);
+
+        bool Inside(float x, float y)
+        {
+            float dx = x - center.X;
+            float dy = y - center.Y;
+            return dx * dx + dy * dy <= r2;
+        }
+    }
+
     /// <summary>FNV-1a fingerprint of complete gameplay state. Equal hashes ⇔ equal states.</summary>
     public ulong StateHash()
     {
@@ -175,6 +261,16 @@ public sealed class SimWorld
             // 2026-07-08 multi-move controls: which move is in flight is now mutable
             // state and must be fingerprinted (an unhashed field is a determinism hole).
             hash = Fnv1a.Add(hash, p.CurrentMoveIndex);
+            // 2026-07-12 shields: phase, aim, activating button, per-slot health.
+            hash = Fnv1a.Add(hash, (int)p.ShieldPhase);
+            hash = Fnv1a.Add(hash, p.ShieldOffset.X);
+            hash = Fnv1a.Add(hash, p.ShieldOffset.Y);
+            hash = Fnv1a.Add(hash, p.ShieldButton);
+            hash = Fnv1a.Add(hash, p.StunFromShieldBreak ? 1 : 0);
+            foreach (float health in p.ShieldHealths)
+            {
+                hash = Fnv1a.Add(hash, health);
+            }
         }
         return hash;
     }
@@ -184,7 +280,8 @@ public sealed class SimWorld
             _players.Select(p => new PlayerStats(
                 p.TotalDamageTaken, p.TotalHitsReceived, p.Stocks, p.RecoveryTicks,
                 p.CompletedStockDamage.Append(p.Damage).ToArray(),
-                p.MoveUses.ToArray(), p.StunTicks, p.Jumps)).ToArray(),
+                p.MoveUses.ToArray(), p.StunTicks, p.Jumps,
+                p.ShieldActivations, p.BlockedHits, p.ShieldBreaks, p.ShieldTicks)).ToArray(),
             LoserIndex,
             TickCount,
             TickCount / (float)Config.TicksPerSecond,

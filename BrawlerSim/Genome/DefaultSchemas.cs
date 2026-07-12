@@ -19,6 +19,20 @@ public static class CharacterParams
     public const string HitstunDamageScalar = "hitstunDamageScalar";
 }
 
+/// <summary>Stable param keys for the shield schema (2026-07-12, FEATURES.md §Shield).</summary>
+public static class ShieldParams
+{
+    public const string WindUpDuration = "windUpDuration";
+    public const string CoolDownDuration = "coolDownDuration";
+    public const string InitialSize = "initialSize";
+    public const string HoldDegradationRate = "holdDegradationRate";
+    public const string HitDegradationScalar = "hitDegradationScalar";
+    public const string KnockbackReduction = "knockbackReduction";
+    public const string SpacingPush = "spacingPush";
+    public const string RegenRate = "regenRate";
+    public const string BreakStunDuration = "breakStunDuration";
+}
+
 /// <summary>Stable param keys for the move schema.</summary>
 public static class MoveParams
 {
@@ -80,5 +94,25 @@ public static class DefaultSchemas
         new ParamSpec(MoveParams.KnockbackModX, 0f, 1f) { ValidMin = -1.5f, ValidMax = 1.5f },
         new ParamSpec(MoveParams.KnockbackModY, -1f, 1f) { ValidMin = -1.5f, ValidMax = 1.5f },
         new ParamSpec(MoveParams.HitstunDuration, 0f, 1f),
+    });
+
+    /// <summary>
+    /// Shield move type (2026-07-12, FEATURES.md; ranges designer-reviewed in
+    /// docs/features/shield.md). Wind-up/cool-down deliberately shorter than attacks;
+    /// InitialSize is the DIAMETER in world units ("no larger than 2× character
+    /// size"); degradation/regen rates are radius-units per second; BreakStunDuration
+    /// is EXEMPT from MatchConfig.MaxStunSeconds (the break is the counterweight).
+    /// </summary>
+    public static readonly ParamSchema Shield = new("shield", new[]
+    {
+        new ParamSpec(ShieldParams.WindUpDuration, 0.05f, 0.3f),
+        new ParamSpec(ShieldParams.CoolDownDuration, 0.05f, 0.3f),
+        new ParamSpec(ShieldParams.InitialSize, 0.5f, 2.0f),
+        new ParamSpec(ShieldParams.HoldDegradationRate, 0.05f, 0.4f),
+        new ParamSpec(ShieldParams.HitDegradationScalar, 0.01f, 0.06f),
+        new ParamSpec(ShieldParams.KnockbackReduction, 0.5f, 0.9f),
+        new ParamSpec(ShieldParams.SpacingPush, 0.5f, 3.0f),
+        new ParamSpec(ShieldParams.RegenRate, 0.05f, 0.5f),
+        new ParamSpec(ShieldParams.BreakStunDuration, 0.5f, 2.5f),
     });
 }

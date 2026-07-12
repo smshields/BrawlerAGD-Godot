@@ -53,6 +53,15 @@ public sealed record MatchConfig
     /// </summary>
     public float MaxStunSeconds { get; init; } = 0.25f;
 
+    /// <summary>Shield constants (2026-07-12, FEATURES.md §Shield). Break threshold:
+    /// the shield breaks when its radius shrinks to 1/5 of the character's height
+    /// (spec: "1/5th of the character size in radius"). Offset speed: how fast the
+    /// directional controls slide the shield. Push cap: positional expulsion per tick
+    /// (same anti-teleport idea as MaxDepenetrationPerTick).</summary>
+    public float ShieldBreakRadiusFraction { get; init; } = 0.2f;
+    public float ShieldOffsetSpeed { get; init; } = 3f;
+    public float ShieldPushMaxPerTick { get; init; } = 0.05f;
+
     /// <summary>
     /// Half extents of the AI's platform-sensing box (Unity: 20×15 BoxCollider2D on the
     /// OverlapDetector child, used by GetClosestPlatformDirection).

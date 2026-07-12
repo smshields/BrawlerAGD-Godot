@@ -3,14 +3,27 @@ using BrawlerSim.Params;
 
 namespace BrawlerSim.Genome;
 
-/// <summary>One evolvable move: raw params plus a cosmetic sprite gene.</summary>
+/// <summary>What a move slot IS (2026-07-12, FEATURES.md §Shield). A structural gene:
+/// slots of the same type cross params positionally; mismatched slots coin-flip the
+/// whole move from one parent (see GameGenomeOps).</summary>
+public enum MoveType
+{
+    Attack,
+    Shield,
+}
+
+/// <summary>One evolvable move: type, raw params (schema per type), and a cosmetic
+/// sprite gene (unused visually by shields — the circle is procedural — but kept so
+/// gene structure is uniform).</summary>
 public sealed class MoveGenome
 {
+    public MoveType Type { get; }
     public ParamSet Params { get; }
     public int SpriteIndex { get; }
 
-    public MoveGenome(ParamSet @params, int spriteIndex)
+    public MoveGenome(ParamSet @params, int spriteIndex, MoveType type = MoveType.Attack)
     {
+        Type = type;
         Params = @params;
         SpriteIndex = spriteIndex;
     }
@@ -19,6 +32,14 @@ public sealed class MoveGenome
     {
         ParamSet raw = GenomeOps.Generate(config.MoveSchema, rng);
         return new MoveGenome(MoveRules.ConstrainKnockback(raw), rng.NextInt(config.MoveSpriteCount));
+    }
+
+    /// <summary>All nine shield parameters are generated (and hence evolved) freely;
+    /// only the slot TYPE is pinned by the current composition.</summary>
+    public static MoveGenome GenerateShield(GenerationConfig config, Pcg32 rng)
+    {
+        ParamSet raw = GenomeOps.Generate(config.ShieldSchema, rng);
+        return new MoveGenome(raw, rng.NextInt(config.MoveSpriteCount), MoveType.Shield);
     }
 }
 
@@ -69,20 +90,24 @@ public sealed class CharacterGenome
     {
         ParamSet @params = GenomeOps.Generate(config.CharacterSchema, rng);
         int spriteIndex = rng.NextInt(config.PlayerSpriteCount);
-        var moves = new List<MoveGenome>(config.MovesPerCharacter);
+        var moves = new List<MoveGenome>(config.MovesPerCharacter + config.ShieldSlotCount);
         for (int i = 0; i < config.MovesPerCharacter; i++)
         {
             moves.Add(MoveGenome.Generate(config, rng));
+        }
+        for (int i = 0; i < config.ShieldSlotCount; i++)
+        {
+            moves.Add(MoveGenome.GenerateShield(config, rng));
         }
         // Button genes consume RNG only when there is a real choice (>1 move), so
         // single-move populations reproduce pre-feature RNG streams bit-exactly
         // (golden population fingerprints and replicate runs stay valid).
         int[] buttonMoves = new int[Sim.InputFrame.ActionCount];
-        if (config.MovesPerCharacter > 1)
+        if (moves.Count > 1)
         {
             for (int b = 0; b < buttonMoves.Length; b++)
             {
-                buttonMoves[b] = rng.NextInt(config.MovesPerCharacter);
+                buttonMoves[b] = rng.NextInt(moves.Count);
             }
         }
         return new CharacterGenome(name, config.Stocks, spriteIndex, @params, moves,

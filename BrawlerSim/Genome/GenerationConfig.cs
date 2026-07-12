@@ -13,8 +13,15 @@ public sealed record GenerationConfig
     public ParamSchema CharacterSchema { get; init; } = DefaultSchemas.Character;
     public ParamSchema MoveSchema { get; init; } = DefaultSchemas.Move;
 
+    public ParamSchema ShieldSchema { get; init; } = DefaultSchemas.Shield;
+
     public int CharacterCount { get; init; } = 2;
     public int MovesPerCharacter { get; init; } = 2;
+
+    /// <summary>Shield slots appended after the attack slots (2026-07-12; guaranteed
+    /// composition for now — dynamic type assignment is a future flag; set 0 to
+    /// disable shields in generation).</summary>
+    public int ShieldSlotCount { get; init; } = 1;
     public int Stocks { get; init; } = 3;
 
     public int PlayerSpriteCount { get; init; } = 87;

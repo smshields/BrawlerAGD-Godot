@@ -108,8 +108,9 @@ public class MultiMoveControlsTests
     {
         // Bounds under adversarial evolutionary pressure (design Q2): with 2 moves per
         // character, generation + forced mutation + crossover must keep every gene a
-        // valid move index — and must actually explore both values.
-        var config = GenerationConfig.Default with { MovesPerCharacter = 2 };
+        // valid move index — and must actually explore both values. (Shield slot off:
+        // this test pins the two-ATTACK mapping semantics.)
+        var config = GenerationConfig.Default with { MovesPerCharacter = 2, ShieldSlotCount = 0 };
         var rng = new Pcg32(99);
         var population = new List<GameGenome>();
         for (int i = 0; i < 10; i++)

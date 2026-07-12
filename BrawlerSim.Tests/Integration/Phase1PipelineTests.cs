@@ -70,10 +70,10 @@ public class Phase1PipelineTests
     [Fact]
     public void PopulationFingerprintMatchesGoldenValue()
     {
-        // Re-pinned 2026-07-10: MovesPerCharacter default 1 → 2 (second-move feature)
-        // — generation now draws RNG for the second move and the button genes, a REAL
-        // design-space change, unlike the 2026-07-09 format-only re-pin
-        // (13551893661434631362; original single-move pin 9300943650238635838).
-        Assert.Equal(5432710911100783110UL, RunPipeline(20260707));
+        // Re-pinned 2026-07-12: guaranteed shield slot (2 attacks + 1 shield) — new
+        // shield-schema RNG draws + formatVersion 3, a REAL design-space change.
+        // Prior pins: 5432710911100783110 (2026-07-10, two moves),
+        // 13551893661434631362 (2026-07-09, format-only), 9300943650238635838 (orig).
+        Assert.Equal(10607725140721060960UL, RunPipeline(20260707));
     }
 }
