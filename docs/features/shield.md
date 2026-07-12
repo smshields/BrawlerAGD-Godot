@@ -120,3 +120,25 @@ Everything in the plan above landed as specified; deltas and findings:
      Expected next iteration if desired: a block/blocked-hit reward term (v3
      amendment) or persona fitness — designer decision.
 
+## Amendment 2026-07-12 (same day): block reward + humanized shield management
+
+Designer-directed follow-up to the two findings above:
+
+- **standard-v3 `blocks` term**: +2.0 per blocked hit (constructor-tunable). A block
+  suppresses ~1.15 of rewarded interaction (the hit's damage + collision terms), so
+  2.0 makes blocking a net-positive event comparable to landing a hit. Naturally
+  bounded — every block costs shield health.
+- **Shield management is no longer frame-perfect** (designer: "someone would not be
+  able to execute every single time"). Hold/release and aim now run through the same
+  commitment window and randomness mixture as every other decision; an unthreatened
+  hold keeps a 0.6 hesitation utility so release timing varies across seeds
+  (quantized to reaction-window boundaries — the human cadence). One deterministic
+  override: health at/below the release threshold always releases (the circle is
+  visibly red). Raise timing already carried noise (window + mixture + the
+  health-weighted dodge coin).
+- Measured (2 × 300 gens, same seeds as the blind runs): champion shield activations
+  5/2 → 32/14, blocks 1/0 → 9/0, breaks 0; trajectories slightly above the blind
+  runs. Shield use is now selected FOR. Seed 701's champion raises often but blocks
+  rarely — the spacing/zoning value of a raised shield is doing work even without
+  blocks, which is exactly the surprising-builds space the designer wanted open.
+

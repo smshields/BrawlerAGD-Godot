@@ -74,6 +74,9 @@ public sealed class UtilityAgent : IInputSource
     private const float ShieldRaise = 3.0f;
     private const float ShieldHoldRange = 3.0f;
     private const float ShieldReleaseHealthFraction = 0.25f;
+    private const float ShieldHoldUtility = 2.0f;   // vs the 1.0 release baseline
+    private const float ShieldReleaseBaseline = 1.0f;
+    private const float ShieldUnthreatenedHold = 0.6f; // hesitation: sampling can hold on
     private const float BreakPunishBonus = 2.0f;
     private const float BreakPunishDamagePreference = 0.2f;
 
@@ -111,6 +114,7 @@ public sealed class UtilityAgent : IInputSource
         {
             return ManageRaisedShield(self, opponent);
         }
+        _heldShieldHold = true; // a future raise starts committed to holding
 
         UtilityContext ctx = BuildContext(world, self, opponent, _graph);
 
@@ -171,30 +175,49 @@ public sealed class UtilityAgent : IInputSource
     }
 
     /// <summary>
-    /// Shield management runs every tick (no commitment window — shields need
-    /// responsiveness): keep holding while the opponent stays threatening and health
-    /// has margin; release early near the break threshold; aim the shield toward the
-    /// opponent when it no longer covers the whole body (the first live use of the
-    /// Vertical input axis).
+    /// Shield management (2026-07-12 humanization, designer-directed): hold/release
+    /// and aim go through the SAME imperfection machinery as everything else — the
+    /// commitment window delays reactions and the randomness mixture makes release
+    /// timing fallible — so evolution cannot tune shield timings against
+    /// frame-perfect execution no human could deliver. The one deterministic override:
+    /// health at/below the release threshold always releases (the circle is visibly
+    /// red — even humans don't miss that).
     /// </summary>
     private InputFrame ManageRaisedShield(SimPlayer self, SimPlayer opponent)
     {
         float healthFraction = ShieldHealthFractionOf(self);
-        bool threatened = opponent.State is PlayerState.WarmUp or PlayerState.Attack
-            || (opponent.Position - self.Position).Length() <= ShieldHoldRange;
-        bool hold = threatened && healthFraction > ShieldReleaseHealthFraction;
-        byte actions = hold && self.ShieldButton >= 0
+        if (healthFraction <= ShieldReleaseHealthFraction)
+        {
+            _heldShieldHold = false; // forced release — never ride into the break
+        }
+        else if (--_ticksUntilRedecide <= 0)
+        {
+            _ticksUntilRedecide = _config.DecisionIntervalTicks;
+            bool threatened = opponent.State is PlayerState.WarmUp or PlayerState.Attack
+                || (opponent.Position - self.Position).Length() <= ShieldHoldRange;
+            _shieldScores[0] = ShieldReleaseBaseline;
+            _shieldScores[1] = threatened ? ShieldHoldUtility : ShieldUnthreatenedHold;
+            _heldShieldHold = Select(_shieldScores) == 1;
+
+            _heldAimH = 0f;
+            _heldAimV = 0f;
+            if (_heldShieldHold && self.ShieldRadius < MathF.Max(self.BodyHalf.X, self.BodyHalf.Y) * 2f)
+            {
+                _heldAimH = MathF.Sign(opponent.Position.X - self.Position.X);
+                _heldAimV = MathF.Sign(opponent.Position.Y - self.Position.Y);
+            }
+        }
+
+        byte actions = _heldShieldHold && self.ShieldButton >= 0
             ? InputFrame.ActionBit(self.ShieldButton)
             : (byte)0;
-
-        float aimH = 0f, aimV = 0f;
-        if (hold && self.ShieldRadius < MathF.Max(self.BodyHalf.X, self.BodyHalf.Y) * 2f)
-        {
-            aimH = MathF.Sign(opponent.Position.X - self.Position.X);
-            aimV = MathF.Sign(opponent.Position.Y - self.Position.Y);
-        }
-        return new InputFrame(aimH, aimV, false, actions);
+        return new InputFrame(_heldAimH, _heldAimV, false, actions);
     }
+
+    private readonly float[] _shieldScores = new float[2];
+    private bool _heldShieldHold = true; // entering Shield implies the raise decision
+    private float _heldAimH;
+    private float _heldAimV;
 
     private static float ShieldHealthFractionOf(SimPlayer self)
     {

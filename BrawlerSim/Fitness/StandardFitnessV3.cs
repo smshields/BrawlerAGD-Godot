@@ -67,6 +67,16 @@ public sealed class StandardFitnessV3 : IFitnessFunction
     public const float DefaultJumpWeight = 10f;
     public const float DefaultJumpSaturation = 40f;
 
+    /// <summary>
+    /// Per-blocked-hit reward (2026-07-12 shield amendment). Rationale: a blocked hit
+    /// SUPPRESSES ~1.15 fitness of rewarded interaction (the hit's ~0.65 damage term +
+    /// 0.5 collision term), so under a blind fitness shields were selected AGAINST
+    /// (measured: champions with 3 activations / 0 blocks). 2.0 per block makes a
+    /// block a net-positive interaction event, comparable to landing a hit. Naturally
+    /// bounded — each block costs shield health, so block counts can't run away.
+    /// </summary>
+    public const float DefaultBlockReward = 2f;
+
     private readonly ComposedFitness _composed;
 
     public StandardFitnessV3(
@@ -79,7 +89,8 @@ public sealed class StandardFitnessV3 : IFitnessFunction
         float collisionScalar = DefaultCollisionScalar,
         float moveMixWeight = DefaultMoveMixWeight,
         float stunLockWeight = DefaultStunLockWeight,
-        float jumpWeight = DefaultJumpWeight)
+        float jumpWeight = DefaultJumpWeight,
+        float blockReward = DefaultBlockReward)
     {
         _composed = new ComposedFitness("standard-v3", new ComposedFitness.Term[]
         {
@@ -107,6 +118,8 @@ public sealed class StandardFitnessV3 : IFitnessFunction
             new("jumps", r =>
                 jumpWeight * MathF.Min(r.Players[0].Jumps + r.Players[1].Jumps, DefaultJumpSaturation)
                     / DefaultJumpSaturation),
+            new("blocks", r =>
+                blockReward * (r.Players[0].BlockedHits + r.Players[1].BlockedHits)),
         });
     }
 

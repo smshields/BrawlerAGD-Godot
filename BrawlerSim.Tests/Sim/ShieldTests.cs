@@ -1,5 +1,6 @@
 using BrawlerSim.Agents;
 using BrawlerSim.Determinism;
+using BrawlerSim.Fitness;
 using BrawlerSim.Genome;
 using BrawlerSim.Params;
 using BrawlerSim.Serialization;
@@ -283,6 +284,62 @@ public class ShieldTests
         // Opponent teleports far away → release.
         world.Players[1].Position = new Vec2(7f, -1.4f);
         Assert.False(agent.GetInput(world, 0).ActionPressed(2));
+    }
+
+    [Fact]
+    public void BlocksAreRewardedByFitness()
+    {
+        // 2026-07-12 amendment: 2.0 per blocked hit — a block outweighs the ~1.15 of
+        // interaction reward it suppresses, so shields stop being anti-fitness.
+        var fitness = new StandardFitnessV3();
+        var blocker = new PlayerStats(0f, 0, 3, 0, new[] { 0f }, new[] { 1, 1 }, 0, 0, 2, 5, 0, 300);
+        var other = new PlayerStats(0f, 0, 3, 0, new[] { 0f }, new[] { 1, 1 });
+        var match = new MatchResult(new[] { blocker, other }, 0, 2700, 45f, 0, null);
+        Assert.Equal(StandardFitnessV3.DefaultBlockReward * 5f,
+            fitness.Breakdown(match).First(t => t.Name == "blocks").Value, 0.001f);
+    }
+
+    [Fact]
+    public void ShieldReleaseTimingIsHumanlyImperfect()
+    {
+        // Designer 2026-07-12: shield management must not be frame-perfect. With
+        // randomness on and the opponent NOT threatening, release timing must VARY
+        // across seeds (the mixture can keep holding a while); with the default
+        // config it must still release reasonably soon.
+        var releaseTicks = new List<int>();
+        for (ulong seed = 0; seed < 20; seed++)
+        {
+            SimWorld world = Grounded(ShieldArena(), -4f, 6f); // opponent far: no threat
+            Hold(world, 7, HoldShield);
+            var agent = new UtilityAgent(new Pcg32(seed), new AgentConfig { Randomness = 0.35f });
+            int t = 0;
+            for (; t < 120 && world.Players[0].State == PlayerState.Shield; t++)
+            {
+                Span<InputFrame> frame = stackalloc[] { agent.GetInput(world, 0), InputFrame.Neutral };
+                world.Tick(frame);
+            }
+            releaseTicks.Add(t);
+        }
+        // Releases land on reaction-window boundaries (7, 15, 23…) — quantization IS
+        // the human-cadence design; what matters is that the timing is not one value.
+        Assert.True(releaseTicks.Distinct().Count() >= 2,
+            $"release timing is deterministic across seeds: {string.Join(",", releaseTicks)}");
+        Assert.All(releaseTicks, t => Assert.True(t < 120, "agent never released an unthreatened shield"));
+    }
+
+    [Fact]
+    public void RedShieldIsAlwaysReleasedRegardlessOfRandomness()
+    {
+        for (ulong seed = 0; seed < 10; seed++)
+        {
+            SimWorld world = Grounded(ShieldArena(), -1.2f, 0.8f); // opponent CLOSE (threat)
+            SimPlayer self = world.Players[0];
+            Hold(world, 7, HoldShield);
+            self.ShieldHealths[1] = 0.8f * 0.24f; // health fraction 0.24 < release threshold 0.25
+            var agent = new UtilityAgent(new Pcg32(seed), new AgentConfig { Randomness = 0.5f });
+            InputFrame input = agent.GetInput(world, 0);
+            Assert.Equal<byte>(0, input.Actions); // released, every seed, no exceptions
+        }
     }
 
     [Fact]
