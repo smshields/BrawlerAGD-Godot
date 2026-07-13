@@ -28,6 +28,13 @@ public static class SimPhysics
         if (!player.IsDashTraveling)
         {
             player.Velocity += new Vec2(0f, -config.Gravity * player.GravityScale * dt);
+            if (player.IsFastFalling)
+            {
+                // Fast fall (2026-07-13): flat added acceleration while holding down —
+                // structurally never slower than the character's default fall.
+                player.Velocity += new Vec2(0f, -player.FastFallAcceleration * dt);
+                player.FastFallTicks++;
+            }
             player.Velocity *= 1f / (1f + dt * player.Drag);
         }
 

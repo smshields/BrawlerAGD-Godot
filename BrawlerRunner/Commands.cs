@@ -209,7 +209,9 @@ internal static class Commands
                 $"shield(act/blk/brk) {result.Players[0].ShieldActivations}-{result.Players[0].BlockedHits}-{result.Players[0].ShieldBreaks}/" +
                 $"{result.Players[1].ShieldActivations}-{result.Players[1].BlockedHits}-{result.Players[1].ShieldBreaks}  " +
                 $"dash(n/dodge) {result.Players[0].DashCount}-{result.Players[0].DashInvulnDodges}/" +
-                $"{result.Players[1].DashCount}-{result.Players[1].DashInvulnDodges}");
+                $"{result.Players[1].DashCount}-{result.Players[1].DashInvulnDodges}  " +
+                $"ff/crouch/di {result.Players[0].FastFallTicks}-{result.Players[0].CrouchTicks}-{result.Players[0].DIInfluencedHits}/" +
+                $"{result.Players[1].FastFallTicks}-{result.Players[1].CrouchTicks}-{result.Players[1].DIInfluencedHits}");
             if (breakdown && fitness is ComposedFitness composed)
             {
                 Console.WriteLine("           " + string.Join("  ",

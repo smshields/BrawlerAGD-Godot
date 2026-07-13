@@ -88,7 +88,8 @@ recordings), then wait for their confirmation.
 - Player state tints (Unity-verbatim + additions): Idle white · Air green ·
   JumpsExhausted grey · WarmUp yellow · Attack red · CoolDown blue · Stun magenta ·
   Shield cyan (2026-07-12; the shield itself is a white→red circle by degradation) ·
-  Dash orange (2026-07-13).
+  Dash orange (2026-07-13) · Crouch purple with the body squished feet-planted
+  (2026-07-13; distinct from Stun magenta).
   These ARE the game's readability system — new states need a tint decision.
 - ALL-CAPS for menu/UI labels. 1280×720 design viewport, `canvas_items` stretch,
   fixed 16:9 world view (players die off-screen at the blast zone — that hidden-death

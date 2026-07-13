@@ -60,6 +60,10 @@ public partial class PlayerView : Node2D
     {
         Position = new Vector2(_player.Position.X * _ppu, -_player.Position.Y * _ppu);
         QueueRedraw(); // shield circle tracks sim state every frame
+        // Crouch squish (2026-07-13): scale from sim state, feet planted.
+        float crouch = _player.CrouchScale;
+        _body.Scale = new Vector2(_player.WidthScalar, _player.HeightScalar * crouch) * (_ppu / 16f);
+        _body.Position = new Vector2(0f, _player.BodyHalf.Y * (1f - crouch) * _ppu);
         _body.FlipH = _player.Facing < 0;
         _body.Modulate = StateColor(_player.State) with
         {
@@ -111,6 +115,7 @@ public partial class PlayerView : Node2D
     {
         PlayerState.Shield => Colors.Cyan,
         PlayerState.Dash => Colors.Orange, // 2026-07-13 designer tint decision
+        PlayerState.Crouch => Colors.Purple, // 2026-07-13 designer tint decision
         PlayerState.Idle => Colors.White,
         PlayerState.Air => Colors.Green,
         PlayerState.AirJumpsExhausted => Colors.Gray,

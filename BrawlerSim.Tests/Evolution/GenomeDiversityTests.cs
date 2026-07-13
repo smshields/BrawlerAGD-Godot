@@ -24,8 +24,8 @@ public class GenomeDiversityTests
     {
         // One character param moved by half its generation range: maxGroundSpeed 4→8
         // out of [2,10] → normalized 0.5 on that dimension for ONE character.
-        // Dimensions: 2 chars × (12 char params + 12 move params) = 48.
-        // Expected: 0.5 / 48.
+        // Dimensions: 2 chars × (19 char params [12 + the 2026-07-13 appends] +
+        // 12 move params) = 62. Expected: 0.5 / 62.
         GameGenome a = Arena();
         var b = new GameGenome(new[]
         {
@@ -36,7 +36,7 @@ public class GenomeDiversityTests
         }, a.Stage);
 
         float distance = GenomeDistance.Normalized(a, b, GenerationConfig.Default);
-        Assert.Equal(0.5 / 48.0, distance, 6);
+        Assert.Equal(0.5 / 62.0, distance, 6);
     }
 
     [Fact]

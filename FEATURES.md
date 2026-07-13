@@ -90,3 +90,64 @@ The dash mechanic allows a player to quickly move from one spot to another with 
     - Agents should use dash to avoid high-risk incoming attacks.
     - Agents should use dash to close distance when a kill is likely.
     - Dashes should be avoided in the air (to avoid entering jump exhausted state) unless necessary to recover or a promising kill is possible.
+
+
+# Fast Fall/Crouch/Directional Influence
+
+The fast fall mechanic allows a player to increase the rate of their descent by holding down while in the air. The crouch mechanic allows a player to "squish" their characters downwards by some percentage. Every character has both a fast fall and a crouch, and these parameters will live alongside basic character constraints instead of as an assignable button. 
+
+
+
+### Fast Fall
+- Global 
+	- You can only fast fall in the air.
+	- Fast falling is activated by pressing/holding down.
+	- Fast falling can be used even during all states in air aside from dash and attack execution and stun (jumps exhausted, warm-up, cool-down can all be fast-fallen)
+- Parameters
+	- Accelleration
+		- Affects the rate at which the character falls while pressing down. Can never be lower than the default fall rate for a character.
+- Agent
+	- Fast fall is effectively another dodge action. As such, if a character is in the air and vulnerable to an attack, it should be one of potential options to dodge, and should be favored if warm-up/cool-down/jumps exhausted is active.
+	- Fast fall can be used to close distance with an opponent below you for an attack, and should occasionally be selected to get in range of an opponent during
+
+### Crouch
+- Global
+	- Crouching reduces character height only by a ratio.
+	- Crouching changes friction on the floor - could be positive or negative; if you are running and crouch, you might slow down quickly or slide farther.
+	- Crouching speed should animate, and generally be very fast (but not instantaneous).
+	- Crouching can be used to avoid dying if on the floor to slow down momentum (if it does slow down) or to approach (if it speeds up)
+	- Only allowed while touching the floor
+	- Crouch can be used during idle only.
+	- Hit-box should be changed alongside the player
+	- if a character attacks while crouching, they first return to their normal size before executing the attack. The time to return to full size must be included before attacking, and it cannot be cancelled or accept any inputs while doing it.
+	- No inputs are possible between full size and full crouch.
+	- Crouching has its own state.
+- Parameters
+	- Accelleration Change
+		- Scalar that decides how much a character positively/negatively accellerates if crouching while moving
+	- Speed
+		- Determines how quickly a character reaches final crouch and returns to full stand.
+	- Height Ratio
+		- Determines the ratio of height when crouching (must be less than the character size - e.g. always less than 1).
+- Agent
+	- The agent should include crouching as an option to dodge incoming attacks (alongside moving away, jumping, dashing)
+	- The agent should use crouch to reduce knockback off a stage at high percentages when knocked along the ground if the accelleration change slows them down
+	- The agent should use crouch to approach quickly for damage opportunities if the accelleration change speeds them up.
+
+### Directional Influence
+- Global
+	- Directional influence impacts the direction a character flies when hit. 
+	- Directional influence is only taken into account the moment that a character is hit and begins to receive knockback.
+	- Directional influence happens regardless of character state.
+	- Directional influence is minor (it can't override knockback magnitude or direction entirely), but gives a player a small chance of not flying entirely off screen.
+	- Directional influence is difficult, and shouldn't be perfect-reaction for agents during evolution.
+	- We should have a new UI elements that show the direction influence when watching so we can debug. Place it near existing UI elements.
+	- Influence should be applied at a very small rate 
+- Parameters
+	- Directional influence
+		- Determines how much a key press impacts the direction of knockback. Should not be able to substantially impact knockback. Should be a proportion based on 
+	- Knockback Reduction
+		- Determines how much a knockback is reduced if the player is holding a direction opposite of the hit itself.
+- Agent
+	- Agents should be imperfect - they might still be holding a direction they were holding before they were attempting to influence, but they may also directionally influence perfectly.
+	- Agents should try and influence towards the farthest line to die to minimize risk of death.

@@ -8,6 +8,9 @@ public partial class HudView : CanvasLayer
 {
     private SimWorld _world = null!;
     private readonly Label[] _panels = new Label[2];
+    private readonly Label[] _diArrows = new Label[2];
+    private readonly int[] _lastHits = new int[2];
+    private readonly int[] _flashTicks = new int[2];
     private Label _banner = null!;
     private Label _pause = null!;
 
@@ -38,6 +41,39 @@ public partial class HudView : CanvasLayer
         _pause.Visible = false;
     }
 
+    /// <summary>Debug DI indicator (2026-07-13, designer request): a live 8-way arrow
+    /// of the held influence direction, flashing bright on the tick a hit lands.</summary>
+    private void SyncDiArrow(int i)
+    {
+        var player = _world.Players[i];
+        if (_diArrows[i] is null)
+        {
+            _diArrows[i] = new Label { Modulate = new Color(0.5f, 0.55f, 0.62f) };
+            _diArrows[i].AddThemeFontSizeOverride("font_size", 22);
+            _diArrows[i].Position = _panels[i].Position + new Vector2(i == 0 ? 210f : -34f, 2f);
+            AddChild(_diArrows[i]);
+        }
+        int hits = player.TotalHitsReceived;
+        if (hits != _lastHits[i])
+        {
+            _lastHits[i] = hits;
+            _flashTicks[i] = 18;
+        }
+        _flashTicks[i] = Mathf.Max(0, _flashTicks[i] - 1);
+        int dx = System.Math.Sign(player.HeldDirection.X);
+        int dy = System.Math.Sign(player.HeldDirection.Y);
+        string glyph = (dx, dy) switch
+        {
+            (0, 0) => "·",
+            (1, 0) => "→", (-1, 0) => "←", (0, 1) => "↑", (0, -1) => "↓",
+            (1, 1) => "↗", (-1, 1) => "↖", (1, -1) => "↘", (-1, -1) => "↙",
+        };
+        _diArrows[i].Text = glyph;
+        _diArrows[i].Modulate = _flashTicks[i] > 0
+            ? new Color(1f, 0.85f, 0.3f)
+            : new Color(0.5f, 0.55f, 0.62f);
+    }
+
     public void Sync(bool paused)
     {
         for (int i = 0; i < 2; i++)
@@ -45,6 +81,7 @@ public partial class HudView : CanvasLayer
             SimPlayer player = _world.Players[i];
             string hearts = new string('#', player.Stocks).Replace("#", "● ");
             _panels[i].Text = $"{player.Name}  {player.Damage:F1}%\n{hearts}\n{player.State}";
+            SyncDiArrow(i);
         }
         _pause.Visible = paused;
 

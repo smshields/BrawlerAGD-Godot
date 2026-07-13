@@ -85,6 +85,16 @@ public sealed class UtilityAgent : IInputSource
     private const float DefenseJump = 2.0f;
     private const float DefenseShield = 3.0f;       // × shield health margin
     private const float DefenseDash = 2.0f;
+    // 2026-07-13 fast fall / crouch / DI:
+    private const float DefenseFastFall = 2.0f;
+    private const float DefenseFastFallVulnerable = 2.8f; // favored in warm-up/cool-down/exhausted (spec)
+    private const float DefenseCrouch = 2.5f;       // only when the crouched hurtbox clears the arc
+    private const float BaselineVerticalNeutral = 0.5f;
+    private const float FastFallPursuit = 1.2f;     // opponent below → drop onto them
+    private const float CrouchBrake = 2.0f;         // negative-accel crouch at high slide speed
+    private const float CrouchSlideApproach = 1.0f; // positive-accel crouch toward a far opponent
+    private const float DIHold = 1.8f;              // held direction toward safety when a hit is coming
+    private const float DIHoldVertical = 0.8f;
     // Dash offense/utility (2026-07-13): recovery is where the dash shines.
     private const float DashRecover = 2.5f;
     private const float DashApproach = 1.2f;
@@ -105,6 +115,7 @@ public sealed class UtilityAgent : IInputSource
 
     // Committed decision, held until the window expires or a salient event fires.
     private float _heldHorizontal;
+    private float _heldVertical;
     private int _ticksUntilRedecide;
 
     // Event-edge memory for early re-decision.
@@ -161,8 +172,9 @@ public sealed class UtilityAgent : IInputSource
 
         if (--_ticksUntilRedecide > 0 && !salient)
         {
-            // Held frame: movement persists, jump/attack were single-tick presses.
-            return new InputFrame(_heldHorizontal, 0f, false, 0);
+            // Held frame: movement AND vertical persist (crouch/fast-fall are holds);
+            // jump/attack were single-tick presses.
+            return new InputFrame(_heldHorizontal, _heldVertical, false, 0);
         }
         _ticksUntilRedecide = _config.DecisionIntervalTicks;
 
@@ -173,6 +185,7 @@ public sealed class UtilityAgent : IInputSource
         }
 
         int moveChoice = Select(scores.Horizontal);          // 0 left, 1 neutral, 2 right
+        int verticalChoice = Select(scores.Vertical);        // 0 down, 1 neutral, 2 up
         int jumpChoice = Select(scores.Jump);                // 0 no, 1 yes
         int attackChoice = Select(scores.Attack);            // 0 none, else candidate
 
@@ -186,10 +199,16 @@ public sealed class UtilityAgent : IInputSource
             float shieldMargin = MathF.Max(0f,
                 (ctx.ShieldHealthFraction - ShieldReleaseHealthFraction) / (1f - ShieldReleaseHealthFraction));
             bool shieldUsable = ctx.Self.State == PlayerState.Idle && shieldMargin > 0f && !ctx.OverPit;
+            bool airborne = !ctx.Self.IsGrounded;
+            bool fastFallVulnState = ctx.Self.State is PlayerState.WarmUp
+                or PlayerState.CoolDown or PlayerState.AirJumpsExhausted;
             _defenseScores[0] = DefenseNone;
             _defenseScores[1] = jumpAvailable ? DefenseJump : 0f;
             _defenseScores[2] = shieldUsable ? DefenseShield * shieldMargin : 0f;
             _defenseScores[3] = ctx.DashUsable ? DefenseDash : 0f;
+            _defenseScores[4] = airborne && ctx.Self.FastFallAcceleration > 0f
+                ? (fastFallVulnState ? DefenseFastFallVulnerable : DefenseFastFall) : 0f;
+            _defenseScores[5] = ctx.CrouchClearsThreat ? DefenseCrouch : 0f;
             int defense = Select(_defenseScores);
             int away = -ctx.FacingToOpponent;
             switch (defense)
@@ -206,6 +225,17 @@ public sealed class UtilityAgent : IInputSource
                 case 3:
                     jumpChoice = 0;
                     attackChoice = DashCandidate(scores, ctx.DashSlot);
+                    break;
+                case 4: // fast fall out of the arc
+                    jumpChoice = 0;
+                    attackChoice = 0;
+                    verticalChoice = 0;
+                    break;
+                case 5: // duck under it
+                    jumpChoice = 0;
+                    attackChoice = 0;
+                    verticalChoice = 0;
+                    moveChoice = 1; // stay planted; the FSM enters Crouch from Idle+down
                     break;
             }
         }
@@ -229,10 +259,11 @@ public sealed class UtilityAgent : IInputSource
         }
 
         _heldHorizontal = dashChosen ? _dashIntentH : moveChoice - 1;
+        _heldVertical = dashChosen ? _dashIntentV : verticalChoice - 1;
         byte actions = attackChoice > 0
             ? InputFrame.ActionBit(scores.AttackButtons[attackChoice])
             : (byte)0;
-        return new InputFrame(_heldHorizontal, dashChosen ? _dashIntentV : 0f, jumpChoice == 1, actions);
+        return new InputFrame(_heldHorizontal, _heldVertical, jumpChoice == 1, actions);
     }
 
     private static int ShieldCandidate(UtilityScores scores, SimPlayer self)
@@ -259,7 +290,7 @@ public sealed class UtilityAgent : IInputSource
         return 0;
     }
 
-    private readonly float[] _defenseScores = new float[4];
+    private readonly float[] _defenseScores = new float[6];
     private float _dashIntentH;
     private float _dashIntentV;
 
@@ -435,6 +466,7 @@ public sealed class UtilityAgent : IInputSource
         // Telegraph: the opponent is WINDING UP an attack whose arc (+margin) covers
         // us — the readable moment defensive options respond to.
         bool telegraphThreat = false;
+        bool crouchClearsThreat = false;
         if (opponent.State == PlayerState.WarmUp
             && opponent.Moves[opponent.CurrentMoveIndex] is SimMove windingUp)
         {
@@ -444,6 +476,14 @@ public sealed class UtilityAgent : IInputSource
                     windingUp.BaseHalf.X * opponent.WidthScalar + TelegraphDodgeMargin,
                     windingUp.BaseHalf.Y * opponent.HeightScalar + TelegraphDodgeMargin));
             telegraphThreat = arc.Overlaps(self.Body);
+            // Ducking helps only if the CROUCHED hurtbox top would clear the arc's
+            // bottom edge (grounded, from Idle, feet planted).
+            if (telegraphThreat && self.IsGrounded && self.State == PlayerState.Idle)
+            {
+                float feetY = self.Position.Y - self.BodyHalf.Y;
+                float crouchedTop = feetY + 2f * self.BodyHalf.Y * self.CrouchHeightRatio;
+                crouchClearsThreat = arc.Bottom > crouchedTop + 0.05f;
+            }
         }
 
         // Threat: can any of the OPPONENT's moves reach me right now (their facing
@@ -510,7 +550,8 @@ public sealed class UtilityAgent : IInputSource
             dashUsable,
             dashSlot,
             OpponentStunned: opponent.State == PlayerState.Stun,
-            recoverAim);
+            recoverAim,
+            crouchClearsThreat);
     }
 
     /// <summary>
@@ -677,6 +718,7 @@ public sealed class UtilityAgent : IInputSource
         new FlankBehavior(),
         new AttackBehavior(),
         new DashUtilityBehavior(),
+        new VerticalUtilityBehavior(),
         new EvadeBehavior(),
         new ThreatDodgeBehavior(),
         new ExhaustedCautionBehavior(),
@@ -699,6 +741,7 @@ public sealed class UtilityAgent : IInputSource
         public void Contribute(in UtilityContext ctx, UtilityScores scores)
         {
             scores.Horizontal[1] += BaselineNeutral;
+            scores.Vertical[1] += BaselineVerticalNeutral;
             scores.Jump[0] += BaselineNoJump;
             scores.Attack[0] += BaselineNoAttack;
         }
@@ -899,6 +942,49 @@ public sealed class UtilityAgent : IInputSource
         }
     }
 
+    /// <summary>2026-07-13 fast fall / crouch / DI, all on the vertical (and DI also
+    /// the horizontal) channel: drop onto an opponent below; crouch-brake a deadly
+    /// ground slide (negative crouch accel); crouch-slide toward a far opponent
+    /// (positive accel); and pre-position the held direction toward safety when a
+    /// hit is coming or landing — DI reads whatever is held at the hit instant, so
+    /// the commitment window supplies exactly the imperfection the spec demands.</summary>
+    private sealed class VerticalUtilityBehavior : IUtilityBehavior
+    {
+        public void Contribute(in UtilityContext ctx, UtilityScores scores)
+        {
+            SimPlayer self = ctx.Self;
+            // Fast-fall pursuit: airborne, opponent clearly below and roughly under us.
+            if (!self.IsGrounded && self.FastFallAcceleration > 0f
+                && ctx.Opponent.Position.Y < self.Position.Y - 1.5f
+                && MathF.Abs(ctx.Opponent.Position.X - self.Position.X) < 2f)
+            {
+                scores.Vertical[0] += FastFallPursuit;
+            }
+            // Crouch braking: sliding dangerously fast at high damage with a braking gene.
+            if (self.IsGrounded && self.State == PlayerState.Idle
+                && self.CrouchAcceleration < 0f && self.Damage >= HighDamageThreshold
+                && MathF.Abs(self.Velocity.X) > self.MaxGroundSpeed)
+            {
+                scores.Vertical[0] += CrouchBrake;
+            }
+            // Crouch-slide approach: a speed-boosting gene and a distant opponent.
+            if (self.IsGrounded && self.State == PlayerState.Idle
+                && self.CrouchAcceleration > 0f && !ctx.TelegraphThreat
+                && ctx.Distance > DashApproachRange)
+            {
+                scores.Vertical[0] += CrouchSlideApproach;
+            }
+            // DI pre-positioning: about to be hit (or being juggled) → hold toward the
+            // farthest blast line (stage center) and up.
+            if (self.DirectionalInfluence > 0f
+                && (ctx.TelegraphThreat || ctx.UnderThreat || self.State == PlayerState.Stun))
+            {
+                scores.Horizontal[self.Position.X >= 0f ? 0 : 2] += DIHold;
+                scores.Vertical[2] += DIHoldVertical;
+            }
+        }
+    }
+
     /// <summary>Req 4: at high damage, back away — harder the higher the damage (up to
     /// 2×) — but toward stage center when the retreat direction walks off the platform.
     /// Attacks stay live via AttackBehavior.</summary>
@@ -1017,7 +1103,8 @@ public readonly record struct UtilityContext(
     bool DashUsable,
     int DashSlot,
     bool OpponentStunned,
-    Vec2 RecoverAim);
+    Vec2 RecoverAim,
+    bool CrouchClearsThreat);
 
 /// <summary>
 /// The per-decision score sheet. Horizontal = {left, neutral, right}; Jump = {no, yes};
@@ -1027,6 +1114,7 @@ public readonly record struct UtilityContext(
 public sealed class UtilityScores
 {
     public readonly float[] Horizontal = new float[3];
+    public readonly float[] Vertical = new float[3]; // down, neutral, up (2026-07-13)
     public readonly float[] Jump = new float[2];
     public readonly float[] Attack;
     public readonly int[] AttackMoves;

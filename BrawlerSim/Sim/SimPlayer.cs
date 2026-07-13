@@ -15,6 +15,17 @@ public enum PlayerState
     Stun,
     Shield, // 2026-07-12, FEATURES.md §Shield — tint: cyan
     Dash,   // 2026-07-13, FEATURES.md §Dash — tint: orange
+    Crouch, // 2026-07-13, FEATURES.md §Fast Fall/Crouch/DI — tint: purple
+}
+
+/// <summary>Crouch sub-phase: sink and rise are input-deaf (spec); movement and
+/// action-queuing happen only while Held.</summary>
+public enum CrouchStage
+{
+    None,
+    Sink,
+    Held,
+    Rise,
 }
 
 /// <summary>Dash sub-phase: warm-up (direction still steerable, optional i-frames),
@@ -88,6 +99,13 @@ public sealed class SimPlayer
     public readonly float Drag;
     public readonly float GravityScale;
     public readonly float HitstunDamageScalar;
+    public readonly float FastFallAcceleration;
+    public readonly float CrouchAcceleration;
+    public readonly int CrouchStageTicks;
+    public readonly float CrouchMoveSpeed;
+    public readonly float CrouchHeightRatio;
+    public readonly float DirectionalInfluence;
+    public readonly float DiKnockbackReduction;
     public readonly Vec2 BodyHalf;
     public readonly Vec2 SpawnPosition;
 
@@ -121,6 +139,15 @@ public sealed class SimPlayer
     public Vec2 DashDirection;
     public bool AirDashUsed;
 
+    // Fast fall / crouch / DI (2026-07-13, all hashed).
+    /// <summary>This tick's held direction signs — read by fast fall, crouch entry,
+    /// and DI at the hit instant. Captured every StepStateMachine.</summary>
+    public Vec2 HeldDirection;
+    public CrouchStage CrouchPhase;
+    /// <summary>Action queued during crouch, executed after the input-deaf rise:
+    /// -1 none, -2 jump, ≥0 a move slot.</summary>
+    public int QueuedCrouchAction = -1;
+
     private readonly MatchConfig _config;
 
     // Stats accumulated for fitness/research.
@@ -151,6 +178,11 @@ public sealed class SimPlayer
     public int DashCount;
     public int DashInvulnDodges;
 
+    // Fast fall / crouch / DI stats (2026-07-13, research-only).
+    public int FastFallTicks;
+    public int CrouchTicks;
+    public int DIInfluencedHits;
+
     public SimPlayer(int index, CharacterGenome genome, Vec2 spawn, MatchConfig config)
     {
         Index = index;
@@ -177,6 +209,13 @@ public sealed class SimPlayer
         HitstunDamageScalar = p.Get(CharacterParams.HitstunDamageScalar);
         WidthScalar = p.Get(CharacterParams.WidthScalar);
         HeightScalar = p.Get(CharacterParams.HeightScalar);
+        FastFallAcceleration = p.Get(CharacterParams.FastFallAcceleration);
+        CrouchAcceleration = p.Get(CharacterParams.CrouchAccelerationChange);
+        CrouchStageTicks = Math.Max(1, config.ToTicks(p.Get(CharacterParams.CrouchSpeed)));
+        CrouchMoveSpeed = p.Get(CharacterParams.CrouchMoveSpeed);
+        CrouchHeightRatio = p.Get(CharacterParams.CrouchHeightRatio);
+        DirectionalInfluence = p.Get(CharacterParams.DirectionalInfluence);
+        DiKnockbackReduction = p.Get(CharacterParams.DiKnockbackReduction);
         BodyHalf = new Vec2(
             config.PlayerBaseWidth * WidthScalar / 2f,
             config.PlayerBaseHeight * HeightScalar / 2f);
@@ -189,7 +228,50 @@ public sealed class SimPlayer
     public readonly float WidthScalar;
     public readonly float HeightScalar;
 
-    public Aabb Body => new(Position, BodyHalf);
+    /// <summary>Vertical body scale while crouching (1 = full height): animates over
+    /// the sink/rise stages, sits at CrouchHeightRatio while held.</summary>
+    public float CrouchScale
+    {
+        get
+        {
+            if (State != PlayerState.Crouch)
+            {
+                return 1f;
+            }
+            float progress = PhaseTicksLeft / (float)CrouchStageTicks;
+            return CrouchPhase switch
+            {
+                CrouchStage.Sink => CrouchHeightRatio + (1f - CrouchHeightRatio) * progress,
+                CrouchStage.Rise => 1f - (1f - CrouchHeightRatio) * progress,
+                _ => CrouchHeightRatio,
+            };
+        }
+    }
+
+    /// <summary>Feet stay planted while the height shrinks: the bottom edge is
+    /// invariant (Position.Y − BodyHalf.Y); the center drops with the scale.</summary>
+    public Aabb Body
+    {
+        get
+        {
+            float scale = CrouchScale;
+            if (scale >= 1f)
+            {
+                return new Aabb(Position, BodyHalf);
+            }
+            float half = BodyHalf.Y * scale;
+            return new Aabb(
+                new Vec2(Position.X, Position.Y - (BodyHalf.Y - half)),
+                new Vec2(BodyHalf.X, half));
+        }
+    }
+
+    /// <summary>Fast fall: airborne, holding down, and in a state that permits it
+    /// (spec: everything airborne except dash, attack execution, and stun).</summary>
+    public bool IsFastFalling =>
+        !IsGrounded && HeldDirection.Y < 0f && FastFallAcceleration > 0f
+        && State is PlayerState.Air or PlayerState.AirJumpsExhausted
+            or PlayerState.WarmUp or PlayerState.CoolDown;
 
     /// <summary>The shield being held right now, or null.</summary>
     public SimShield? ActiveShield => State == PlayerState.Shield ? _shields[CurrentMoveIndex] : null;
@@ -251,6 +333,10 @@ public sealed class SimPlayer
     /// <summary>Advances move/stun phase timers and applies this tick's input intents.</summary>
     public void StepStateMachine(in InputFrame input)
     {
+        // Held direction (2026-07-13): one capture serving fast fall (down, airborne),
+        // crouch entry (down, grounded), and DI (read at the hit instant).
+        HeldDirection = new Vec2(MathF.Sign(input.Horizontal), MathF.Sign(input.Vertical));
+
         // Shield regeneration: every slot not currently held regenerates toward full —
         // resuming from CURRENT health (spec: never resets to fresh).
         for (int slot = 0; slot < _shields.Length; slot++)
@@ -270,6 +356,10 @@ public sealed class SimPlayer
 
             case PlayerState.Dash:
                 StepDash(input);
+                return;
+
+            case PlayerState.Crouch:
+                StepCrouch(input);
                 return;
 
             case PlayerState.Stun:
@@ -309,6 +399,14 @@ public sealed class SimPlayer
                 else if (input.Actions != 0)
                 {
                     StartAction(input.FirstAction);
+                }
+                else if (input.Vertical < 0f && IsGrounded)
+                {
+                    // Crouch entry (2026-07-13): Idle + held down, grounded only.
+                    State = PlayerState.Crouch;
+                    CrouchPhase = CrouchStage.Sink;
+                    PhaseTicksLeft = CrouchStageTicks;
+                    QueuedCrouchAction = -1;
                 }
                 return;
 
@@ -378,6 +476,8 @@ public sealed class SimPlayer
         StunFromShieldBreak = false;
         ShieldPhase = ShieldStage.None;
         DashPhase = DashStage.None;
+        CrouchPhase = CrouchStage.None; // a hit cancels crouch at full size (designer)
+        QueuedCrouchAction = -1;
         PhaseTicksLeft = stunTicks;
     }
 
@@ -418,6 +518,89 @@ public sealed class SimPlayer
             return;
         }
         StartMove(slot);
+    }
+
+    private void StepCrouch(in InputFrame input)
+    {
+        CrouchTicks++;
+        switch (CrouchPhase)
+        {
+            case CrouchStage.Sink: // input-deaf by spec
+                if (--PhaseTicksLeft <= 0)
+                {
+                    CrouchPhase = CrouchStage.Held;
+                    PhaseTicksLeft = 0;
+                }
+                return;
+
+            case CrouchStage.Held:
+                // Movement at the crouch-scaled speed (designer revision) plus the
+                // slide friction: momentum gains/loses CrouchAcceleration each second,
+                // positive slides capped at 1.5× the ground-speed gene.
+                ApplyHorizontalScaled(input.Horizontal, CrouchMoveSpeed);
+                if (CrouchAcceleration != 0f && Velocity.X != 0f)
+                {
+                    float cap = MaxGroundSpeed * 1.5f;
+                    float slid = Velocity.X + MathF.Sign(Velocity.X) * CrouchAcceleration * _config.Dt;
+                    if (MathF.Sign(slid) != MathF.Sign(Velocity.X))
+                    {
+                        slid = 0f; // braking never reverses
+                    }
+                    else if (CrouchAcceleration > 0f && MathF.Abs(slid) > cap)
+                    {
+                        slid = MathF.Sign(slid) * MathF.Max(cap, MathF.Abs(Velocity.X));
+                    }
+                    Velocity = Velocity with { X = slid };
+                }
+
+                if (input.Jump)
+                {
+                    BeginCrouchRise(queued: -2);
+                }
+                else if (input.Actions != 0)
+                {
+                    BeginCrouchRise(queued: _buttonMoves[input.FirstAction]);
+                }
+                else if (input.Vertical >= 0f)
+                {
+                    BeginCrouchRise(queued: -1);
+                }
+                return;
+
+            case CrouchStage.Rise: // input-deaf, uncancellable by spec
+                if (--PhaseTicksLeft <= 0)
+                {
+                    CrouchPhase = CrouchStage.None;
+                    int queued = QueuedCrouchAction;
+                    QueuedCrouchAction = -1;
+                    State = PlayerState.Idle;
+                    if (queued == -2)
+                    {
+                        if (IsGrounded)
+                        {
+                            Jumps++;
+                            Velocity = Velocity with { Y = GroundJumpForce };
+                            State = PlayerState.Air;
+                        }
+                    }
+                    else if (queued >= 0)
+                    {
+                        int button = ButtonForMove(queued);
+                        if (button >= 0)
+                        {
+                            StartAction(button);
+                        }
+                    }
+                }
+                return;
+        }
+    }
+
+    private void BeginCrouchRise(int queued)
+    {
+        QueuedCrouchAction = queued;
+        CrouchPhase = CrouchStage.Rise;
+        PhaseTicksLeft = CrouchStageTicks;
     }
 
     private void StartDash(int slot)
@@ -595,6 +778,30 @@ public sealed class SimPlayer
     /// the cap only limits SELF-applied speed — it neither snap-reverses direction nor
     /// bleeds off external (knockback) velocity above the cap.
     /// </summary>
+    private void ApplyHorizontalScaled(float horizontal, float speedScale)
+    {
+        if (horizontal > 0f)
+        {
+            Facing = 1;
+            float max = MaxGroundSpeed * speedScale;
+            float accel = GroundAcceleration * speedScale;
+            if (Velocity.X < max)
+            {
+                Velocity = Velocity with { X = MathF.Min(Velocity.X + accel, max) };
+            }
+        }
+        else if (horizontal < 0f)
+        {
+            Facing = -1;
+            float max = MaxGroundSpeed * speedScale;
+            float accel = GroundAcceleration * speedScale;
+            if (Velocity.X > -max)
+            {
+                Velocity = Velocity with { X = MathF.Max(Velocity.X - accel, -max) };
+            }
+        }
+    }
+
     private void ApplyHorizontal(float horizontal)
     {
         if (horizontal > 0f)

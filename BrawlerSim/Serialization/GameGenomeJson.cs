@@ -87,7 +87,8 @@ public static class GameGenomeJson
             c.Name ?? "Unnamed",
             c.Stocks,
             c.SpriteIndex,
-            ParamSet.FromDictionary(config.CharacterSchema, Require(c.Params, "character params")),
+            ParamSet.FromDictionary(config.CharacterSchema,
+                WithCharacterDefaults(Require(c.Params, "character params"))),
             (c.Moves ?? new List<MoveDoc>()).Select(m => m.Type switch
             {
                 "shield" => new MoveGenome(
@@ -117,6 +118,29 @@ public static class GameGenomeJson
 
     private static Dictionary<string, float> Require(Dictionary<string, float>? dict, string what) =>
         dict ?? throw new JsonException($"game.json is missing {what}.");
+
+    /// <summary>Neutral defaults for the 2026-07-13 character-schema appends: every
+    /// value switches its mechanic OFF (crouchMoveSpeed 1.0 = unchanged speed), so
+    /// pre-feature genomes play exactly as they always did.</summary>
+    internal static readonly (string Key, float Value)[] CharacterParamDefaults =
+    {
+        (CharacterParams.FastFallAcceleration, 0f),
+        (CharacterParams.CrouchAccelerationChange, 0f),
+        (CharacterParams.CrouchSpeed, 0.1f),
+        (CharacterParams.CrouchMoveSpeed, 1f),
+        (CharacterParams.CrouchHeightRatio, 0.9f),
+        (CharacterParams.DirectionalInfluence, 0f),
+        (CharacterParams.DiKnockbackReduction, 0f),
+    };
+
+    internal static Dictionary<string, float> WithCharacterDefaults(Dictionary<string, float> dict)
+    {
+        foreach ((string key, float value) in CharacterParamDefaults)
+        {
+            dict.TryAdd(key, value);
+        }
+        return dict;
+    }
 
     // DTOs — the on-disk shape. Do not reuse genome types here: the file format must be
     // able to evolve independently of the in-memory model.

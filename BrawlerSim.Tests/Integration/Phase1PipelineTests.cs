@@ -70,10 +70,10 @@ public class Phase1PipelineTests
     [Fact]
     public void PopulationFingerprintMatchesGoldenValue()
     {
-        // Re-pinned 2026-07-13: guaranteed dash slot (pinned to the last button) —
-        // new dash-schema RNG draws + formatVersion 4, a REAL design-space change.
-        // Prior pins: 10607725140721060960 (shield slot), 5432710911100783110 (two
-        // moves), 13551893661434631362 (format-only), 9300943650238635838 (orig).
-        Assert.Equal(16079587979934170348UL, RunPipeline(20260707));
+        // Re-pinned 2026-07-13 (2nd): seven character-schema appends (fast fall /
+        // crouch / DI) — new generation draws, a REAL design-space change. Prior
+        // pins: 16079587979934170348 (dash slot), 10607725140721060960 (shield),
+        // 5432710911100783110 (two moves), 13551893661434631362, 9300943650238635838.
+        Assert.Equal(5768454974650524447UL, RunPipeline(20260707));
     }
 }

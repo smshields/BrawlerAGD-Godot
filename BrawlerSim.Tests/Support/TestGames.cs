@@ -22,6 +22,15 @@ public static class TestGames
             [CharacterParams.HeightScalar] = 1f,
             [CharacterParams.GravityScalar] = 1f,
             [CharacterParams.HitstunDamageScalar] = 0.2f,
+            // 2026-07-13 appends at their NEUTRAL values (mechanics off) so every
+            // pre-existing hand-computed expectation still holds exactly.
+            [CharacterParams.FastFallAcceleration] = 0f,
+            [CharacterParams.CrouchAccelerationChange] = 0f,
+            [CharacterParams.CrouchSpeed] = 0.1f,
+            [CharacterParams.CrouchMoveSpeed] = 1f,
+            [CharacterParams.CrouchHeightRatio] = 0.9f,
+            [CharacterParams.DirectionalInfluence] = 0f,
+            [CharacterParams.DiKnockbackReduction] = 0f,
         };
         foreach ((string key, float value) in overrides)
         {

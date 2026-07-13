@@ -297,12 +297,12 @@ public class UtilityAgentTests
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 0)),
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 1)),
         });
-        // Re-pinned 2026-07-13 (2nd): vulnerable disengage — CoolDown now gates the
-        // chase behaviors, which changes legacy-genome matches too (every swing has a
-        // cool-down). Prior pins: 5206514131316504700 (dash), 17369012423366605927
-        // (shield), 2695584452249808183 (exhausted disengage), 13063472053697347474
-        // (traversal), 4239894947699402948 / 8169156236120396373 (stun caps),
-        // 3417322836374644188 (flank), 15992591370472251803 (initial).
-        Assert.Equal(11582576729381719023UL, result.FinalHash);
+        // Re-pinned 2026-07-13 (3rd): fast-fall/crouch/DI — hash format grew and the
+        // agent gained the vertical channel (one more RNG draw per decision). Prior
+        // pins: 11582576729381719023 (vulnerable disengage), 5206514131316504700
+        // (dash), 17369012423366605927 (shield), 2695584452249808183,
+        // 13063472053697347474, 4239894947699402948 / 8169156236120396373,
+        // 3417322836374644188, 15992591370472251803 (initial).
+        Assert.Equal(15547022023902356175UL, result.FinalHash);
     }
 }

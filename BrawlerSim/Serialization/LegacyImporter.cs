@@ -33,7 +33,8 @@ public static class LegacyImporter
         using JsonDocument playerDoc = ParseFile(playerPath);
         JsonElement playerRoot = playerDoc.RootElement;
 
-        ParamSet playerParams = ParamSet.FromDictionary(config.CharacterSchema, NumericFields(playerRoot));
+        ParamSet playerParams = ParamSet.FromDictionary(config.CharacterSchema,
+            GameGenomeJson.WithCharacterDefaults(NumericFields(playerRoot)));
         string name = playerRoot.TryGetProperty("playerName", out JsonElement nameEl)
             ? nameEl.GetString() ?? "Unnamed"
             : "Unnamed";

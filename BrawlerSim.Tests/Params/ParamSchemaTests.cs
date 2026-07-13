@@ -44,6 +44,14 @@ public class ParamSchemaTests
             ("heightScalar", 0.5f, 1.5f),
             ("gravityScalar", 0.3f, 1.3f),
             ("hitstunDamageScalar", 0.1f, 0.3f),
+            // Appended 2026-07-13 (fastfall-crouch-di.md) — append-only preserved.
+            ("fastFallAcceleration", 0f, 15f),
+            ("crouchAccelerationChange", -8f, 8f),
+            ("crouchSpeed", 0.05f, 0.2f),
+            ("crouchMoveSpeed", 0.3f, 1.5f),
+            ("crouchHeightRatio", 0.4f, 0.9f),
+            ("directionalInfluence", 0.02f, 0.10f),
+            ("diKnockbackReduction", 0.05f, 0.20f),
         };
         AssertSchema(DefaultSchemas.Character, expected);
     }

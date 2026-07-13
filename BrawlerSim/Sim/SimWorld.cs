@@ -199,6 +199,13 @@ public sealed class SimWorld
             victim.Position, hitbox.Center, attacker.Move.KnockbackDirection,
             attacker.Facing, attacker.Move.KnockbackScalar, damageAfterHit);
 
+        // Directional influence (2026-07-13, FEATURES.md §DI): the victim's held
+        // direction at the hit instant deflects the knockback slightly (≤10% gene)
+        // and, when held near-opposite (within 45°), trims its magnitude (≤20% gene).
+        // SKIPPED while shielding — including pokes through partial cover: a shielder
+        // is committed to the shield, not influencing (designer clarification).
+        knockback = ApplyDirectionalInfluence(victim, knockback);
+
         int stunTicks = Config.ToTicks(
             attacker.Move.HitstunDuration * damageAfterHit * victim.HitstunDamageScalar);
         if (!float.IsPositiveInfinity(Config.MaxStunSeconds))
@@ -208,6 +215,32 @@ public sealed class SimWorld
 
         victim.ApplyHit(attacker.Move.DamageGiven, knockback, stunTicks);
         victim.InvincibleTicksLeft = Config.InvincibilityTicks;
+    }
+
+    private static Vec2 ApplyDirectionalInfluence(SimPlayer victim, Vec2 knockback)
+    {
+        if (victim.DirectionalInfluence <= 0f || victim.State == PlayerState.Shield)
+        {
+            return knockback;
+        }
+        Vec2 held = victim.HeldDirection;
+        float heldLength = held.Length();
+        float magnitude = knockback.Length();
+        if (heldLength <= 0f || magnitude <= 0f)
+        {
+            return knockback;
+        }
+        Vec2 heldUnit = held * (1f / heldLength);
+        Vec2 result = knockback + heldUnit * (victim.DirectionalInfluence * magnitude);
+        // Opposite-hold reduction: alignment within 45° of straight-against.
+        Vec2 kbUnit = knockback * (1f / magnitude);
+        float dot = heldUnit.X * kbUnit.X + heldUnit.Y * kbUnit.Y;
+        if (dot < -0.70710678f)
+        {
+            result *= 1f - victim.DiKnockbackReduction;
+        }
+        victim.DIInfluencedHits++;
+        return result;
     }
 
     /// <summary>
@@ -280,6 +313,11 @@ public sealed class SimWorld
             hash = Fnv1a.Add(hash, p.DashDirection.X);
             hash = Fnv1a.Add(hash, p.DashDirection.Y);
             hash = Fnv1a.Add(hash, p.AirDashUsed ? 1 : 0);
+            // 2026-07-13 fast fall / crouch / DI.
+            hash = Fnv1a.Add(hash, p.HeldDirection.X);
+            hash = Fnv1a.Add(hash, p.HeldDirection.Y);
+            hash = Fnv1a.Add(hash, (int)p.CrouchPhase);
+            hash = Fnv1a.Add(hash, p.QueuedCrouchAction);
             foreach (float health in p.ShieldHealths)
             {
                 hash = Fnv1a.Add(hash, health);
@@ -295,7 +333,8 @@ public sealed class SimWorld
                 p.CompletedStockDamage.Append(p.Damage).ToArray(),
                 p.MoveUses.ToArray(), p.StunTicks, p.Jumps,
                 p.ShieldActivations, p.BlockedHits, p.ShieldBreaks, p.ShieldTicks,
-                p.DashCount, p.DashInvulnDodges)).ToArray(),
+                p.DashCount, p.DashInvulnDodges,
+                p.FastFallTicks, p.CrouchTicks, p.DIInfluencedHits)).ToArray(),
             LoserIndex,
             TickCount,
             TickCount / (float)Config.TicksPerSecond,

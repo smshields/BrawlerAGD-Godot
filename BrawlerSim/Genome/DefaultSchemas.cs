@@ -17,6 +17,17 @@ public static class CharacterParams
     public const string HeightScalar = "heightScalar";
     public const string GravityScalar = "gravityScalar";
     public const string HitstunDamageScalar = "hitstunDamageScalar";
+
+    // Fast fall / crouch / DI (2026-07-13, FEATURES.md; appended — order is
+    // crossover semantics). Loader defaults for pre-feature files:
+    // GameGenomeJson.CharacterParamDefaults (all mechanics neutral/off).
+    public const string FastFallAcceleration = "fastFallAcceleration";
+    public const string CrouchAccelerationChange = "crouchAccelerationChange";
+    public const string CrouchSpeed = "crouchSpeed";
+    public const string CrouchMoveSpeed = "crouchMoveSpeed";
+    public const string CrouchHeightRatio = "crouchHeightRatio";
+    public const string DirectionalInfluence = "directionalInfluence";
+    public const string DiKnockbackReduction = "diKnockbackReduction";
 }
 
 /// <summary>Stable param keys for the shield schema (2026-07-12, FEATURES.md §Shield).</summary>
@@ -82,6 +93,18 @@ public static class DefaultSchemas
         new ParamSpec(CharacterParams.HeightScalar, 0.5f, 1.5f),
         new ParamSpec(CharacterParams.GravityScalar, 0.3f, 1.3f),
         new ParamSpec(CharacterParams.HitstunDamageScalar, 0.1f, 0.3f),
+        // Appended 2026-07-13 (fastfall-crouch-di.md); append-only preserves the
+        // crossover indexing of everything above.
+        new ParamSpec(CharacterParams.FastFallAcceleration, 0f, 15f),
+        new ParamSpec(CharacterParams.CrouchAccelerationChange, -8f, 8f),
+        new ParamSpec(CharacterParams.CrouchSpeed, 0.05f, 0.2f),
+        new ParamSpec(CharacterParams.CrouchMoveSpeed, 0.3f, 1.5f),
+        new ParamSpec(CharacterParams.CrouchHeightRatio, 0.4f, 0.9f),
+        // DI genes GENERATE in the live ranges but VALIDATE down to 0: the loader's
+        // neutral default for pre-feature genomes is 0 = mechanic off (same
+        // generation-vs-valid-domain split as knockbackModX, DEVIATIONS #13).
+        new ParamSpec(CharacterParams.DirectionalInfluence, 0.02f, 0.10f) { ValidMin = 0f },
+        new ParamSpec(CharacterParams.DiKnockbackReduction, 0.05f, 0.20f) { ValidMin = 0f },
     });
 
     public static readonly ParamSchema Move = new("move", new[]
