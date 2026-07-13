@@ -10,6 +10,7 @@ public enum MoveType
 {
     Attack,
     Shield,
+    Dash, // 2026-07-13, FEATURES.md §Dash
 }
 
 /// <summary>One evolvable move: type, raw params (schema per type), and a cosmetic
@@ -40,6 +41,12 @@ public sealed class MoveGenome
     {
         ParamSet raw = GenomeOps.Generate(config.ShieldSchema, rng);
         return new MoveGenome(raw, rng.NextInt(config.MoveSpriteCount), MoveType.Shield);
+    }
+
+    public static MoveGenome GenerateDash(GenerationConfig config, Pcg32 rng)
+    {
+        ParamSet raw = GenomeOps.Generate(config.DashSchema, rng);
+        return new MoveGenome(raw, rng.NextInt(config.MoveSpriteCount), MoveType.Dash);
     }
 }
 
@@ -90,7 +97,7 @@ public sealed class CharacterGenome
     {
         ParamSet @params = GenomeOps.Generate(config.CharacterSchema, rng);
         int spriteIndex = rng.NextInt(config.PlayerSpriteCount);
-        var moves = new List<MoveGenome>(config.MovesPerCharacter + config.ShieldSlotCount);
+        var moves = new List<MoveGenome>(config.MovesPerCharacter + config.ShieldSlotCount + config.DashSlotCount);
         for (int i = 0; i < config.MovesPerCharacter; i++)
         {
             moves.Add(MoveGenome.Generate(config, rng));
@@ -99,19 +106,31 @@ public sealed class CharacterGenome
         {
             moves.Add(MoveGenome.GenerateShield(config, rng));
         }
-        // Button genes consume RNG only when there is a real choice (>1 move), so
-        // single-move populations reproduce pre-feature RNG streams bit-exactly
-        // (golden population fingerprints and replicate runs stay valid).
-        int[] buttonMoves = new int[Sim.InputFrame.ActionCount];
-        if (moves.Count > 1)
+        for (int i = 0; i < config.DashSlotCount; i++)
         {
-            for (int b = 0; b < buttonMoves.Length; b++)
+            moves.Add(MoveGenome.GenerateDash(config, rng)); // dash is always the LAST slot
+        }
+        // Button genes consume RNG only when there is a real choice (>1 move), so
+        // single-move populations reproduce pre-feature RNG streams bit-exactly.
+        // Dash pin (2026-07-13, designer): the dash owns the LAST button (right
+        // shoulder / L); other moves are mapped over the remaining buttons.
+        int mappableButtons = config.DashSlotCount > 0
+            ? Sim.InputFrame.ActionCount - 1 : Sim.InputFrame.ActionCount;
+        int nonDashMoves = moves.Count - config.DashSlotCount;
+        int[] buttonMoves = new int[Sim.InputFrame.ActionCount];
+        if (nonDashMoves > 1)
+        {
+            for (int b = 0; b < mappableButtons; b++)
             {
-                buttonMoves[b] = rng.NextInt(moves.Count);
+                buttonMoves[b] = rng.NextInt(nonDashMoves);
             }
         }
-        return new CharacterGenome(name, config.Stocks, spriteIndex, @params, moves,
-            EnsureButtonCoverage(buttonMoves, moves.Count));
+        EnsureButtonCoverage(buttonMoves, nonDashMoves, mappableButtons);
+        if (config.DashSlotCount > 0)
+        {
+            buttonMoves[Sim.InputFrame.ActionCount - 1] = moves.Count - 1;
+        }
+        return new CharacterGenome(name, config.Stocks, spriteIndex, @params, moves, buttonMoves);
     }
 
     /// <summary>
@@ -122,16 +141,25 @@ public sealed class CharacterGenome
     /// unmap anything. Deterministic and RNG-free; a no-op for covering mappings.
     /// </summary>
     public static int[] EnsureButtonCoverage(int[] buttonMoves, int moveCount)
+        => EnsureButtonCoverage(buttonMoves, moveCount, buttonMoves.Length);
+
+    /// <summary>Coverage over the FIRST buttonLimit buttons only — buttons past the
+    /// limit are reserved (the dash pin) and neither counted nor repaired.</summary>
+    public static int[] EnsureButtonCoverage(int[] buttonMoves, int moveCount, int buttonLimit)
     {
-        if (moveCount > buttonMoves.Length)
+        if (moveCount > buttonLimit)
         {
             throw new ArgumentException(
-                $"{moveCount} moves cannot all be mapped onto {buttonMoves.Length} buttons.");
+                $"{moveCount} moves cannot all be mapped onto {buttonLimit} buttons.");
+        }
+        if (moveCount == 0)
+        {
+            return buttonMoves;
         }
         Span<int> uses = stackalloc int[moveCount];
-        foreach (int assigned in buttonMoves)
+        for (int b = 0; b < buttonLimit; b++)
         {
-            uses[assigned]++;
+            uses[buttonMoves[b]]++;
         }
         for (int m = 0; m < moveCount; m++)
         {
@@ -139,7 +167,7 @@ public sealed class CharacterGenome
             {
                 continue;
             }
-            for (int b = 0; b < buttonMoves.Length; b++)
+            for (int b = 0; b < buttonLimit; b++)
             {
                 if (uses[buttonMoves[b]] > 1)
                 {

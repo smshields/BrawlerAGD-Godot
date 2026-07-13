@@ -23,8 +23,13 @@ public static class SimPhysics
         float dt = config.Dt;
 
         // Box2D order: gravity, then linear damping, then integrate position.
-        player.Velocity += new Vec2(0f, -config.Gravity * player.GravityScale * dt);
-        player.Velocity *= 1f / (1f + dt * player.Drag);
+        // Dash travel (2026-07-13): a locked straight line — gravity and drag are
+        // suspended (the dash re-asserts its velocity every tick anyway).
+        if (!player.IsDashTraveling)
+        {
+            player.Velocity += new Vec2(0f, -config.Gravity * player.GravityScale * dt);
+            player.Velocity *= 1f / (1f + dt * player.Drag);
+        }
 
         Vec2 displacement = player.Velocity * dt;
         float maxAxis = MathF.Max(DetMath.Abs(displacement.X), DetMath.Abs(displacement.Y));
@@ -33,8 +38,8 @@ public static class SimPhysics
 
         for (int i = 0; i < substeps; i++)
         {
-            MoveAxis(player, opponent, platforms, step.X, horizontal: true);
-            MoveAxis(player, opponent, platforms, step.Y, horizontal: false);
+            MoveAxis(player, opponent, platforms, config, step.X, horizontal: true);
+            MoveAxis(player, opponent, platforms, config, step.Y, horizontal: false);
         }
 
         player.OnGroundedChanged(IsGrounded(player, platforms));
@@ -45,7 +50,7 @@ public static class SimPhysics
     /// a crossing — against the opponent's body. Pre-existing overlap is left for the
     /// capped resolver, so residual contact never snaps positions.
     /// </summary>
-    private static void MoveAxis(SimPlayer player, SimPlayer opponent, IReadOnlyList<Aabb> platforms, float delta, bool horizontal)
+    private static void MoveAxis(SimPlayer player, SimPlayer opponent, IReadOnlyList<Aabb> platforms, MatchConfig config, float delta, bool horizontal)
     {
         if (delta == 0f)
         {
@@ -69,7 +74,7 @@ public static class SimPhysics
                     ? other.Left - player.BodyHalf.X - Skin
                     : other.Right + player.BodyHalf.X + Skin;
                 player.Position = player.Position with { X = resolvedX };
-                ResolveAxisVelocity(player, opponent, horizontal: true,
+                ResolveAxisVelocity(player, opponent, config, horizontal: true,
                     directionOfA: playerOnLeft ? -1f : 1f);
             }
             else
@@ -79,7 +84,7 @@ public static class SimPhysics
                     ? other.Bottom - player.BodyHalf.Y - Skin
                     : other.Top + player.BodyHalf.Y + Skin;
                 player.Position = player.Position with { Y = resolvedY };
-                ResolveAxisVelocity(player, opponent, horizontal: false,
+                ResolveAxisVelocity(player, opponent, config, horizontal: false,
                     directionOfA: playerBelow ? -1f : 1f);
             }
         }
@@ -157,7 +162,7 @@ public static class SimPhysics
             float direction = a.Position.X <= b.Position.X ? -1f : 1f;
             a.Position += new Vec2(direction * correction * (b.Mass / total), 0f);
             b.Position -= new Vec2(direction * correction * (a.Mass / total), 0f);
-            ResolveAxisVelocity(a, b, horizontal: true, direction);
+            ResolveAxisVelocity(a, b, config, horizontal: true, direction);
         }
         else
         {
@@ -165,11 +170,11 @@ public static class SimPhysics
             float direction = a.Position.Y <= b.Position.Y ? -1f : 1f;
             a.Position += new Vec2(0f, direction * correction * (b.Mass / total));
             b.Position -= new Vec2(0f, direction * correction * (a.Mass / total));
-            ResolveAxisVelocity(a, b, horizontal: false, direction);
+            ResolveAxisVelocity(a, b, config, horizontal: false, direction);
         }
     }
 
-    private static void ResolveAxisVelocity(SimPlayer a, SimPlayer b, bool horizontal, float directionOfA)
+    private static void ResolveAxisVelocity(SimPlayer a, SimPlayer b, MatchConfig config, bool horizontal, float directionOfA)
     {
         float va = horizontal ? a.Velocity.X : a.Velocity.Y;
         float vb = horizontal ? b.Velocity.X : b.Velocity.Y;
@@ -182,7 +187,21 @@ public static class SimPhysics
             return;
         }
         float common = (a.Mass * va + b.Mass * vb) / (a.Mass + b.Mass);
-        a.Velocity = horizontal ? a.Velocity with { X = common } : a.Velocity with { Y = common };
-        b.Velocity = horizontal ? b.Velocity with { X = common } : b.Velocity with { Y = common };
+        // Dash contact cap (2026-07-13, designer): a dashing player shoves but can
+        // never KO — the velocity imparted to the NON-dashing side is clamped,
+        // damage-independent. (The dasher re-asserts its own speed next tick.)
+        float aNew = common, bNew = common;
+        if (b.IsDashTraveling && !a.IsDashTraveling)
+        {
+            aNew = MathF.Abs(common) > config.DashContactPushCap
+                ? MathF.Sign(common) * config.DashContactPushCap : common;
+        }
+        else if (a.IsDashTraveling && !b.IsDashTraveling)
+        {
+            bNew = MathF.Abs(common) > config.DashContactPushCap
+                ? MathF.Sign(common) * config.DashContactPushCap : common;
+        }
+        a.Velocity = horizontal ? a.Velocity with { X = aNew } : a.Velocity with { Y = aNew };
+        b.Velocity = horizontal ? b.Velocity with { X = bNew } : b.Velocity with { Y = bNew };
     }
 }

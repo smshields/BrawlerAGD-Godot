@@ -87,7 +87,8 @@ recordings), then wait for their confirmation.
   (LevelLoader 9-slice Q/W/E/A/S/D/Z/X/C); no skeuomorphism; abstraction over detail.
 - Player state tints (Unity-verbatim + additions): Idle white · Air green ·
   JumpsExhausted grey · WarmUp yellow · Attack red · CoolDown blue · Stun magenta ·
-  Shield cyan (2026-07-12; the shield itself is a white→red circle by degradation).
+  Shield cyan (2026-07-12; the shield itself is a white→red circle by degradation) ·
+  Dash orange (2026-07-13).
   These ARE the game's readability system — new states need a tint decision.
 - ALL-CAPS for menu/UI labels. 1280×720 design viewport, `canvas_items` stretch,
   fixed 16:9 world view (players die off-screen at the blast zone — that hidden-death
@@ -146,9 +147,10 @@ readable); game.json is formatVersion 2 (v1 readable); run.json records the agen
 config (old checkpoints resume as DT). Outstanding: first push + CI canary review
 (needs designer's GitHub auth); DT archival after designer confirms the utility pivot.
 Feature 3 (second move, button coverage, damage-ranked selection, moveMix nudge,
-0.25 s stun cap + stunLock/jumps fitness terms) and feature 4 (SHIELD move type:
-guaranteed third slot, nine evolvable params, coverage blocking, spacing push,
-cap-exempt break stun, agent shield behaviors, game.json v3 —
-docs/features/shield.md) are implemented and awaiting the designer play-test gate.
+0.25 s stun cap + stunLock/jumps fitness terms) feature 4 (SHIELD move type, game.json v3, block-reward fitness term —
+docs/features/shield.md), and feature 5 (DASH move type: gravity-suspended travel,
+per-stage evolvable i-frames, jumps+dash air budget, no-KO contact cap, pinned last
+button, unified defense channel, game.json v4 — docs/features/dash.md) are
+implemented and awaiting the designer play-test gate.
 Utility-agent behavior log (flank/traversal/exhausted-disengage/shield) lives in
 docs/features/utility-agent.md; fitness standard-v3 is shield-BLIND for now.

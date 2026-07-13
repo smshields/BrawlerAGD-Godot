@@ -14,6 +14,7 @@ public sealed record GenerationConfig
     public ParamSchema MoveSchema { get; init; } = DefaultSchemas.Move;
 
     public ParamSchema ShieldSchema { get; init; } = DefaultSchemas.Shield;
+    public ParamSchema DashSchema { get; init; } = DefaultSchemas.Dash;
 
     public int CharacterCount { get; init; } = 2;
     public int MovesPerCharacter { get; init; } = 2;
@@ -22,6 +23,11 @@ public sealed record GenerationConfig
     /// composition for now — dynamic type assignment is a future flag; set 0 to
     /// disable shields in generation).</summary>
     public int ShieldSlotCount { get; init; } = 1;
+
+    /// <summary>Dash slots appended LAST (2026-07-13), each pinned to the final action
+    /// button (right shoulder / L) — designer clamp until dynamic composition. With
+    /// 2 attacks + shield + dash on 4 buttons the mapping gene is a fixed bijection.</summary>
+    public int DashSlotCount { get; init; } = 1;
     public int Stocks { get; init; } = 3;
 
     public int PlayerSpriteCount { get; init; } = 87;

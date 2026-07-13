@@ -207,7 +207,9 @@ internal static class Commands
                 $"uses {string.Join("+", result.Players[0].MoveUses ?? Array.Empty<int>())}/{string.Join("+", result.Players[1].MoveUses ?? Array.Empty<int>())}  " +
                 $"jumps {result.Players[0].Jumps}/{result.Players[1].Jumps}  " +
                 $"shield(act/blk/brk) {result.Players[0].ShieldActivations}-{result.Players[0].BlockedHits}-{result.Players[0].ShieldBreaks}/" +
-                $"{result.Players[1].ShieldActivations}-{result.Players[1].BlockedHits}-{result.Players[1].ShieldBreaks}");
+                $"{result.Players[1].ShieldActivations}-{result.Players[1].BlockedHits}-{result.Players[1].ShieldBreaks}  " +
+                $"dash(n/dodge) {result.Players[0].DashCount}-{result.Players[0].DashInvulnDodges}/" +
+                $"{result.Players[1].DashCount}-{result.Players[1].DashInvulnDodges}");
             if (breakdown && fitness is ComposedFitness composed)
             {
                 Console.WriteLine("           " + string.Join("  ",

@@ -110,6 +110,7 @@ public partial class PlayerView : Node2D
     private static Color StateColor(PlayerState state) => state switch
     {
         PlayerState.Shield => Colors.Cyan,
+        PlayerState.Dash => Colors.Orange, // 2026-07-13 designer tint decision
         PlayerState.Idle => Colors.White,
         PlayerState.Air => Colors.Green,
         PlayerState.AirJumpsExhausted => Colors.Gray,

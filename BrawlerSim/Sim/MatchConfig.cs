@@ -62,6 +62,11 @@ public sealed record MatchConfig
     public float ShieldOffsetSpeed { get; init; } = 3f;
     public float ShieldPushMaxPerTick { get; init; } = 0.05f;
 
+    /// <summary>Dash-into-opponent contact (2026-07-13, designer): solid, but the
+    /// velocity a dashing player can impart is capped here — damage-independent,
+    /// deliberately far below KO speeds ("a dash can shove, never KO").</summary>
+    public float DashContactPushCap { get; init; } = 2f;
+
     /// <summary>
     /// Half extents of the AI's platform-sensing box (Unity: 20×15 BoxCollider2D on the
     /// OverlapDetector child, used by GetClosestPlatformDirection).

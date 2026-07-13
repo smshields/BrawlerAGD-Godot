@@ -33,6 +33,16 @@ public static class ShieldParams
     public const string BreakStunDuration = "breakStunDuration";
 }
 
+/// <summary>Stable param keys for the dash schema (2026-07-13, FEATURES.md §Dash).</summary>
+public static class DashParams
+{
+    public const string WindUpDuration = "windUpDuration";
+    public const string Acceleration = "acceleration";
+    public const string Duration = "duration";
+    public const string WarmUpInvulnerable = "warmUpInvulnerable";
+    public const string DurationInvulnerable = "durationInvulnerable";
+}
+
 /// <summary>Stable param keys for the move schema.</summary>
 public static class MoveParams
 {
@@ -114,5 +124,20 @@ public static class DefaultSchemas
         new ParamSpec(ShieldParams.SpacingPush, 0.5f, 3.0f),
         new ParamSpec(ShieldParams.RegenRate, 0.05f, 0.5f),
         new ParamSpec(ShieldParams.BreakStunDuration, 0.5f, 2.5f),
+    });
+
+    /// <summary>
+    /// Dash move type (2026-07-13, FEATURES.md §Dash; docs/features/dash.md). No
+    /// cool-down by design. With gravity suspended during travel, Acceleration IS the
+    /// travel speed (u/s) held for Duration. The two invulnerability params are
+    /// bools-as-floats (active ≥ 0.5) so they ride the normal ParamSet genetic ops.
+    /// </summary>
+    public static readonly ParamSchema Dash = new("dash", new[]
+    {
+        new ParamSpec(DashParams.WindUpDuration, 0.05f, 0.4f),
+        new ParamSpec(DashParams.Acceleration, 6f, 18f),
+        new ParamSpec(DashParams.Duration, 0.1f, 0.4f),
+        new ParamSpec(DashParams.WarmUpInvulnerable, 0f, 1f),
+        new ParamSpec(DashParams.DurationInvulnerable, 0f, 1f),
     });
 }

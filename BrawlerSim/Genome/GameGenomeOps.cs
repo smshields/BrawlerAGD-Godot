@@ -62,14 +62,31 @@ public static class GameGenomeOps
     private static int[] MutateButtonMoves(CharacterGenome character, Pcg32 rng)
     {
         var buttonMoves = character.ButtonMoves.ToArray();
-        if (character.Moves.Count > 1)
+        (int mappableButtons, int mappableMoves, int dashSlot) = MappableRange(character);
+        if (mappableMoves > 1)
         {
-            for (int b = 0; b < buttonMoves.Length; b++)
+            for (int b = 0; b < mappableButtons; b++)
             {
-                buttonMoves[b] = rng.NextInt(character.Moves.Count);
+                buttonMoves[b] = rng.NextInt(mappableMoves);
             }
         }
-        return CharacterGenome.EnsureButtonCoverage(buttonMoves, character.Moves.Count);
+        CharacterGenome.EnsureButtonCoverage(buttonMoves, mappableMoves, mappableButtons);
+        if (dashSlot >= 0)
+        {
+            buttonMoves[buttonMoves.Length - 1] = dashSlot;
+        }
+        return buttonMoves;
+    }
+
+    /// <summary>The dash pin (2026-07-13): a dash slot (always last when present)
+    /// owns the last button; other moves map over the remaining buttons.</summary>
+    private static (int MappableButtons, int MappableMoves, int DashSlot) MappableRange(CharacterGenome character)
+    {
+        int last = character.Moves.Count - 1;
+        bool pinned = last >= 0 && character.Moves[last].Type == MoveType.Dash;
+        return pinned
+            ? (Sim.InputFrame.ActionCount - 1, last, last)
+            : (Sim.InputFrame.ActionCount, character.Moves.Count, -1);
     }
 
     /// <summary>Crossover followed by the single all-or-none mutation roll.</summary>
@@ -111,14 +128,19 @@ public static class GameGenomeOps
         // Per-button coin flip between parents, RNG-gated like MutateButtonMoves: with a
         // single move both parents' genes are identical zeros, so no draw is consumed.
         var buttonMoves = a.ButtonMoves.ToArray();
-        if (a.Moves.Count > 1)
+        (int mappableButtons, int mappableMoves, int dashSlot) = MappableRange(a);
+        if (mappableMoves > 1)
         {
-            for (int btn = 0; btn < buttonMoves.Length; btn++)
+            for (int btn = 0; btn < mappableButtons; btn++)
             {
                 buttonMoves[btn] = rng.NextInt(2) == 0 ? a.ButtonMoves[btn] : b.ButtonMoves[btn];
             }
         }
-        return new CharacterGenome(a.Name, a.Stocks, spriteIndex, childParams, moves,
-            CharacterGenome.EnsureButtonCoverage(buttonMoves, a.Moves.Count));
+        CharacterGenome.EnsureButtonCoverage(buttonMoves, mappableMoves, mappableButtons);
+        if (dashSlot >= 0)
+        {
+            buttonMoves[buttonMoves.Length - 1] = dashSlot;
+        }
+        return new CharacterGenome(a.Name, a.Stocks, spriteIndex, childParams, moves, buttonMoves);
     }
 }

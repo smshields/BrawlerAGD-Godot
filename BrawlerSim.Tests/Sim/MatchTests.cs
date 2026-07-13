@@ -105,11 +105,11 @@ public class MatchTests
     public void GoldenMatchHashMatches()
     {
         MatchResult result = RunAiMatch(StudyGame("GameC"), seed: 20260707);
-        // Re-pinned 2026-07-12: shield state fields joined StateHash (FORMAT-only for
-        // this legacy all-attack genome — behavior identical, fields constant).
-        // Prior pins: 13546504710617393521 (0.25 s stun cap), 5450044395552427516
+        // Re-pinned 2026-07-13: dash state fields joined StateHash (FORMAT-only for
+        // this legacy all-attack genome). Prior pins: 12579901790422998345 (shield
+        // fields), 13546504710617393521 (0.25 s stun cap), 5450044395552427516
         // (0.75 s cap), 8640048477680184839 (hash format), 1788087336528951335.
-        Assert.Equal(12579901790422998345UL, result.FinalHash);
+        Assert.Equal(14366357446713044105UL, result.FinalHash);
     }
 
     [Fact]

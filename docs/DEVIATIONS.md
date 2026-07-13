@@ -64,6 +64,12 @@ Within this system, all results are exactly reproducible from (genome, seed).
 |---|--------|----------------|----------------|
 | 19 | Shields implemented as a schema-driven move type: new `PlayerState.Shield` (cyan tint), guaranteed third move slot, nine evolvable parameters, coverage-based blocking, spacing push (new step in the contact phase of the tick order), hold/hit degradation with regen, and a cap-EXEMPT evolvable break stun. Agent gained shield raise/hold/aim/release behaviors and the dodge-vs-shield weighted-random arbitration; game.json is formatVersion 3. | Unity's Move 2/shield was half-implemented dead code (parry/reflect fields nothing read — deviation #14) | Completes the deferred shield from #14 as a genuinely searchable design-space axis. Instrument change (agent) + genome-structure change: fitness results are a new era; standard-v3 is deliberately BLIND to shields in v1 (stats recorded: activations/blocks/breaks/shield ticks). Finding: under damage-rewarding blind fitness, shield use is selected AGAINST — see shield.md. |
 
+## Dash move type (2026-07-13, docs/features/dash.md)
+
+| # | Change | Unity behavior | Why it matters |
+|---|--------|----------------|----------------|
+| 20 | Dash move type: `PlayerState.Dash` (orange tint) with warm-up/travel stages; gravity suspended during travel (a deliberate physics exception); per-stage evolvable invulnerability; air budget extended to jumps + one dash per airtime (all orderings); dash-contact velocity capped damage-independent (shove, never KO); guaranteed last move slot pinned to the last button. Agent: unified defense channel (nothing/hop/shield/dash, one weighted-random pick), recovery/approach/punish dashes. game.json v4. | No dash concept | New design-space axis; instrument change (defense refactor). With 4 moves on 4 buttons + the pin, the button-mapping gene is a fixed bijection until dynamic composition. Fitness remains dash-blind; smoke runs show immediate adoption (mobility pays indirectly) and active search over the invulnerability genes. |
+
 ## Known intentional quirk preservation (unchanged, for the record)
 
 - AI playtester ported verbatim including: absolute-Y target comparisons, level-based

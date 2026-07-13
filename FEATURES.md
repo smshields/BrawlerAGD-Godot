@@ -54,3 +54,39 @@ Several pieces go into making the shield. To implement it, we need to do the fol
         - The agent should be less prone to shielding if the shield is close to breaking. 
         - The agent should try to move the shield towards the enemy if the shield is smaller than the character's hitbox.
         - If a player sees that the opponent is stunned from a shield break, they should attempt to use a powerful move.
+
+
+# Dash Mechanic
+
+The dash mechanic allows a player to quickly move from one spot to another with a varying amount of speed and invulnerability. The dash has many use cases - it can help get back to a platform, it can move away from an opponent, or it can close distance to attack. For now, like the shield, we will assign it to a single button and clamp it to it (right shoulder button) while also developing this so that we can make it assignable in the future during evolutions.
+
+- We will make some small changes to controls and state management to make dashes work as intended. Namely:
+	- The dash must be a new state. Players cannot attack, shield, jump during a dash.
+	- Dashes have a warm up
+	- The dash introduces invincibility frames - we will play with the ability to turn them on/off depending on the stage of the dash. This allows the dash to be more useful for recovery/evasion.
+	- Jumping mechanics change - The following are allowable states. Players are not completely exhausted until all three movements are made. 
+		- dash - jump - jump (players dash into the air by holding up or up/left or up/right)
+		- jump - dash - jump
+		- jump - jump - dash
+		- Doing any of the above puts you back into the jumps exhausted state, where further actions are not possible.
+	- Dashes are directional - they will move the character in the direction that they are holding. If they are not holding any direction, they move horizontally in the direction the player is holding.
+	- Dashes have a duration - during this, players cannot change their direction until the dash is over.
+	- If a player dashes collides with an opponent
+- Like attacks and shields, this mechanic will be parameterized with the following behaviors.
+	- Warm-up time - same behavior as shield/attack
+		- Decent range, but should be clamped. We're looking for something that enables fast, short dashes, or slow, long dashes, or any permutation there of. Note: there is no cool-down time for dashes.
+	- Acceleration 
+		- how much acceleration performing a dash causes in the direction the player is holding
+	- Duration 
+		- how long the dash lasts
+		- During this time, the player has no ability to input controls (e.g. change direction, execute an attack, etc.)
+		- If the dash is causing the jump-exhausted state, the character should enter the state after the duration is completed - no actions should be possible between direction and dash.
+	- Warm-up invulnerable
+		- T/F - if active, during the warm-up of the dash, the player becomes invulnerable to attacks.
+	- Duration invulnerable
+		- T/F - if active, during the dash, the player becomes invulnerable to attacks.
+- Agent Behaviors
+    - Agents should use dash to recover and return to platforms.
+    - Agents should use dash to avoid high-risk incoming attacks.
+    - Agents should use dash to close distance when a kill is likely.
+    - Dashes should be avoided in the air (to avoid entering jump exhausted state) unless necessary to recover or a promising kill is possible.

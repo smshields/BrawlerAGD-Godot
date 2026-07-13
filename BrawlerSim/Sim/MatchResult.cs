@@ -18,7 +18,9 @@ public sealed record PlayerStats(
     int ShieldActivations = 0,
     int BlockedHits = 0,
     int ShieldBreaks = 0,
-    int ShieldTicks = 0);
+    int ShieldTicks = 0,
+    int DashCount = 0,
+    int DashInvulnDodges = 0);
 
 /// <summary>
 /// Outcome of one simulated match. LoserIndex is -1 for a timeout draw. FinalHash

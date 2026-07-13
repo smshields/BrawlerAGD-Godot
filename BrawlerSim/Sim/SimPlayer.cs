@@ -14,6 +14,16 @@ public enum PlayerState
     CoolDown,
     Stun,
     Shield, // 2026-07-12, FEATURES.md §Shield — tint: cyan
+    Dash,   // 2026-07-13, FEATURES.md §Dash — tint: orange
+}
+
+/// <summary>Dash sub-phase: warm-up (direction still steerable, optional i-frames),
+/// then travel (locked straight line, gravity suspended, optional i-frames).</summary>
+public enum DashStage
+{
+    None,
+    WarmUp,
+    Travel,
 }
 
 /// <summary>Sub-phase of the Shield state: the circle grows over the shield's wind-up,
@@ -45,7 +55,13 @@ public sealed class SimPlayer
     /// <summary>Shield slots resolved to tick-domain values; NULL at attack slots.</summary>
     public IReadOnlyList<SimShield?> Shields => _shields;
 
-    public MoveType MoveTypeAt(int index) => _shields[index] is null ? MoveType.Attack : MoveType.Shield;
+    /// <summary>Dash slots resolved to tick-domain values; NULL elsewhere.</summary>
+    public IReadOnlyList<SimDash?> Dashes => _dashes;
+
+    public MoveType MoveTypeAt(int index) =>
+        _shields[index] is not null ? MoveType.Shield
+        : _dashes[index] is not null ? MoveType.Dash
+        : MoveType.Attack;
 
     /// <summary>Genome button→move mapping: ButtonMoves[b] = move triggered by button b.</summary>
     public IReadOnlyList<int> ButtonMoves => _buttonMoves;
@@ -58,6 +74,7 @@ public sealed class SimPlayer
 
     private readonly SimMove?[] _moves;
     private readonly SimShield?[] _shields;
+    private readonly SimDash?[] _dashes;
     private readonly int[] _buttonMoves;
 
     // Character constants, resolved once from the genome.
@@ -98,6 +115,12 @@ public sealed class SimPlayer
     /// punish window (FEATURES.md: "attempt to use a powerful move"). Hashed.</summary>
     public bool StunFromShieldBreak;
 
+    // Dash state (2026-07-13, hashed except stats): one dash per airtime — the third
+    // air action alongside the two jumps (dash-jump-jump in any order, then done).
+    public DashStage DashPhase;
+    public Vec2 DashDirection;
+    public bool AirDashUsed;
+
     private readonly MatchConfig _config;
 
     // Stats accumulated for fitness/research.
@@ -124,12 +147,17 @@ public sealed class SimPlayer
     public int ShieldBreaks;
     public int ShieldTicks;
 
+    // Dash stats (2026-07-13, research-only).
+    public int DashCount;
+    public int DashInvulnDodges;
+
     public SimPlayer(int index, CharacterGenome genome, Vec2 spawn, MatchConfig config)
     {
         Index = index;
         Name = genome.Name;
         _moves = genome.Moves.Select(m => m.Type == MoveType.Attack ? new SimMove(m, config) : null).ToArray();
         _shields = genome.Moves.Select(m => m.Type == MoveType.Shield ? new SimShield(m, config) : null).ToArray();
+        _dashes = genome.Moves.Select(m => m.Type == MoveType.Dash ? new SimDash(m, config) : null).ToArray();
         _buttonMoves = genome.ButtonMoves.ToArray();
         MoveUses = new int[_moves.Length];
         ShieldHealths = _shields.Select(sh => sh?.InitialRadius ?? 0f).ToArray();
@@ -165,6 +193,29 @@ public sealed class SimPlayer
 
     /// <summary>The shield being held right now, or null.</summary>
     public SimShield? ActiveShield => State == PlayerState.Shield ? _shields[CurrentMoveIndex] : null;
+
+    /// <summary>The dash in progress, or null.</summary>
+    public SimDash? ActiveDash => State == PlayerState.Dash ? _dashes[CurrentMoveIndex] : null;
+
+    /// <summary>Gravity is suspended and velocity locked while travelling.</summary>
+    public bool IsDashTraveling => State == PlayerState.Dash && DashPhase == DashStage.Travel;
+
+    /// <summary>Per-stage dash i-frames (FEATURES.md): distinct from post-hit
+    /// invincibility; negated hits are counted as DashInvulnDodges.</summary>
+    public bool DashInvulnerable
+    {
+        get
+        {
+            SimDash? dash = ActiveDash;
+            return dash is not null && (DashPhase == DashStage.WarmUp
+                ? dash.WarmUpInvulnerable
+                : dash.DurationInvulnerable);
+        }
+    }
+
+    /// <summary>Can a dash start right now? Grounded always; airborne once per
+    /// airtime (the spec's third air action, usable even with jumps spent).</summary>
+    public bool CanDash => IsGrounded || !AirDashUsed;
 
     /// <summary>Effective (rendered AND blocking) radius: health scaled by the
     /// grow/shrink animation fraction. 0 when not shielding.</summary>
@@ -215,6 +266,10 @@ public sealed class SimPlayer
         {
             case PlayerState.Shield:
                 StepShield(input);
+                return;
+
+            case PlayerState.Dash:
+                StepDash(input);
                 return;
 
             case PlayerState.Stun:
@@ -274,7 +329,17 @@ public sealed class SimPlayer
 
             case PlayerState.AirJumpsExhausted:
                 // Unity parity: movement only — no attacks once air jumps are spent.
+                // EXCEPT the dash (2026-07-13): it is the third air action and remains
+                // available here until used (jump-jump-dash).
                 ApplyHorizontal(input.Horizontal);
+                if (input.Actions != 0)
+                {
+                    int slot = _buttonMoves[input.FirstAction];
+                    if (_dashes[slot] is not null && CanDash)
+                    {
+                        StartDash(slot);
+                    }
+                }
                 return;
         }
     }
@@ -286,6 +351,12 @@ public sealed class SimPlayer
         if (grounded)
         {
             JumpsExhausted = false;
+            if (State != PlayerState.Dash)
+            {
+                // A grounded dash warm-up must not refund the budget it just spent —
+                // the ground-started upward dash IS the air dash (dash-jump-jump).
+                AirDashUsed = false;
+            }
             if (State is PlayerState.Air or PlayerState.AirJumpsExhausted)
             {
                 State = PlayerState.Idle;
@@ -306,6 +377,7 @@ public sealed class SimPlayer
         State = PlayerState.Stun; // cancels any in-flight move (deliberate cleanup)
         StunFromShieldBreak = false;
         ShieldPhase = ShieldStage.None;
+        DashPhase = DashStage.None;
         PhaseTicksLeft = stunTicks;
     }
 
@@ -322,7 +394,8 @@ public sealed class SimPlayer
     }
 
     /// <summary>Routes a pressed button to its slot's action: attacks start from Idle
-    /// or Air; shields ONLY from Idle (spec: no shielding in the air).</summary>
+    /// or Air; shields ONLY from Idle (spec: no shielding in the air); dashes from
+    /// Idle/Air (and AirJumpsExhausted, handled in its own case) once per airtime.</summary>
     private void StartAction(int button, bool airborne = false)
     {
         int slot = _buttonMoves[button];
@@ -336,7 +409,65 @@ public sealed class SimPlayer
             }
             return;
         }
+        if (_dashes[slot] is not null)
+        {
+            if (CanDash)
+            {
+                StartDash(slot);
+            }
+            return;
+        }
         StartMove(slot);
+    }
+
+    private void StartDash(int slot)
+    {
+        CurrentMoveIndex = slot;
+        State = PlayerState.Dash;
+        DashPhase = DashStage.WarmUp;
+        PhaseTicksLeft = _dashes[slot]!.WindUpTicks;
+        AirDashUsed = true; // grounding resets it; airborne chains cap at one dash
+        DashCount++;
+    }
+
+    private void StepDash(in InputFrame input)
+    {
+        SimDash dash = _dashes[CurrentMoveIndex]!;
+        switch (DashPhase)
+        {
+            case DashStage.WarmUp:
+                if (--PhaseTicksLeft <= 0)
+                {
+                    // Direction captured at travel start from the HELD axes (8-way);
+                    // neutral falls back to horizontal facing (spec).
+                    var direction = new Vec2(MathF.Sign(input.Horizontal), MathF.Sign(input.Vertical));
+                    float length = direction.Length();
+                    DashDirection = length > 0f ? direction * (1f / length) : new Vec2(Facing, 0f);
+                    if (DashDirection.X != 0f)
+                    {
+                        Facing = DashDirection.X > 0f ? 1 : -1;
+                    }
+                    DashPhase = DashStage.Travel;
+                    PhaseTicksLeft = dash.DurationTicks;
+                    Velocity = DashDirection * dash.Speed;
+                }
+                return;
+            case DashStage.Travel:
+                // Locked straight line: velocity re-asserted every tick (drag and
+                // contact cannot bleed it; gravity is skipped in SimPhysics).
+                Velocity = DashDirection * dash.Speed;
+                if (--PhaseTicksLeft <= 0)
+                {
+                    DashPhase = DashStage.None;
+                    // Carry momentum, but clamped to ordinary movement speed — the
+                    // no-KO guarantee must survive the travel→normal-physics handoff
+                    // (residual 18 u/s slamming into a body would launch uncapped).
+                    float carry = MathF.Min(dash.Speed, IsGrounded ? MaxGroundSpeed : MaxAirSpeed);
+                    Velocity = DashDirection * carry;
+                    ResolveNeutralState(); // gravity resumes
+                }
+                return;
+        }
     }
 
     private void StartShield(int slot, int button)

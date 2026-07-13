@@ -77,6 +77,17 @@ public sealed class UtilityAgent : IInputSource
     private const float ShieldHoldUtility = 2.0f;   // vs the 1.0 release baseline
     private const float ShieldReleaseBaseline = 1.0f;
     private const float ShieldUnthreatenedHold = 0.6f; // hesitation: sampling can hold on
+    // Defense channel (2026-07-13 dash feature): one weighted-random pick among the
+    // defensive options on a telegraphed swing — do nothing / hop / shield / dash out.
+    private const float DefenseNone = 1.0f;
+    private const float DefenseJump = 2.0f;
+    private const float DefenseShield = 3.0f;       // × shield health margin
+    private const float DefenseDash = 2.0f;
+    // Dash offense/utility (2026-07-13): recovery is where the dash shines.
+    private const float DashRecover = 2.5f;
+    private const float DashApproach = 1.2f;
+    private const float DashApproachRange = 5f;
+    private const float DashPunish = 2.0f;
     private const float BreakPunishBonus = 2.0f;
     private const float BreakPunishDamagePreference = 0.2f;
 
@@ -116,6 +127,13 @@ public sealed class UtilityAgent : IInputSource
         }
         _heldShieldHold = true; // a future raise starts committed to holding
 
+        if (self.State == PlayerState.Dash)
+        {
+            // Steer the held direction toward the dash intent during warm-up; travel
+            // ignores inputs anyway. The intent WAS the decision — no re-rolls.
+            return new InputFrame(_dashIntentH, _dashIntentV, false, 0);
+        }
+
         UtilityContext ctx = BuildContext(world, self, opponent, _graph);
 
         if (ctx.OverPit)
@@ -150,21 +168,50 @@ public sealed class UtilityAgent : IInputSource
         int jumpChoice = Select(scores.Jump);                // 0 no, 1 yes
         int attackChoice = Select(scores.Attack);            // 0 none, else candidate
 
-        // Dodge-vs-shield arbitration (designer: weighted random): when the jump and a
-        // shield press BOTH won their channels, exactly one may act (the FSM would let
-        // the jump preempt the shield) — a health-weighted coin picks.
-        bool choseShield = attackChoice > 0
-            && ctx.Self.MoveTypeAt(scores.AttackMoves[attackChoice]) == Genome.MoveType.Shield;
-        if (choseShield && jumpChoice == 1)
+        // Defense channel (2026-07-13, replaces the pairwise dodge/shield coin): on a
+        // telegraphed swing with no counter-hit available, ONE weighted-random pick
+        // among {nothing, hop away, shield, dash out} — all options priced together.
+        if (ctx.TelegraphThreat && !ctx.AnyCanHit
+            && ctx.Self.State is not (PlayerState.WarmUp or PlayerState.Attack))
         {
-            if (_rng.NextFloat() < 0.7f * ctx.ShieldHealthFraction)
+            bool jumpAvailable = ctx.Self.IsGrounded || !ctx.Self.JumpsExhausted;
+            float shieldMargin = MathF.Max(0f,
+                (ctx.ShieldHealthFraction - ShieldReleaseHealthFraction) / (1f - ShieldReleaseHealthFraction));
+            bool shieldUsable = ctx.Self.State == PlayerState.Idle && shieldMargin > 0f && !ctx.OverPit;
+            _defenseScores[0] = DefenseNone;
+            _defenseScores[1] = jumpAvailable ? DefenseJump : 0f;
+            _defenseScores[2] = shieldUsable ? DefenseShield * shieldMargin : 0f;
+            _defenseScores[3] = ctx.DashUsable ? DefenseDash : 0f;
+            int defense = Select(_defenseScores);
+            int away = -ctx.FacingToOpponent;
+            switch (defense)
             {
-                jumpChoice = 0; // commit to the shield
+                case 1:
+                    jumpChoice = 1;
+                    moveChoice = away > 0 ? 2 : 0;
+                    attackChoice = 0;
+                    break;
+                case 2:
+                    jumpChoice = 0;
+                    attackChoice = ShieldCandidate(scores, ctx.Self);
+                    break;
+                case 3:
+                    jumpChoice = 0;
+                    attackChoice = DashCandidate(scores, ctx.DashSlot);
+                    break;
             }
-            else
-            {
-                attackChoice = 0; // dodge instead
-            }
+        }
+
+        // A selected dash press locks in its intent direction (steered during warm-up):
+        // recovery → toward the platform; threatened → away; otherwise → the opponent.
+        if (attackChoice > 0
+            && ctx.Self.MoveTypeAt(scores.AttackMoves[attackChoice]) == Genome.MoveType.Dash)
+        {
+            Vec2 target = ctx.OverPit && ctx.RecoverTargetValid ? ctx.RecoverTarget - ctx.Self.Position
+                : ctx.TelegraphThreat ? new Vec2(-ctx.FacingToOpponent, 0f)
+                : ctx.Opponent.Position - ctx.Self.Position;
+            _dashIntentH = MathF.Sign(target.X);
+            _dashIntentV = MathF.Sign(target.Y);
         }
 
         _heldHorizontal = moveChoice - 1;
@@ -173,6 +220,34 @@ public sealed class UtilityAgent : IInputSource
             : (byte)0;
         return new InputFrame(_heldHorizontal, 0f, jumpChoice == 1, actions);
     }
+
+    private static int ShieldCandidate(UtilityScores scores, SimPlayer self)
+    {
+        for (int c = 1; c < scores.Attack.Length; c++)
+        {
+            if (self.MoveTypeAt(scores.AttackMoves[c]) == Genome.MoveType.Shield)
+            {
+                return c;
+            }
+        }
+        return 0;
+    }
+
+    private static int DashCandidate(UtilityScores scores, int dashSlot)
+    {
+        for (int c = 1; c < scores.Attack.Length; c++)
+        {
+            if (scores.AttackMoves[c] == dashSlot)
+            {
+                return c;
+            }
+        }
+        return 0;
+    }
+
+    private readonly float[] _defenseScores = new float[4];
+    private float _dashIntentH;
+    private float _dashIntentV;
 
     /// <summary>
     /// Shield management (2026-07-12 humanization, designer-directed): hold/release
@@ -324,6 +399,20 @@ public sealed class UtilityAgent : IInputSource
             }
         }
 
+        // Telegraph: the opponent is WINDING UP an attack whose arc (+margin) covers
+        // us — the readable moment defensive options respond to.
+        bool telegraphThreat = false;
+        if (opponent.State == PlayerState.WarmUp
+            && opponent.Moves[opponent.CurrentMoveIndex] is SimMove windingUp)
+        {
+            var arc = new Aabb(
+                opponent.Position + new Vec2(windingUp.Offset.X * opponent.Facing, windingUp.Offset.Y),
+                new Vec2(
+                    windingUp.BaseHalf.X * opponent.WidthScalar + TelegraphDodgeMargin,
+                    windingUp.BaseHalf.Y * opponent.HeightScalar + TelegraphDodgeMargin));
+            telegraphThreat = arc.Overlaps(self.Body);
+        }
+
         // Threat: can any of the OPPONENT's moves reach me right now (their facing
         // toward me)? Humans see the incoming swing arc and leave it.
         bool underThreat = false;
@@ -340,7 +429,21 @@ public sealed class UtilityAgent : IInputSource
             underThreat = theirHitbox.Overlaps(self.Body);
         }
 
-        bool exhausted = self.State == PlayerState.AirJumpsExhausted;
+        // A dash remains usable from AirJumpsExhausted (the third air action), so
+        // "exhausted" caution now means jumps AND the dash are spent.
+        int dashSlot = -1;
+        for (int m = 0; m < self.Dashes.Count; m++)
+        {
+            if (self.Dashes[m] is not null && self.ButtonForMove(m) >= 0)
+            {
+                dashSlot = m;
+                break;
+            }
+        }
+        bool dashUsable = dashSlot >= 0 && self.CanDash
+            && self.State is PlayerState.Idle or PlayerState.Air or PlayerState.AirJumpsExhausted;
+        bool exhausted = self.State == PlayerState.AirJumpsExhausted
+            && !(dashSlot >= 0 && self.CanDash);
         (int flankDirection, bool flankSafe) = ComputeFlank(world, self, opponent);
 
         // Traversal: next hop toward the opponent's platform via the per-match graph.
@@ -372,7 +475,11 @@ public sealed class UtilityAgent : IInputSource
             hasTraversal, traversalLaunch, traversalDirection, traversalNeedsJump,
             exhausted,
             ShieldHealthFractionOf(self),
-            OpponentBreakStunned: opponent.State == PlayerState.Stun && opponent.StunFromShieldBreak);
+            OpponentBreakStunned: opponent.State == PlayerState.Stun && opponent.StunFromShieldBreak,
+            telegraphThreat,
+            dashUsable,
+            dashSlot,
+            OpponentStunned: opponent.State == PlayerState.Stun);
     }
 
     /// <summary>
@@ -529,10 +636,9 @@ public sealed class UtilityAgent : IInputSource
         new TraverseBehavior(),
         new FlankBehavior(),
         new AttackBehavior(),
-        new ShieldBehavior(),
+        new DashUtilityBehavior(),
         new EvadeBehavior(),
         new ThreatDodgeBehavior(),
-        new TelegraphDodgeBehavior(),
         new ExhaustedCautionBehavior(),
         new SpacingBehavior(),
     };
@@ -701,43 +807,41 @@ public sealed class UtilityAgent : IInputSource
         }
     }
 
-    /// <summary>FEATURES.md agent spec: raise the shield when the opponent winds up in
-    /// range (same telegraph test as the dodge — the two compete via the channel
-    /// selection plus the health-weighted arbitration in GetInput). Utility scales
-    /// with shield health: near-broken shields are not worth raising.</summary>
-    private sealed class ShieldBehavior : IUtilityBehavior
+    /// <summary>Non-defense dash uses (2026-07-13): recovery over a pit (the dash is
+    /// the premier third air action), approach from range, and stun punish — each a
+    /// candidate on the action channel, arbitrated by normal channel selection.</summary>
+    private sealed class DashUtilityBehavior : IUtilityBehavior
     {
         public void Contribute(in UtilityContext ctx, UtilityScores scores)
         {
-            if (ctx.Self.State != PlayerState.Idle || ctx.OverPit
-                || ctx.ShieldHealthFraction <= ShieldReleaseHealthFraction
-                || ctx.Opponent.State != PlayerState.WarmUp)
+            if (!ctx.DashUsable)
             {
                 return;
             }
-            SimMove? incoming = ctx.Opponent.Moves[ctx.Opponent.CurrentMoveIndex];
-            if (incoming is null)
+            float utility = 0f;
+            if (ctx.OverPit && ctx.RecoverTargetValid)
+            {
+                utility = DashRecover;
+            }
+            else if (ctx.OpponentStunned && ctx.Distance > SpacingDistance)
+            {
+                utility = DashPunish;
+            }
+            else if (!ctx.OverPit && !ctx.TelegraphThreat && ctx.Distance > DashApproachRange
+                && !ctx.HasTraversal)
+            {
+                utility = DashApproach;
+            }
+            if (utility <= 0f)
             {
                 return;
             }
-            var arc = new Aabb(
-                ctx.Opponent.Position + new Vec2(incoming.Offset.X * ctx.Opponent.Facing, incoming.Offset.Y),
-                new Vec2(
-                    incoming.BaseHalf.X * ctx.Opponent.WidthScalar + TelegraphDodgeMargin,
-                    incoming.BaseHalf.Y * ctx.Opponent.HeightScalar + TelegraphDodgeMargin));
-            if (!arc.Overlaps(ctx.Self.Body))
-            {
-                return;
-            }
-            // Weight ramps from 0 at the release threshold to full at full health, so
-            // a nearly-broken shield never outbids the do-nothing baseline.
-            float margin = MathF.Max(0f,
-                (ctx.ShieldHealthFraction - ShieldReleaseHealthFraction) / (1f - ShieldReleaseHealthFraction));
             for (int c = 1; c < scores.Attack.Length; c++)
             {
-                if (ctx.Self.MoveTypeAt(scores.AttackMoves[c]) == Genome.MoveType.Shield)
+                if (scores.AttackMoves[c] == ctx.DashSlot)
                 {
-                    scores.Attack[c] += ShieldRaise * margin;
+                    scores.Attack[c] += utility;
+                    return;
                 }
             }
         }
@@ -794,48 +898,11 @@ public sealed class UtilityAgent : IInputSource
         }
     }
 
-    /// <summary>The opponent's WarmUp state is a telegraphed swing: if their move's arc
-    /// will reach us, hop away (jumping is the escape humans reach for — designer
-    /// request 2026-07-10). Committed swings of our own stay planted, and trades are
-    /// still taken when we can hit back.</summary>
-    private sealed class TelegraphDodgeBehavior : IUtilityBehavior
-    {
-        public void Contribute(in UtilityContext ctx, UtilityScores scores)
-        {
-            if (ctx.Opponent.State != PlayerState.WarmUp || ctx.OverPit || ctx.AnyCanHit
-                || ctx.Self.State is PlayerState.WarmUp or PlayerState.Attack)
-            {
-                return;
-            }
-            SimMove incoming = ctx.Opponent.Move; // the move they are winding up
-            var arc = new Aabb(
-                ctx.Opponent.Position + new Vec2(incoming.Offset.X * ctx.Opponent.Facing, incoming.Offset.Y),
-                new Vec2(
-                    incoming.BaseHalf.X * ctx.Opponent.WidthScalar + TelegraphDodgeMargin,
-                    incoming.BaseHalf.Y * ctx.Opponent.HeightScalar + TelegraphDodgeMargin));
-            if (!arc.Overlaps(ctx.Self.Body))
-            {
-                return;
-            }
-            if (ctx.Self.IsGrounded || !ctx.Self.JumpsExhausted)
-            {
-                scores.Jump[1] += TelegraphDodgeJump;
-            }
-            int away = -ctx.FacingToOpponent;
-            bool retreatFallsOff = ctx.Self.IsGrounded
-                && OverPit(ctx.World, ctx.Self, EdgeProbeDistance * away);
-            if (retreatFallsOff)
-            {
-                away = ctx.Self.Position.X >= 0f ? -1 : 1;
-            }
-            scores.Horizontal[away > 0 ? 2 : 0] += TelegraphDodgeMove;
-        }
-    }
-
     /// <summary>AirJumpsExhausted cannot attack (Unity parity), so proximity is pure
     /// exposure: drift away from a nearby opponent until landing (designer,
     /// 2026-07-10). Recovery still overrides over pits; Doomed is deliberately exempt
-    /// (off-stage death, requirement 1b).</summary>
+    /// (off-stage death, requirement 1b). Since 2026-07-13 "exhausted" also requires
+    /// the air dash to be spent — a dash-capable character is not helpless.</summary>
     private sealed class ExhaustedCautionBehavior : IUtilityBehavior
     {
         public void Contribute(in UtilityContext ctx, UtilityScores scores)
@@ -893,7 +960,11 @@ public readonly record struct UtilityContext(
     bool TraversalNeedsJump,
     bool Exhausted,
     float ShieldHealthFraction,
-    bool OpponentBreakStunned);
+    bool OpponentBreakStunned,
+    bool TelegraphThreat,
+    bool DashUsable,
+    int DashSlot,
+    bool OpponentStunned);
 
 /// <summary>
 /// The per-decision score sheet. Horizontal = {left, neutral, right}; Jump = {no, yes};

@@ -165,6 +165,14 @@ public sealed class SimWorld
             return;
         }
 
+        // Dash i-frames (2026-07-13): a hit that WOULD have landed is negated and
+        // counted — the research data sees evasion value even with fitness blind.
+        if (victim.DashInvulnerable)
+        {
+            victim.DashInvulnDodges++;
+            return;
+        }
+
         SimShield? shield = victim.ActiveShield;
         if (shield is not null && victim.ShieldRadius > 0f
             && OverlapFullyInsideShield(hitbox, victim.Body,
@@ -267,6 +275,11 @@ public sealed class SimWorld
             hash = Fnv1a.Add(hash, p.ShieldOffset.Y);
             hash = Fnv1a.Add(hash, p.ShieldButton);
             hash = Fnv1a.Add(hash, p.StunFromShieldBreak ? 1 : 0);
+            // 2026-07-13 dash: stage, locked direction, per-airtime budget.
+            hash = Fnv1a.Add(hash, (int)p.DashPhase);
+            hash = Fnv1a.Add(hash, p.DashDirection.X);
+            hash = Fnv1a.Add(hash, p.DashDirection.Y);
+            hash = Fnv1a.Add(hash, p.AirDashUsed ? 1 : 0);
             foreach (float health in p.ShieldHealths)
             {
                 hash = Fnv1a.Add(hash, health);
@@ -281,7 +294,8 @@ public sealed class SimWorld
                 p.TotalDamageTaken, p.TotalHitsReceived, p.Stocks, p.RecoveryTicks,
                 p.CompletedStockDamage.Append(p.Damage).ToArray(),
                 p.MoveUses.ToArray(), p.StunTicks, p.Jumps,
-                p.ShieldActivations, p.BlockedHits, p.ShieldBreaks, p.ShieldTicks)).ToArray(),
+                p.ShieldActivations, p.BlockedHits, p.ShieldBreaks, p.ShieldTicks,
+                p.DashCount, p.DashInvulnDodges)).ToArray(),
             LoserIndex,
             TickCount,
             TickCount / (float)Config.TicksPerSecond,
