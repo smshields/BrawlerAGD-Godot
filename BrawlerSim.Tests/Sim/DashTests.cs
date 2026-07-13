@@ -342,6 +342,48 @@ public class DashTests
     }
 
     [Fact]
+    public void ExhaustedJumpersWithADashInHandStillDisengage()
+    {
+        // Designer playtest report (2026-07-13): AirJumpsExhausted characters chased
+        // again — the dash feature had re-keyed "exhausted" to jumps+dash spent, so a
+        // dash in hand re-enabled the chase. They cannot ATTACK in that state, so
+        // proximity is exposure regardless of the dash (which stays available for
+        // recovery/escape). Mid-air near the opponent: drift AWAY.
+        SimWorld world = Grounded(DashArena(), -2f, 1f);
+        SimPlayer self = world.Players[0];
+        world.Tick(stackalloc[] { new InputFrame(0f, 0f, true, 0), InputFrame.Neutral });
+        world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
+        world.Tick(stackalloc[] { new InputFrame(0f, 0f, true, 0), InputFrame.Neutral });
+        Assert.Equal(PlayerState.AirJumpsExhausted, self.State);
+        Assert.True(self.CanDash); // the dash is unspent — and must not re-enable chasing
+
+        var agent = new UtilityAgent(new Pcg32(1), new AgentConfig { Randomness = 0f, DecisionIntervalTicks = 1 });
+        InputFrame input = agent.GetInput(world, 0);
+        Assert.Equal(-1f, input.Horizontal); // away from the opponent at x = 1
+    }
+
+    [Fact]
+    public void CoolingDownCharactersDecideToRetreat()
+    {
+        // Same report: cool-down is vulnerable (no attacks, no movement) — the agent's
+        // held direction must point AWAY so the first post-cool-down frames retreat
+        // instead of resuming the chase.
+        SimWorld world = Grounded(DashArena(), -1f, 0.2f);
+        SimPlayer self = world.Players[0];
+        // Swing: warm-up 12 + execute 6 → cool-down.
+        world.Tick(stackalloc[] { new InputFrame(0f, 0f, false, InputFrame.ActionBit(0)), InputFrame.Neutral });
+        for (int t = 0; t < 18 && self.State != PlayerState.CoolDown; t++)
+        {
+            world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
+        }
+        Assert.Equal(PlayerState.CoolDown, self.State);
+
+        var agent = new UtilityAgent(new Pcg32(1), new AgentConfig { Randomness = 0f, DecisionIntervalTicks = 1 });
+        InputFrame input = agent.GetInput(world, 0);
+        Assert.Equal(-1f, input.Horizontal); // retreat intent while vulnerable
+    }
+
+    [Fact]
     public void DashMatchesStayDeterministicAndTerminate()
     {
         var config = GenerationConfig.Default;

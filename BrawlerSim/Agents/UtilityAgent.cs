@@ -62,8 +62,10 @@ public sealed class UtilityAgent : IInputSource
     private const float TraverseMove = 2.0f;      // above Approach (1.5), below Flank (2.5)
     private const float TraverseJump = 2.5f;
     private const float TraverseLaunchSlack = 0.6f;
-    // Exhausted caution (2026-07-10 designer request): AirJumpsExhausted cannot attack,
-    // so chasing is pure exposure — drift away until landing restores capability.
+    // Vulnerable caution (2026-07-10 exhausted-disengage, generalized 2026-07-13 per
+    // designer playtest): CoolDown and AirJumpsExhausted cannot attack, so chasing is
+    // pure exposure — offensive behaviors gate off and a retreat drift takes over.
+    // The dash stays available for RECOVERY and defensive escapes, never the chase.
     private const float ExhaustedRetreat = 1.5f;
     private const float ExhaustedCautionRange = 4f;
     // Shield (2026-07-12, FEATURES.md agent spec): raise on a telegraphed swing,
@@ -460,10 +462,10 @@ public sealed class UtilityAgent : IInputSource
             underThreat = theirHitbox.Overlaps(self.Body);
         }
 
-        // A dash remains usable from AirJumpsExhausted (the third air action), so
-        // "exhausted" caution now means jumps AND the dash are spent.
-        bool exhausted = self.State == PlayerState.AirJumpsExhausted
-            && !(dashSlot >= 0 && self.CanDash);
+        // Vulnerable = cannot attack (CoolDown / AirJumpsExhausted) — a dash in hand
+        // does NOT re-enable chasing (2026-07-13 playtest fix); it stays available
+        // for recovery and the defense channel.
+        bool vulnerable = self.State is PlayerState.CoolDown or PlayerState.AirJumpsExhausted;
         // The recovery LANDING AIM: above the platform top, x clamped to its span —
         // "get above the platform before floating/jumping onto it" (designer).
         Vec2 recoverAim = targetSensed
@@ -501,7 +503,7 @@ public sealed class UtilityAgent : IInputSource
             canHit, anyCanHit, facingToOpponent, attackTarget, underThreat,
             flankDirection, flankSafe,
             hasTraversal, traversalLaunch, traversalDirection, traversalNeedsJump,
-            exhausted,
+            vulnerable,
             ShieldHealthFractionOf(self),
             OpponentBreakStunned: opponent.State == PlayerState.Stun && opponent.StunFromShieldBreak,
             telegraphThreat,
@@ -750,9 +752,9 @@ public sealed class UtilityAgent : IInputSource
     {
         public void Contribute(in UtilityContext ctx, UtilityScores scores)
         {
-            if (ctx.OverPit || ctx.Exhausted)
+            if (ctx.OverPit || ctx.Vulnerable)
             {
-                return; // recovery/doomed own the off-stage story; exhausted disengages
+                return; // recovery/doomed own the off-stage story; vulnerable disengages
             }
             float dx = ctx.AttackTarget.X - ctx.Self.Position.X;
             float urgency = MathF.Min(ctx.Distance / ApproachDistanceScale, 1f);
@@ -782,7 +784,7 @@ public sealed class UtilityAgent : IInputSource
     {
         public void Contribute(in UtilityContext ctx, UtilityScores scores)
         {
-            if (!ctx.HasTraversal || ctx.OverPit || ctx.Exhausted)
+            if (!ctx.HasTraversal || ctx.OverPit || ctx.Vulnerable)
             {
                 return;
             }
@@ -808,7 +810,7 @@ public sealed class UtilityAgent : IInputSource
     {
         public void Contribute(in UtilityContext ctx, UtilityScores scores)
         {
-            if (ctx.FlankDirection == 0 || ctx.OverPit || ctx.Exhausted)
+            if (ctx.FlankDirection == 0 || ctx.OverPit || ctx.Vulnerable)
             {
                 return;
             }
@@ -825,9 +827,9 @@ public sealed class UtilityAgent : IInputSource
     {
         public void Contribute(in UtilityContext ctx, UtilityScores scores)
         {
-            if (ctx.Exhausted)
+            if (ctx.Vulnerable)
             {
-                return; // the FSM ignores attacks in AirJumpsExhausted — don't press them
+                return; // the FSM ignores attacks here — don't press dead buttons
             }
             for (int c = 1; c < scores.Attack.Length; c++)
             {
@@ -857,6 +859,10 @@ public sealed class UtilityAgent : IInputSource
                 return;
             }
             float utility = 0f;
+            if (ctx.Vulnerable && !ctx.OverPit)
+            {
+                return; // no chase-dashes while unable to attack; recovery still runs
+            }
             if (ctx.OverPit && ctx.RecoverTargetValid)
             {
                 // Playtest fix (2026-07-13): the recovery dash exists to gain HEIGHT
@@ -944,16 +950,16 @@ public sealed class UtilityAgent : IInputSource
         }
     }
 
-    /// <summary>AirJumpsExhausted cannot attack (Unity parity), so proximity is pure
-    /// exposure: drift away from a nearby opponent until landing (designer,
-    /// 2026-07-10). Recovery still overrides over pits; Doomed is deliberately exempt
-    /// (off-stage death, requirement 1b). Since 2026-07-13 "exhausted" also requires
-    /// the air dash to be spent — a dash-capable character is not helpless.</summary>
+    /// <summary>CoolDown and AirJumpsExhausted cannot attack, so proximity is pure
+    /// exposure: drift away from a nearby opponent until capability returns
+    /// (2026-07-10, generalized to both vulnerable states 2026-07-13 per designer
+    /// playtest — a dash in hand does not re-enable the chase). Recovery still
+    /// overrides over pits; Doomed is deliberately exempt (off-stage death, req 1b).</summary>
     private sealed class ExhaustedCautionBehavior : IUtilityBehavior
     {
         public void Contribute(in UtilityContext ctx, UtilityScores scores)
         {
-            if (!ctx.Exhausted || ctx.OverPit || ctx.Distance > ExhaustedCautionRange)
+            if (!ctx.Vulnerable || ctx.OverPit || ctx.Distance > ExhaustedCautionRange)
             {
                 return;
             }
@@ -1004,7 +1010,7 @@ public readonly record struct UtilityContext(
     Vec2 TraversalLaunch,
     int TraversalDirection,
     bool TraversalNeedsJump,
-    bool Exhausted,
+    bool Vulnerable,
     float ShieldHealthFraction,
     bool OpponentBreakStunned,
     bool TelegraphThreat,
