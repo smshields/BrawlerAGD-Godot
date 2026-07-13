@@ -281,13 +281,15 @@ public class DashTests
     }
 
     [Fact]
-    public void AgentDashesToRecoverWhenJumpsAreSpent()
+    public void RecoveryDashFromBelowAimsUpward()
     {
-        // Over the void, jumps exhausted, dash in hand: the greedy agent presses it
-        // (the premier third-air-action recovery) with intent toward the platform.
+        // Designer playtest report (2026-07-13): recovery dashes must move the
+        // character UP to get above the platform — never at the underside. Character
+        // below the stage top, off the left edge, jumps spent: the greedy agent
+        // dashes with an UPWARD vertical intent and toward the platform.
         var world = new SimWorld(DashArena());
         SimPlayer self = world.Players[0];
-        self.Position = new Vec2(-9.4f, 0.5f);
+        self.Position = new Vec2(-9.4f, -3.5f); // BELOW the platform top (−2)
         self.JumpsExhausted = true;
         world.Players[1].Position = new Vec2(6f, -1.4f);
         world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
@@ -296,6 +298,47 @@ public class DashTests
         var agent = new UtilityAgent(new Pcg32(1), new AgentConfig { Randomness = 0f, DecisionIntervalTicks = 1 });
         InputFrame input = agent.GetInput(world, 0);
         Assert.True(input.ActionPressed(3), "agent did not dash to recover");
+        Assert.Equal(1f, input.Vertical);   // UP — the whole point
+        Assert.Equal(1f, input.Horizontal); // toward the platform on the right
+    }
+
+    [Fact]
+    public void NoRecoveryDashWhenAlreadyAboveThePlatform()
+    {
+        // Same report: characters above the stage edge were WASTING the dash pointed
+        // downward at the lip. Slightly off the edge but ABOVE the top with a small
+        // gap → drift in, keep the dash.
+        var world = new SimWorld(DashArena());
+        SimPlayer self = world.Players[0];
+        self.Position = new Vec2(-9.2f, 0.5f); // above the top (−2), gap 1.2
+        self.JumpsExhausted = true;
+        world.Players[1].Position = new Vec2(6f, -1.4f);
+        world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
+
+        var agent = new UtilityAgent(new Pcg32(1), new AgentConfig { Randomness = 0f, DecisionIntervalTicks = 1 });
+        InputFrame input = agent.GetInput(world, 0);
+        Assert.False(input.ActionPressed(3), "agent wasted the dash while already above the platform");
+        Assert.Equal(1f, input.Horizontal); // normal recovery drift continues
+    }
+
+    [Fact]
+    public void RecoveryDashNeverAimsDownward()
+    {
+        // Above the top but FAR out horizontally: a dash is justified, but it must be
+        // horizontal — never a downward component during recovery.
+        var world = new SimWorld(DashArena());
+        SimPlayer self = world.Players[0];
+        self.Position = new Vec2(-10.5f, 3.5f); // far above, big horizontal gap
+        self.JumpsExhausted = true;
+        world.Players[1].Position = new Vec2(6f, -1.4f);
+        world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
+
+        var agent = new UtilityAgent(new Pcg32(1), new AgentConfig { Randomness = 0f, DecisionIntervalTicks = 1 });
+        InputFrame input = agent.GetInput(world, 0);
+        if (input.ActionPressed(3))
+        {
+            Assert.True(input.Vertical >= 0f, "recovery dash aimed DOWNWARD");
+        }
     }
 
     [Fact]

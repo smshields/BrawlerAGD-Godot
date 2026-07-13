@@ -101,3 +101,29 @@ Everything in the strategy landed; deltas and findings:
   jumps term all pay indirectly). The invulnerability GENES are already being
   searched: one champion character runs (0.83, 0.97) — both stages invulnerable —
   while its opponent runs (0.04, 0.15). Champion clip: runs/media/dash801_best.mp4.
+
+## Amendment 2026-07-13: landing-aim recovery dashes (designer playtest report)
+
+Reported: recovery dashes pointed DOWN at the stage lip when above it, and never
+pointed UP from below. Root causes, all fixed with regression tests written first:
+
+1. The recovery aim used the platform's CLOSEST POINT — the underside from below
+   (no upward component ever) and the lip from above (downward aim). Recovery
+   dashes now target a LANDING POINT: x clamped to the platform span, y = top +
+   1.2 u clearance ("get above the platform before floating/jumping onto it").
+2. Recovery reachability ignored the dash entirely — with jumps spent, sensed
+   platforms were classed unreachable, so the recovery-dash utility never fired at
+   all from below. A usable dash now extends reach by its straight-line travel
+   (+1 u drift slack) in any direction, including straight up.
+3. Waste guard: no recovery dash when already above the top with a small gap
+   (drift in instead; the dash is saved) — fires only when height is needed or the
+   horizontal gap exceeds 2.5 u. And a recovery dash can never aim downward.
+4. The press frame now carries the intent direction immediately (humans hold the
+   direction as they press).
+
+Evolution re-run (2 × 300 gens): trajectories unchanged (a capability fix, not an
+exploit-closure) — but champion quality under the fixed agent jumps: re-evals
+50.9/68.8 with ZERO timeout draws (pre-fix champions re-measure at −9.2/8.7 with
+3/5 draws — they had adapted to opponents who fumbled recovery). Dash usage rose
+further (95/109 per evaluation; one champion lands 38 i-frame dodges). Clip:
+runs/media/dashfix801_best.mp4.

@@ -88,6 +88,12 @@ public sealed class UtilityAgent : IInputSource
     private const float DashApproach = 1.2f;
     private const float DashApproachRange = 5f;
     private const float DashPunish = 2.0f;
+    // Recovery aim (2026-07-13 playtest fix): dashes target a LANDING POINT above the
+    // platform top, never the box's closest point (which is the underside from below
+    // and the lip from above). Clearance = how far above the top to aim; the dash is
+    // saved when already above the top unless the horizontal gap is large.
+    private const float RecoveryAimClearance = 1.2f;
+    private const float DashRecoverHorizontalGap = 2.5f;
     private const float BreakPunishBonus = 2.0f;
     private const float BreakPunishDamagePreference = 0.2f;
 
@@ -202,23 +208,29 @@ public sealed class UtilityAgent : IInputSource
             }
         }
 
-        // A selected dash press locks in its intent direction (steered during warm-up):
-        // recovery → toward the platform; threatened → away; otherwise → the opponent.
-        if (attackChoice > 0
-            && ctx.Self.MoveTypeAt(scores.AttackMoves[attackChoice]) == Genome.MoveType.Dash)
+        // A selected dash press locks in its intent direction (held from the press
+        // itself and steered through warm-up): recovery → the landing aim above the
+        // platform; threatened → away; otherwise → the opponent.
+        bool dashChosen = attackChoice > 0
+            && ctx.Self.MoveTypeAt(scores.AttackMoves[attackChoice]) == Genome.MoveType.Dash;
+        if (dashChosen)
         {
-            Vec2 target = ctx.OverPit && ctx.RecoverTargetValid ? ctx.RecoverTarget - ctx.Self.Position
+            Vec2 target = ctx.OverPit && ctx.RecoverTargetValid ? ctx.RecoverAim - ctx.Self.Position
                 : ctx.TelegraphThreat ? new Vec2(-ctx.FacingToOpponent, 0f)
                 : ctx.Opponent.Position - ctx.Self.Position;
             _dashIntentH = MathF.Sign(target.X);
             _dashIntentV = MathF.Sign(target.Y);
+            if (ctx.OverPit && _dashIntentV < 0f)
+            {
+                _dashIntentV = 0f; // a recovery dash never points downward (designer)
+            }
         }
 
-        _heldHorizontal = moveChoice - 1;
+        _heldHorizontal = dashChosen ? _dashIntentH : moveChoice - 1;
         byte actions = attackChoice > 0
             ? InputFrame.ActionBit(scores.AttackButtons[attackChoice])
             : (byte)0;
-        return new InputFrame(_heldHorizontal, 0f, jumpChoice == 1, actions);
+        return new InputFrame(_heldHorizontal, dashChosen ? _dashIntentV : 0f, jumpChoice == 1, actions);
     }
 
     private static int ShieldCandidate(UtilityScores scores, SimPlayer self)
@@ -356,15 +368,34 @@ public sealed class UtilityAgent : IInputSource
 
     private static UtilityContext BuildContext(SimWorld world, SimPlayer self, SimPlayer opponent, PlatformGraph graph)
     {
+        // Dash availability first — recovery reachability must credit a usable dash
+        // (2026-07-13 playtest fix: with jumps spent, the dash IS the way back up).
+        int dashSlot = -1;
+        for (int m = 0; m < self.Dashes.Count; m++)
+        {
+            if (self.Dashes[m] is not null && self.ButtonForMove(m) >= 0)
+            {
+                dashSlot = m;
+                break;
+            }
+        }
+        bool dashUsable = dashSlot >= 0 && self.CanDash
+            && self.State is PlayerState.Idle or PlayerState.Air or PlayerState.AirJumpsExhausted;
+        float dashRange = dashUsable
+            ? self.Dashes[dashSlot]!.Speed * self.Dashes[dashSlot]!.DurationTicks * world.Config.Dt
+            : 0f;
+
         bool overPit = OverPit(world, self, 0f);
         Vec2 recoverTarget = Vec2.Zero;
+        Aabb recoverPlatform = default;
         bool targetSensed = false, reachable = false;
         if (overPit)
         {
             // Directional recovery (2026-07-10 traversal fix): among REACHABLE sensed
             // platforms, prefer the one closest to the OPPONENT — mid-hop recovery
             // continues the chase instead of pulling back to the platform just left.
-            targetSensed = TrySensedRecoverTarget(world, self, opponent, out recoverTarget, out reachable);
+            targetSensed = TrySensedRecoverTarget(world, self, opponent, dashRange,
+                out recoverTarget, out recoverPlatform, out reachable);
         }
 
         int facingToOpponent = opponent.Position.X >= self.Position.X ? 1 : -1;
@@ -431,19 +462,16 @@ public sealed class UtilityAgent : IInputSource
 
         // A dash remains usable from AirJumpsExhausted (the third air action), so
         // "exhausted" caution now means jumps AND the dash are spent.
-        int dashSlot = -1;
-        for (int m = 0; m < self.Dashes.Count; m++)
-        {
-            if (self.Dashes[m] is not null && self.ButtonForMove(m) >= 0)
-            {
-                dashSlot = m;
-                break;
-            }
-        }
-        bool dashUsable = dashSlot >= 0 && self.CanDash
-            && self.State is PlayerState.Idle or PlayerState.Air or PlayerState.AirJumpsExhausted;
         bool exhausted = self.State == PlayerState.AirJumpsExhausted
             && !(dashSlot >= 0 && self.CanDash);
+        // The recovery LANDING AIM: above the platform top, x clamped to its span —
+        // "get above the platform before floating/jumping onto it" (designer).
+        Vec2 recoverAim = targetSensed
+            ? new Vec2(
+                MathF.Min(MathF.Max(self.Position.X, recoverPlatform.Left), recoverPlatform.Right),
+                recoverPlatform.Top + RecoveryAimClearance)
+            : Vec2.Zero;
+
         (int flankDirection, bool flankSafe) = ComputeFlank(world, self, opponent);
 
         // Traversal: next hop toward the opponent's platform via the per-match graph.
@@ -479,7 +507,8 @@ public sealed class UtilityAgent : IInputSource
             telegraphThreat,
             dashUsable,
             dashSlot,
-            OpponentStunned: opponent.State == PlayerState.Stun);
+            OpponentStunned: opponent.State == PlayerState.Stun,
+            recoverAim);
     }
 
     /// <summary>
@@ -543,16 +572,19 @@ public sealed class UtilityAgent : IInputSource
     /// closest point is nearest to the opponent (chase-preserving); when none is
     /// reachable, the nearest-to-self sensed point (the Doomed check's subject).</summary>
     private static bool TrySensedRecoverTarget(
-        SimWorld world, SimPlayer self, SimPlayer opponent, out Vec2 target, out bool reachable)
+        SimWorld world, SimPlayer self, SimPlayer opponent, float dashRange,
+        out Vec2 target, out Aabb chosenPlatform, out bool reachable)
     {
         var sense = new Aabb(
             self.Position,
             new Vec2(world.Config.PlatformSenseHalfWidth, world.Config.PlatformSenseHalfHeight));
         target = Vec2.Zero;
+        chosenPlatform = default;
         reachable = false;
         bool found = false;
         float bestReachable = float.PositiveInfinity, bestFallback = float.PositiveInfinity;
         Vec2 fallback = Vec2.Zero;
+        Aabb fallbackPlatform = default;
         foreach (Aabb platform in world.Platforms)
         {
             if (!sense.Overlaps(platform))
@@ -566,14 +598,19 @@ public sealed class UtilityAgent : IInputSource
             {
                 bestFallback = toSelf;
                 fallback = point;
+                fallbackPlatform = platform;
             }
-            if (EstimateReachable(world, self, point))
+            // A usable dash extends reach by its straight-line travel (+1 u of
+            // post-dash drift slack) in ANY direction — including straight up.
+            bool inDashReach = dashRange > 0f && toSelf <= dashRange + 1f;
+            if (inDashReach || EstimateReachable(world, self, point))
             {
                 float toOpponent = (point - opponent.Position).Length();
                 if (toOpponent < bestReachable)
                 {
                     bestReachable = toOpponent;
                     target = point;
+                    chosenPlatform = platform;
                     reachable = true;
                 }
             }
@@ -581,6 +618,7 @@ public sealed class UtilityAgent : IInputSource
         if (!reachable)
         {
             target = fallback;
+            chosenPlatform = fallbackPlatform;
         }
         return found;
     }
@@ -821,7 +859,15 @@ public sealed class UtilityAgent : IInputSource
             float utility = 0f;
             if (ctx.OverPit && ctx.RecoverTargetValid)
             {
-                utility = DashRecover;
+                // Playtest fix (2026-07-13): the recovery dash exists to gain HEIGHT
+                // (or cross a large gap) — falling onto the platform from above with a
+                // small gap doesn't spend it.
+                bool needsHeight = ctx.RecoverAim.Y > ctx.Self.Position.Y;
+                bool bigGap = MathF.Abs(ctx.RecoverAim.X - ctx.Self.Position.X) > DashRecoverHorizontalGap;
+                if (needsHeight || bigGap)
+                {
+                    utility = DashRecover;
+                }
             }
             else if (ctx.OpponentStunned && ctx.Distance > SpacingDistance)
             {
@@ -964,7 +1010,8 @@ public readonly record struct UtilityContext(
     bool TelegraphThreat,
     bool DashUsable,
     int DashSlot,
-    bool OpponentStunned);
+    bool OpponentStunned,
+    Vec2 RecoverAim);
 
 /// <summary>
 /// The per-decision score sheet. Horizontal = {left, neutral, right}; Jump = {no, yes};
