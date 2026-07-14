@@ -1,7 +1,10 @@
 using Godot;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using BrawlerSim.Evolution;
+using BrawlerSim.Genome;
+using BrawlerSim.Params;
 using BrawlerSim.Serialization;
 
 namespace BrawlerGodot;
@@ -26,6 +29,24 @@ public partial class EvolveView : Control
     private Button _watchBest = null!;
     private Label _status = null!;
     private FitnessChart _chart = null!;
+
+    // Composition control + advanced ranges (2026-07-14,
+    // docs/features/evolve-composition-and-ranges.md)
+    private OptionButton _compositionMode = null!;
+    private HBoxContainer _perButtonRow = null!;
+    private readonly OptionButton[] _buttonSlots = new OptionButton[BrawlerSim.Sim.InputFrame.ActionCount];
+    private Button _advancedToggle = null!;
+    private ScrollContainer _advancedPanel = null!;
+    private readonly System.Collections.Generic.List<RangeRow> _rangeRows = new();
+
+    private sealed class RangeRow
+    {
+        public required string Schema;
+        public required ParamSpec Stock;
+        public required SpinBox Min;
+        public required SpinBox Max;
+        public required Label Warning;
+    }
 
     private CancellationTokenSource? _cancel;
     private string _runDir = "";
@@ -56,6 +77,7 @@ public partial class EvolveView : Control
             RoundsPerIndividual = (int)_rounds.Value,
             MutationRate = (float)_mutation.Value,
             DropoutRate = (float)_dropout.Value,
+            Generation = BuildGenerationConfig(),
         };
         int generations = (int)_generations.Value;
         _runDir = System.IO.Path.Combine(AppPaths.RunsRoot(), _runName.Text.Trim().Length > 0 ? _runName.Text.Trim() : "unnamed");
@@ -128,6 +150,35 @@ public partial class EvolveView : Control
         GetTree().ChangeSceneToFile("res://scenes/arena.tscn");
     }
 
+    /// <summary>Collects composition mode + advanced range rows into the run's
+    /// GenerationConfig. PINNED with untouched rows = GenerationConfig.Default —
+    /// the byte-identical legacy path.</summary>
+    private GenerationConfig BuildGenerationConfig()
+    {
+        GenerationConfig generation = GenerationConfig.Default;
+        if (_compositionMode.Selected == 1)
+        {
+            generation = generation with { ButtonComposition = GenerationConfig.RandomComposition };
+        }
+        else if (_compositionMode.Selected == 2)
+        {
+            generation = generation with
+            {
+                ButtonComposition = _buttonSlots.Select(s => (SlotSpec)s.Selected).ToArray(),
+            };
+        }
+        var overrides = new System.Collections.Generic.List<RangeOverride>();
+        foreach (RangeRow row in _rangeRows)
+        {
+            float min = (float)row.Min.Value, max = (float)row.Max.Value;
+            if (min != row.Stock.Min || max != row.Stock.Max)
+            {
+                overrides.Add(new RangeOverride(row.Schema, row.Stock.Key, System.MathF.Min(min, max), System.MathF.Max(min, max)));
+            }
+        }
+        return overrides.Count > 0 ? generation.WithRangeOverrides(overrides) : generation;
+    }
+
     private void ApplyAutoConfig(string spec)
     {
         foreach (string pair in spec.Split(';'))
@@ -141,6 +192,14 @@ public partial class EvolveView : Control
                 case "gens": _generations.Value = double.Parse(kv[1]); break;
                 case "seed": _seed.Value = double.Parse(kv[1]); break;
                 case "rounds": _rounds.Value = double.Parse(kv[1]); break;
+                case "composition": // pinned|random|perbutton (headless UI verification)
+                    _compositionMode.Selected = kv[1] switch
+                        { "random" => 1, "perbutton" => 2, _ => 0 };
+                    OnCompositionModeChanged(_compositionMode.Selected);
+                    break;
+                case "advanced": // any value: open the advanced panel for screenshots
+                    ToggleAdvanced();
+                    break;
             }
         }
     }
@@ -172,6 +231,41 @@ public partial class EvolveView : Control
         _mutation = Slider(0.4f); left.AddChild(Labeled("mutation rate", _mutation));
         _dropout = Slider(0.5f); left.AddChild(Labeled("dropout rate", _dropout));
 
+        // Composition (2026-07-14): PINNED = today's fixed attack/attack/shield/dash;
+        // RANDOM = every button free; PER-BUTTON = pin some, free others.
+        _compositionMode = new OptionButton();
+        _compositionMode.AddItem("PINNED (ATTACK/ATTACK/SHIELD/DASH)", 0);
+        _compositionMode.AddItem("RANDOMIZED (TYPES EVOLVE)", 1);
+        _compositionMode.AddItem("PER-BUTTON", 2);
+        _compositionMode.Selected = 0;
+        _compositionMode.ItemSelected += i => OnCompositionModeChanged((int)i);
+        left.AddChild(Labeled("composition", _compositionMode));
+
+        _perButtonRow = new HBoxContainer { Visible = false };
+        _perButtonRow.AddThemeConstantOverride("separation", 4);
+        string[] buttonNames = { "I", "J", "K", "L" };
+        for (int b = 0; b < _buttonSlots.Length; b++)
+        {
+            var slot = new OptionButton { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+            slot.AddItem("ATTACK", 0);
+            slot.AddItem("SHIELD", 1);
+            slot.AddItem("DASH", 2);
+            slot.AddItem("RANDOM", 3);
+            slot.Selected = b switch { 2 => 1, 3 => 2, _ => 0 }; // seed from the pinned layout
+            _buttonSlots[b] = slot;
+            var cell = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+            var name = new Label { Text = buttonNames[b], HorizontalAlignment = HorizontalAlignment.Center };
+            name.AddThemeFontSizeOverride("font_size", 12);
+            cell.AddChild(name);
+            cell.AddChild(slot);
+            _perButtonRow.AddChild(cell);
+        }
+        left.AddChild(_perButtonRow);
+
+        _advancedToggle = new Button { Text = "ADVANCED: PARAMETER RANGES", ToggleMode = true };
+        _advancedToggle.Pressed += ToggleAdvanced;
+        left.AddChild(_advancedToggle);
+
         _start = new Button { Text = "START RUN" };
         _start.Pressed += StartRun;
         left.AddChild(_start);
@@ -190,10 +284,124 @@ public partial class EvolveView : Control
         root.AddChild(right);
         _chart = new FitnessChart { SizeFlagsVertical = SizeFlags.ExpandFill };
         right.AddChild(_chart);
+        _advancedPanel = BuildAdvancedPanel();
+        right.AddChild(_advancedPanel);
         _status = new Label { Text = "configure a run and press START" };
         _status.AddThemeFontSizeOverride("font_size", 14);
         right.AddChild(_status);
     }
+
+    private void OnCompositionModeChanged(int mode)
+    {
+        _perButtonRow.Visible = mode == 2;
+    }
+
+    /// <summary>The advanced panel swaps with the chart (same slot on the right) so
+    /// the range grid gets full height; the run keeps drawing to the chart underneath
+    /// and reappears when the panel is toggled off.</summary>
+    private void ToggleAdvanced()
+    {
+        bool show = !_advancedPanel.Visible;
+        _advancedPanel.Visible = show;
+        _chart.Visible = !show;
+        _advancedToggle.ButtonPressed = show;
+    }
+
+    private ScrollContainer BuildAdvancedPanel()
+    {
+        var scroll = new ScrollContainer
+        {
+            Visible = false,
+            SizeFlagsVertical = SizeFlags.ExpandFill,
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+        };
+        var list = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        list.AddThemeConstantOverride("separation", 2);
+        scroll.AddChild(list);
+
+        var heading = new Label { Text = "GENERATION RANGES — EDITS APPLY TO NEW RUNS AND ARE RECORDED IN RUN.JSON" };
+        heading.AddThemeFontSizeOverride("font_size", 14);
+        list.AddChild(heading);
+        var note = new Label
+        {
+            Text = "CLAMP A PARAMETER BY SETTING MIN = MAX. AMBER = OUTSIDE THE TESTED DOMAIN.",
+            Modulate = new Color(0.7f, 0.7f, 0.75f),
+        };
+        note.AddThemeFontSizeOverride("font_size", 12);
+        list.AddChild(note);
+
+        var reset = new Button { Text = "RESET ALL TO DEFAULTS" };
+        reset.Pressed += () =>
+        {
+            foreach (RangeRow row in _rangeRows)
+            {
+                row.Min.SetValueNoSignal(row.Stock.Min);
+                row.Max.SetValueNoSignal(row.Stock.Max);
+                UpdateRowWarning(row);
+            }
+        };
+        list.AddChild(reset);
+
+        foreach ((string name, ParamSchema schema) in new[]
+        {
+            ("character", DefaultSchemas.Character),
+            ("move", DefaultSchemas.Move),
+            ("shield", DefaultSchemas.Shield),
+            ("dash", DefaultSchemas.Dash),
+        })
+        {
+            var section = new Label { Text = name.ToUpperInvariant() };
+            section.AddThemeFontSizeOverride("font_size", 16);
+            list.AddChild(section);
+            foreach (ParamSpec spec in schema.Specs)
+            {
+                list.AddChild(BuildRangeRow(name, spec));
+            }
+        }
+        return scroll;
+    }
+
+    private Control BuildRangeRow(string schema, ParamSpec spec)
+    {
+        var row = new HBoxContainer();
+        var label = new Label { Text = spec.Key, CustomMinimumSize = new Vector2(230f, 0f) };
+        label.AddThemeFontSizeOverride("font_size", 13);
+        row.AddChild(label);
+        SpinBox min = RangeSpin(spec.Min);
+        SpinBox max = RangeSpin(spec.Max);
+        row.AddChild(min);
+        row.AddChild(max);
+        var warning = new Label
+        {
+            Text = "",
+            CustomMinimumSize = new Vector2(200f, 0f),
+            Modulate = new Color(1f, 0.75f, 0.25f),
+        };
+        warning.AddThemeFontSizeOverride("font_size", 12);
+        row.AddChild(warning);
+
+        var rangeRow = new RangeRow { Schema = schema, Stock = spec, Min = min, Max = max, Warning = warning };
+        _rangeRows.Add(rangeRow);
+        min.ValueChanged += _ => UpdateRowWarning(rangeRow);
+        max.ValueChanged += _ => UpdateRowWarning(rangeRow);
+        return row;
+    }
+
+    private static void UpdateRowWarning(RangeRow row)
+    {
+        float min = (float)row.Min.Value, max = (float)row.Max.Value;
+        bool edited = min != row.Stock.Min || max != row.Stock.Max;
+        bool outside = min < row.Stock.EffectiveValidMin || max > row.Stock.EffectiveValidMax;
+        row.Warning.Text = outside ? "OUTSIDE TESTED DOMAIN" : edited ? (min == max ? "CLAMPED" : "EDITED") : "";
+        row.Warning.Modulate = outside ? new Color(1f, 0.75f, 0.25f) : new Color(0.6f, 0.75f, 0.6f);
+    }
+
+    private static SpinBox RangeSpin(float value) => new()
+    {
+        MinValue = -10_000, MaxValue = 10_000, Step = 0.01, Value = value,
+        AllowGreater = true, AllowLesser = true,
+        CustomMinimumSize = new Vector2(110f, 0f),
+    };
 
     private static SpinBox Spin(double value, double min, double max) =>
         new() { MinValue = min, MaxValue = max, Value = value, CustomMinimumSize = new Vector2(140f, 0f) };

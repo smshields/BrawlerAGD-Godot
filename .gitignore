@@ -9,6 +9,9 @@ godot/.godot/
 
 # Evolution run output (checkpoints, results, replays)
 runs/
+# Archived pre-v4 run output (archive/README.md is the catalog and IS tracked)
+archive/*
+!archive/README.md
 
 # IDE
 .idea/

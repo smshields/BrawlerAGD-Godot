@@ -155,3 +155,8 @@ button, unified defense channel, game.json v4 — docs/features/dash.md) are
 implemented and awaiting the designer play-test gate.
 Utility-agent behavior log (flank/traversal/exhausted-disengage/shield) lives in
 docs/features/utility-agent.md; fitness standard-v3 is shield-BLIND for now.
+Feature 7 (2026-07-14): evolve-menu composition control (PINNED default / RANDOM /
+PER-BUTTON; move types are evolvable structural genes in composed modes) + advanced
+per-parameter generation ranges incl. clamps and beyond-domain ranges (run.json
+records both; pinned path byte-identical — docs/features/evolve-composition-and-
+ranges.md, DEVIATIONS #22). Pre-v4 runs archived to archive/ (see its README).

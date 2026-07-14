@@ -56,6 +56,17 @@ public static class RunStore
                 ? null : config.Match.MaxStunSeconds,
             DiversityWeight = config.DiversityWeight,
             FitnessCollisionScalar = config.FitnessCollisionScalar,
+            // Composition + range overrides (2026-07-14): part of what a run MEANS —
+            // absent fields read back as the pinned layout with stock schemas.
+            Composition = config.Generation.ButtonComposition?
+                .Select(s => s.ToString().ToLowerInvariant()).ToList(),
+            TypeRerollRate = config.Generation.IsComposed ? config.Generation.TypeRerollRate : null,
+            RangeOverrides = config.Generation.RangeOverrides.Count == 0
+                ? null
+                : config.Generation.RangeOverrides.Select(o => new RangeOverrideDoc
+                {
+                    Schema = o.Schema, Key = o.Key, Min = o.Min, Max = o.Max,
+                }).ToList(),
             GenerationsCompleted = engine.GenerationsCompleted,
             RngState = state,
             RngInc = inc,
@@ -113,6 +124,7 @@ public static class RunStore
                 MaxStunSeconds = manifest.MaxStunSeconds ?? float.PositiveInfinity,
             },
             DiversityWeight = manifest.DiversityWeight ?? 0f,
+            Generation = BuildGenerationConfig(manifest),
         };
 
         var population = new List<GameGenome>(manifest.PopulationSize);
@@ -130,6 +142,25 @@ public static class RunStore
         var engine = new EvolutionEngine(
             config, population, (manifest.RngState, manifest.RngInc), manifest.GenerationsCompleted);
         return (engine, config, history);
+    }
+
+    private static GenerationConfig BuildGenerationConfig(RunManifest manifest)
+    {
+        GenerationConfig generation = GenerationConfig.Default;
+        if (manifest.Composition is { } composition)
+        {
+            generation = generation with
+            {
+                ButtonComposition = composition.Select(s => Enum.Parse<SlotSpec>(s, ignoreCase: true)).ToArray(),
+                TypeRerollRate = manifest.TypeRerollRate ?? generation.TypeRerollRate,
+            };
+        }
+        if (manifest.RangeOverrides is { Count: > 0 } overrides)
+        {
+            generation = generation.WithRangeOverrides(overrides
+                .Select(o => new RangeOverride(o.Schema ?? "", o.Key ?? "", o.Min, o.Max)).ToArray());
+        }
+        return generation;
     }
 
     private sealed class RunManifest
@@ -150,10 +181,21 @@ public static class RunStore
         public float? MaxStunSeconds { get; set; }
         public float? DiversityWeight { get; set; }
         public float? FitnessCollisionScalar { get; set; }
+        public List<string>? Composition { get; set; }
+        public float? TypeRerollRate { get; set; }
+        public List<RangeOverrideDoc>? RangeOverrides { get; set; }
         public int GenerationsCompleted { get; set; }
         public ulong RngState { get; set; }
         public ulong RngInc { get; set; }
         public List<GenerationStatsDoc>? Stats { get; set; }
+    }
+
+    private sealed class RangeOverrideDoc
+    {
+        public string? Schema { get; set; }
+        public string? Key { get; set; }
+        public float Min { get; set; }
+        public float Max { get; set; }
     }
 
     private sealed class GenerationStatsDoc

@@ -26,7 +26,7 @@ public static class GameGenomeOps
         var children = new List<CharacterGenome>(a.Characters.Count);
         for (int c = 0; c < a.Characters.Count; c++)
         {
-            children.Add(CrossoverCharacter(a.Characters[c], b.Characters[c], rng));
+            children.Add(CrossoverCharacter(a.Characters[c], b.Characters[c], rng, config));
         }
         StageGenome stage = StageGenome.SinglePointCrossover(a.Stage, b.Stage, rng);
         return new GameGenome(children, stage);
@@ -38,20 +38,49 @@ public static class GameGenomeOps
         var mutated = new List<CharacterGenome>(genome.Characters.Count);
         foreach (CharacterGenome character in genome.Characters)
         {
-            var moves = character.Moves
-                .Select(m => new MoveGenome(
-                    GenomeOps.Mutate(m.Params, rng), rng.NextInt(config.MoveSpriteCount), m.Type))
-                .ToList();
+            var moves = config.ButtonComposition is { } composition
+                ? MutateComposedMoves(character, composition, config, rng)
+                : character.Moves
+                    .Select(m => new MoveGenome(
+                        GenomeOps.Mutate(m.Params, rng), rng.NextInt(config.MoveSpriteCount), m.Type))
+                    .ToList();
             mutated.Add(new CharacterGenome(
                 character.Name,
                 character.Stocks,
                 rng.NextInt(config.PlayerSpriteCount),
                 GenomeOps.Mutate(character.Params, rng),
                 moves,
-                MutateButtonMoves(character, rng)));
+                config.IsComposed
+                    ? Enumerable.Range(0, character.ButtonMoves.Count).ToArray() // identity invariant
+                    : MutateButtonMoves(character, rng)));
         }
         StageGenome stage = config.CreateStageGenerator().Generate(rng);
         return new GameGenome(mutated, stage);
+    }
+
+    /// <summary>
+    /// Composed-mode move mutation (2026-07-14, evolve-composition-and-ranges.md): each
+    /// RANDOM-spec slot first rolls against TypeRerollRate — success regenerates the
+    /// slot wholesale (uniform type draw + fresh params/sprite; landing the same type is
+    /// a legitimate full re-roll), failure mutates params as usual. Fixed-spec slots
+    /// never roll: no real choice, no RNG (the stream-gating principle).
+    /// </summary>
+    private static List<MoveGenome> MutateComposedMoves(
+        CharacterGenome character, IReadOnlyList<SlotSpec> composition, GenerationConfig config, Pcg32 rng)
+    {
+        var moves = new List<MoveGenome>(character.Moves.Count);
+        for (int i = 0; i < character.Moves.Count; i++)
+        {
+            MoveGenome m = character.Moves[i];
+            if (i < composition.Count && composition[i] == SlotSpec.Random
+                && rng.NextFloat() < config.TypeRerollRate)
+            {
+                moves.Add(MoveGenome.GenerateOfType((MoveType)rng.NextInt(3), config, rng));
+                continue;
+            }
+            moves.Add(new MoveGenome(GenomeOps.Mutate(m.Params, rng), rng.NextInt(config.MoveSpriteCount), m.Type));
+        }
+        return moves;
     }
 
     /// <summary>
@@ -100,7 +129,7 @@ public static class GameGenomeOps
         return child;
     }
 
-    private static CharacterGenome CrossoverCharacter(CharacterGenome a, CharacterGenome b, Pcg32 rng)
+    private static CharacterGenome CrossoverCharacter(CharacterGenome a, CharacterGenome b, Pcg32 rng, GenerationConfig config)
     {
         if (a.Moves.Count != b.Moves.Count)
         {
@@ -124,6 +153,13 @@ public static class GameGenomeOps
             ParamSet moveParams = GenomeOps.SinglePointCrossover(a.Moves[m].Params, b.Moves[m].Params, rng);
             int moveSprite = rng.NextInt(2) == 0 ? a.Moves[m].SpriteIndex : b.Moves[m].SpriteIndex;
             moves.Add(new MoveGenome(moveParams, moveSprite, a.Moves[m].Type));
+        }
+        if (config.IsComposed)
+        {
+            // Composed mode: buttons are identity by structural invariant — nothing to
+            // cross, no draws consumed.
+            return new CharacterGenome(a.Name, a.Stocks, spriteIndex, childParams, moves,
+                Enumerable.Range(0, a.ButtonMoves.Count).ToArray());
         }
         // Per-button coin flip between parents, RNG-gated like MutateButtonMoves: with a
         // single move both parents' genes are identical zeros, so no draw is consumed.

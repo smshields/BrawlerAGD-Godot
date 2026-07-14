@@ -48,6 +48,23 @@ public sealed class MoveGenome
         ParamSet raw = GenomeOps.Generate(config.DashSchema, rng);
         return new MoveGenome(raw, rng.NextInt(config.MoveSpriteCount), MoveType.Dash);
     }
+
+    public static MoveGenome GenerateOfType(MoveType type, GenerationConfig config, Pcg32 rng) => type switch
+    {
+        MoveType.Shield => GenerateShield(config, rng),
+        MoveType.Dash => GenerateDash(config, rng),
+        _ => Generate(config, rng),
+    };
+
+    /// <summary>Resolve a composed slot spec (2026-07-14): fixed specs map directly;
+    /// Random draws uniformly over the three move types (one RNG draw).</summary>
+    public static MoveType ResolveSlot(SlotSpec spec, Pcg32 rng) => spec switch
+    {
+        SlotSpec.Attack => MoveType.Attack,
+        SlotSpec.Shield => MoveType.Shield,
+        SlotSpec.Dash => MoveType.Dash,
+        _ => (MoveType)rng.NextInt(3),
+    };
 }
 
 /// <summary>One evolvable character: raw params, its moves, and fixed/cosmetic genes.</summary>
@@ -97,6 +114,21 @@ public sealed class CharacterGenome
     {
         ParamSet @params = GenomeOps.Generate(config.CharacterSchema, rng);
         int spriteIndex = rng.NextInt(config.PlayerSpriteCount);
+        if (config.ButtonComposition is { } composition)
+        {
+            // Composed mode (2026-07-14): one move per button, identity mapping. Per
+            // slot: type resolution (a draw only for Random specs), then that type's
+            // generation draws. The mapping gene is structural identity — "which type
+            // sits on which button" evolves via the type gene, not the mapping.
+            var slotMoves = new List<MoveGenome>(composition.Count);
+            int[] identity = new int[composition.Count];
+            for (int i = 0; i < composition.Count; i++)
+            {
+                slotMoves.Add(MoveGenome.GenerateOfType(MoveGenome.ResolveSlot(composition[i], rng), config, rng));
+                identity[i] = i;
+            }
+            return new CharacterGenome(name, config.Stocks, spriteIndex, @params, slotMoves, identity);
+        }
         var moves = new List<MoveGenome>(config.MovesPerCharacter + config.ShieldSlotCount + config.DashSlotCount);
         for (int i = 0; i < config.MovesPerCharacter; i++)
         {

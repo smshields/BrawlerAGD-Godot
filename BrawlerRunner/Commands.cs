@@ -22,6 +22,8 @@ internal static class Commands
         Console.WriteLine("  evolve   --out <dir> [--seed 1] [--pop 100] [--generations 100] [--rounds 1]");
         Console.WriteLine("           [--dropout 0.5] [--mutation 0.4] [--resume]");
         Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
+        Console.WriteLine("           [--composition pinned|random|<attack,shield,dash,random x4>] [--type-reroll 0.2]");
+        Console.WriteLine("           [--range \"schema.key=min:max;...\"]  (schemas: character|move|shield|dash)");
         Console.WriteLine("  evaluate --game <game.json> [--seed 7] [--rounds 5] [--fitness standard-v3|standard-v2]");
         Console.WriteLine("           [--breakdown] [--max-seconds 60] [--target-seconds 45]");
         Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
@@ -138,6 +140,7 @@ internal static class Commands
                 FitnessName = opts.GetValueOrDefault("fitness", FitnessRegistry.DefaultName),
                 FitnessCollisionScalar = opts.ContainsKey("collision-scalar")
                     ? GetFloat(opts, "collision-scalar", 0f) : null,
+                Generation = ParseGeneration(opts),
             };
             engine = new EvolutionEngine(config);
             history = new List<GenerationStats>();
@@ -283,6 +286,49 @@ internal static class Commands
         Randomness = GetFloat(opts, "agent-randomness", AgentConfig.Default.Randomness),
         DecisionIntervalTicks = GetInt(opts, "agent-interval", AgentConfig.Default.DecisionIntervalTicks),
     };
+
+    /// <summary>Composition + advanced ranges (2026-07-14,
+    /// docs/features/evolve-composition-and-ranges.md).</summary>
+    private static GenerationConfig ParseGeneration(Dictionary<string, string> opts)
+    {
+        GenerationConfig generation = GenerationConfig.Default;
+        string composition = opts.GetValueOrDefault("composition", "pinned");
+        if (!string.Equals(composition, "pinned", StringComparison.OrdinalIgnoreCase))
+        {
+            IReadOnlyList<SlotSpec> slots = string.Equals(composition, "random", StringComparison.OrdinalIgnoreCase)
+                ? GenerationConfig.RandomComposition
+                : composition.Split(',').Select(s => Enum.Parse<SlotSpec>(s.Trim(), ignoreCase: true)).ToArray();
+            if (slots.Count != InputFrame.ActionCount)
+            {
+                throw new ArgumentException(
+                    $"--composition needs {InputFrame.ActionCount} slots, got {slots.Count}.");
+            }
+            generation = generation with
+            {
+                ButtonComposition = slots,
+                TypeRerollRate = GetFloat(opts, "type-reroll", generation.TypeRerollRate),
+            };
+        }
+        if (opts.TryGetValue("range", out string? ranges) && ranges.Length > 0)
+        {
+            var overrides = new List<RangeOverride>();
+            foreach (string entry in ranges.Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                string[] kv = entry.Split('=');
+                string[] path = kv[0].Trim().Split('.');
+                string[] range = kv.Length == 2 ? kv[1].Split(':') : Array.Empty<string>();
+                if (path.Length != 2 || range.Length != 2)
+                {
+                    throw new ArgumentException($"Bad --range entry '{entry}' (want schema.key=min:max).");
+                }
+                overrides.Add(new RangeOverride(path[0].Trim(), path[1].Trim(),
+                    float.Parse(range[0], CultureInfo.InvariantCulture),
+                    float.Parse(range[1], CultureInfo.InvariantCulture)));
+            }
+            generation = generation.WithRangeOverrides(overrides);
+        }
+        return generation;
+    }
 
     private static Dictionary<string, string> ParseOptions(string[] args)
     {

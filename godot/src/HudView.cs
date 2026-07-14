@@ -67,6 +67,7 @@ public partial class HudView : CanvasLayer
             (0, 0) => "·",
             (1, 0) => "→", (-1, 0) => "←", (0, 1) => "↑", (0, -1) => "↓",
             (1, 1) => "↗", (-1, 1) => "↖", (1, -1) => "↘", (-1, -1) => "↙",
+            _ => "·", // unreachable: Math.Sign ∈ {-1,0,1}; silences CS8509
         };
         _diArrows[i].Text = glyph;
         _diArrows[i].Modulate = _flashTicks[i] > 0
