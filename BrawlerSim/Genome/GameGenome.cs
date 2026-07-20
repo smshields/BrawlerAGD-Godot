@@ -11,6 +11,7 @@ public enum MoveType
     Attack,
     Shield,
     Dash, // 2026-07-13, FEATURES.md §Dash
+    Projectile, // 2026-07-14, FEATURES.md §Projectiles
 }
 
 /// <summary>One evolvable move: type, raw params (schema per type), and a cosmetic
@@ -49,21 +50,31 @@ public sealed class MoveGenome
         return new MoveGenome(raw, rng.NextInt(config.MoveSpriteCount), MoveType.Dash);
     }
 
+    public static MoveGenome GenerateProjectile(GenerationConfig config, Pcg32 rng)
+    {
+        ParamSet raw = GenomeOps.Generate(config.ProjectileSchema, rng);
+        return new MoveGenome(raw, rng.NextInt(config.MoveSpriteCount), MoveType.Projectile);
+    }
+
     public static MoveGenome GenerateOfType(MoveType type, GenerationConfig config, Pcg32 rng) => type switch
     {
         MoveType.Shield => GenerateShield(config, rng),
         MoveType.Dash => GenerateDash(config, rng),
+        MoveType.Projectile => GenerateProjectile(config, rng),
         _ => Generate(config, rng),
     };
 
     /// <summary>Resolve a composed slot spec (2026-07-14): fixed specs map directly;
-    /// Random draws uniformly over the three move types (one RNG draw).</summary>
+    /// Random draws uniformly over the move types — FOUR since projectiles joined the
+    /// pool (2026-07-14 same-day; composed-mode runs from the 3-type window regenerate
+    /// differently from the same seed — noted in projectiles.md).</summary>
     public static MoveType ResolveSlot(SlotSpec spec, Pcg32 rng) => spec switch
     {
         SlotSpec.Attack => MoveType.Attack,
         SlotSpec.Shield => MoveType.Shield,
         SlotSpec.Dash => MoveType.Dash,
-        _ => (MoveType)rng.NextInt(3),
+        SlotSpec.Projectile => MoveType.Projectile,
+        _ => (MoveType)rng.NextInt(4),
     };
 }
 

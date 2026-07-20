@@ -160,3 +160,10 @@ PER-BUTTON; move types are evolvable structural genes in composed modes) + advan
 per-parameter generation ranges incl. clamps and beyond-domain ranges (run.json
 records both; pinned path byte-identical — docs/features/evolve-composition-and-
 ranges.md, DEVIATIONS #22). Pre-v4 runs archived to archive/ (see its README).
+Feature 8 (2026-07-14): PROJECTILES — 24-gene attack-family move type, the first
+non-player sim entities (closed-form paths, SAT shape collision, melee hit
+pipeline, platform/boundary/TTL/decay despawns, no live cap), gold filled-shape
+rendering, agent corridor-fire/zoning/dodge (defense fires regardless of
+counter-hit vs bolts), SlotSpec.Projectile in the RANDOM pool, game.json v5,
+fitness-blind stats — docs/features/projectiles.md, DEVIATIONS #23. Match goldens
+unmoved (hash section gated on live bolts); fingerprint re-pinned (bytes only).

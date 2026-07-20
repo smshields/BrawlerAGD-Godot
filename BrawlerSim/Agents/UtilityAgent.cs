@@ -38,6 +38,17 @@ public sealed class UtilityAgent : IInputSource
     private const float OpponentAboveThreshold = 1.5f;
     private const float AttackInRange = 4.0f;
     private const float AttackDamagePreference = 0.05f; // dmg ≤ ~15 → bonus ≤ 0.75 < base 4
+
+    // Projectiles (2026-07-14, FEATURES.md §Projectiles agent spec). Fire-from-range
+    // sits BELOW AttackInRange so melee stays preferred when both connect ("avoid
+    // using projectiles at close range" is the hard gate; this is the soft one), and
+    // the weight is deliberately moderate — zoning findable, not agent-forced.
+    private const float ProjectileInRange = 2.6f;
+    private const float ProjectileDamagePreference = 0.04f;
+    private const float MinProjectileRange = 2.5f;      // the close-range gate
+    private const float ProjectileCorridorSlack = 0.6f; // vertical looseness of the aim test
+    private const int ProjectileLookaheadTicks = 30;    // dodge prediction horizon (0.5 s)
+    private const int ProjectileLookaheadStep = 3;
     private const float EvadeMove = 2.0f;         // scaled up to 2× as damage climbs
     private const float HighDamageThreshold = 80f;
     private const float EdgeProbeDistance = 1.0f; // how far ahead evade checks for a pit
@@ -122,6 +133,7 @@ public sealed class UtilityAgent : IInputSource
     private bool _wasGrounded = true;
     private bool _wasOverPit;
     private bool _couldHit;
+    private bool _wasProjectileThreat;
     private bool _wasStunned;
 
     public UtilityAgent(Pcg32 rng, AgentConfig? config = null)
@@ -164,11 +176,13 @@ public sealed class UtilityAgent : IInputSource
             (self.State == PlayerState.Stun && !_wasStunned) ||
             (self.IsGrounded != _wasGrounded) ||
             (ctx.OverPit != _wasOverPit) ||
-            (ctx.AnyCanHit && !_couldHit);
+            (ctx.AnyCanHit && !_couldHit) ||
+            (ctx.ProjectileThreat && !_wasProjectileThreat); // a shot appears — react
         _wasStunned = self.State == PlayerState.Stun;
         _wasGrounded = self.IsGrounded;
         _wasOverPit = ctx.OverPit;
         _couldHit = ctx.AnyCanHit;
+        _wasProjectileThreat = ctx.ProjectileThreat;
 
         if (--_ticksUntilRedecide > 0 && !salient)
         {
@@ -190,9 +204,12 @@ public sealed class UtilityAgent : IInputSource
         int attackChoice = Select(scores.Attack);            // 0 none, else candidate
 
         // Defense channel (2026-07-13, replaces the pairwise dodge/shield coin): on a
-        // telegraphed swing with no counter-hit available, ONE weighted-random pick
-        // among {nothing, hop away, shield, dash out} — all options priced together.
-        if (ctx.TelegraphThreat && !ctx.AnyCanHit
+        // telegraphed swing with no counter-hit available — trade-commit: landing OUR
+        // melee interrupts THEIRS — ONE weighted-random pick among the defense
+        // options. An incoming projectile (2026-07-14) triggers defense REGARDLESS of
+        // counter-hit options: the bolt is committed damage already in flight, and
+        // counter-firing does nothing to stop it (unlike the melee trade).
+        if ((ctx.TelegraphThreat && !ctx.AnyCanHit || ctx.ProjectileThreat)
             && ctx.Self.State is not (PlayerState.WarmUp or PlayerState.Attack))
         {
             bool jumpAvailable = ctx.Self.IsGrounded || !ctx.Self.JumpsExhausted;
@@ -463,6 +480,20 @@ public sealed class UtilityAgent : IInputSource
             }
         }
 
+        // Projectile reach (2026-07-14): a LOOSE corridor prediction per the spec —
+        // horizontal distance within the closed-form range, vertical offset within the
+        // path's lateral envelope (+slack), and outside the close-range gate. The
+        // candidate then scores on the attack channel via ProjectileBehavior.
+        for (int m = 0; m < self.Moves.Count; m++)
+        {
+            if (self.ButtonForMove(m) < 0 || self.ProjectileMoves[m] is not SimProjectileMove ranged)
+            {
+                continue;
+            }
+            canHit[m] = ProjectileCorridorHit(ranged, self, opponent, world.Config);
+            anyCanHit |= canHit[m];
+        }
+
         // Telegraph: the opponent is WINDING UP an attack whose arc (+margin) covers
         // us — the readable moment defensive options respond to.
         bool telegraphThreat = false;
@@ -483,6 +514,47 @@ public sealed class UtilityAgent : IInputSource
                 float feetY = self.Position.Y - self.BodyHalf.Y;
                 float crouchedTop = feetY + 2f * self.BodyHalf.Y * self.CrouchHeightRatio;
                 crouchClearsThreat = arc.Bottom > crouchedTop + 0.05f;
+            }
+        }
+
+        // Incoming projectiles (2026-07-14): sample each dangerous projectile's
+        // closed-form path over the lookahead; a predicted overlap with our body
+        // (inflated by its half extent) is a threat the defense channel answers.
+        // Ducking helps only if every threatening sample passes above the crouched
+        // silhouette — same geometry rule as the melee arc.
+        bool projectileThreat = false;
+        if (world.Projectiles.Count > 0)
+        {
+            float minPredictedBottom = float.MaxValue;
+            Aabb body = self.Body;
+            foreach (SimProjectile incoming in world.Projectiles)
+            {
+                bool dangerous = incoming.Owner != self.Index
+                    || (incoming.Move.HitsSelf && incoming.ClearedOwner);
+                if (!dangerous)
+                {
+                    continue;
+                }
+                var threatBox = new Aabb(body.Center,
+                    new Vec2(body.Half.X + incoming.Move.HalfExtent, body.Half.Y + incoming.Move.HalfExtent));
+                for (int k = ProjectileLookaheadStep; k <= ProjectileLookaheadTicks; k += ProjectileLookaheadStep)
+                {
+                    Vec2 predicted = incoming.Move.PositionAt(
+                        incoming.Origin, incoming.Facing, incoming.AgeTicks + k, world.Config);
+                    if (predicted.X >= threatBox.Left && predicted.X <= threatBox.Right
+                        && predicted.Y >= threatBox.Bottom && predicted.Y <= threatBox.Top)
+                    {
+                        projectileThreat = true;
+                        minPredictedBottom = MathF.Min(
+                            minPredictedBottom, predicted.Y - incoming.Move.HalfExtent);
+                    }
+                }
+            }
+            if (projectileThreat && self.IsGrounded && self.State == PlayerState.Idle)
+            {
+                float feetY = self.Position.Y - self.BodyHalf.Y;
+                float crouchedTop = feetY + 2f * self.BodyHalf.Y * self.CrouchHeightRatio;
+                crouchClearsThreat |= minPredictedBottom > crouchedTop + 0.05f;
             }
         }
 
@@ -551,7 +623,54 @@ public sealed class UtilityAgent : IInputSource
             dashSlot,
             OpponentStunned: opponent.State == PlayerState.Stun,
             recoverAim,
-            crouchClearsThreat);
+            crouchClearsThreat,
+            projectileThreat);
+    }
+
+    /// <summary>
+    /// The spec's "loose range of hits based on projectile shape": facing-toward
+    /// reach out to the closed-form range (accounting for deceleration peaking early),
+    /// vertical tolerance = the path's lateral envelope + the sine amplitude + slack +
+    /// the target's half height, gated closed inside MinProjectileRange. Deliberately
+    /// coarse — precision comes from the sim, misses are the humanizing noise.
+    /// </summary>
+    private static bool ProjectileCorridorHit(
+        SimProjectileMove ranged, SimPlayer self, SimPlayer opponent, MatchConfig config)
+    {
+        float dx = MathF.Abs(opponent.Position.X - self.Position.X);
+        if (dx < MinProjectileRange)
+        {
+            return false;
+        }
+        float ttl = ranged.TtlTicks * config.Dt;
+        float maxRange = ranged.LaunchSpeed * ttl + 0.5f * ranged.Acceleration * ttl * ttl;
+        if (ranged.Acceleration < 0f)
+        {
+            float tPeak = -ranged.LaunchSpeed / ranged.Acceleration; // decelerating: s peaks here
+            if (tPeak < ttl)
+            {
+                maxRange = ranged.LaunchSpeed * tPeak + 0.5f * ranged.Acceleration * tPeak * tPeak;
+            }
+        }
+        if (maxRange <= 0f || dx > maxRange + 1f)
+        {
+            return false;
+        }
+        // Where does the path sit vertically when it reaches the opponent's column?
+        float t = dx / MathF.Max(ranged.LaunchSpeed, 0.5f); // loose: ignores acceleration
+        float launchY = self.Position.Y + ranged.LaunchFraction.Y * self.BodyHalf.Y;
+        float centerY = launchY;
+        if (ranged.Path == ProjectilePath.Quadratic)
+        {
+            centerY -= ranged.PathScalar * ranged.QuadraticScale * dx * dx;
+        }
+        if (ranged.Gravity)
+        {
+            centerY -= 0.5f * config.Gravity * t * t;
+        }
+        float tolerance = ProjectileCorridorSlack + opponent.BodyHalf.Y
+            + (ranged.Path == ProjectilePath.Sine ? ranged.SineAmplitude : 0f);
+        return MathF.Abs(opponent.Position.Y - centerY) <= tolerance;
     }
 
     /// <summary>
@@ -717,6 +836,7 @@ public sealed class UtilityAgent : IInputSource
         new TraverseBehavior(),
         new FlankBehavior(),
         new AttackBehavior(),
+        new ProjectileBehavior(),
         new DashUtilityBehavior(),
         new VerticalUtilityBehavior(),
         new EvadeBehavior(),
@@ -885,6 +1005,32 @@ public sealed class UtilityAgent : IInputSource
                         ? BreakPunishDamagePreference : AttackDamagePreference;
                     float bonus = ctx.OpponentBreakStunned ? BreakPunishBonus : 0f;
                     scores.Attack[c] += AttackInRange + bonus + damagePreference * attack.DamageGiven;
+                }
+            }
+        }
+    }
+
+    /// <summary>Projectile firing (2026-07-14, FEATURES.md §Projectiles agent spec):
+    /// scores any projectile slot whose corridor test says the opponent is plausibly
+    /// hittable — canHit already encodes both the close-range gate and the loose aim,
+    /// so this behavior only prices the candidate. A break-stunned opponent gets the
+    /// half punish bonus (the full one belongs to melee, which actually confirms).</summary>
+    private sealed class ProjectileBehavior : IUtilityBehavior
+    {
+        public void Contribute(in UtilityContext ctx, UtilityScores scores)
+        {
+            if (ctx.Vulnerable)
+            {
+                return;
+            }
+            for (int c = 1; c < scores.Attack.Length; c++)
+            {
+                int move = scores.AttackMoves[c];
+                if (ctx.CanHit[move] && ctx.Self.ProjectileMoves[move] is SimProjectileMove ranged)
+                {
+                    float bonus = ctx.OpponentBreakStunned ? BreakPunishBonus * 0.5f : 0f;
+                    scores.Attack[c] += ProjectileInRange + bonus
+                        + ProjectileDamagePreference * ranged.DamageGiven;
                 }
             }
         }
@@ -1104,7 +1250,8 @@ public readonly record struct UtilityContext(
     int DashSlot,
     bool OpponentStunned,
     Vec2 RecoverAim,
-    bool CrouchClearsThreat);
+    bool CrouchClearsThreat,
+    bool ProjectileThreat);
 
 /// <summary>
 /// The per-decision score sheet. Horizontal = {left, neutral, right}; Jump = {no, yes};

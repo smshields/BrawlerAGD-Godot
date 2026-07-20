@@ -40,8 +40,9 @@ public class CompositionAndRangesTests
     }
 
     [Fact]
-    public void RandomSlotsDrawAllThreeTypesAcrossSeeds()
+    public void RandomSlotsDrawAllFourTypesAcrossSeeds()
     {
+        // 2026-07-14: projectiles joined the Random pool — the draw is uniform over 4.
         var config = Composed(AllRandom);
         var seen = new HashSet<MoveType>();
         for (ulong seed = 0; seed < 20; seed++)
@@ -55,7 +56,7 @@ public class CompositionAndRangesTests
                 }
             }
         }
-        Assert.Equal(3, seen.Count);
+        Assert.Equal(4, seen.Count);
     }
 
     [Fact]
@@ -127,7 +128,7 @@ public class CompositionAndRangesTests
                 rerolledTypes.Add(c.Moves[1].Type);
             }
         }
-        Assert.Equal(3, rerolledTypes.Count); // slot 1 visited every type over 30 rerolls
+        Assert.Equal(4, rerolledTypes.Count); // slot 1 visits every type (4 since projectiles, 2026-07-14)
 
         // Rate 0: types are frozen even for Random specs.
         var never = always with { TypeRerollRate = 0f };

@@ -10,6 +10,8 @@ public enum SlotSpec
     Attack,
     Shield,
     Dash,
+    Projectile, // 2026-07-14 (numeric position is free to claim: SlotSpec crosses
+                // every serialization boundary by NAME, never by ordinal)
     Random,
 }
 
@@ -30,6 +32,7 @@ public sealed record GenerationConfig
 
     public ParamSchema ShieldSchema { get; init; } = DefaultSchemas.Shield;
     public ParamSchema DashSchema { get; init; } = DefaultSchemas.Dash;
+    public ParamSchema ProjectileSchema { get; init; } = DefaultSchemas.Projectile;
 
     public int CharacterCount { get; init; } = 2;
     public int MovesPerCharacter { get; init; } = 2;
@@ -101,6 +104,7 @@ public sealed record GenerationConfig
             MoveSchema = ApplyOverrides(MoveSchema, overrides),
             ShieldSchema = ApplyOverrides(ShieldSchema, overrides),
             DashSchema = ApplyOverrides(DashSchema, overrides),
+            ProjectileSchema = ApplyOverrides(ProjectileSchema, overrides),
         };
     }
 

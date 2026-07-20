@@ -247,10 +247,12 @@ public partial class EvolveView : Control
         for (int b = 0; b < _buttonSlots.Length; b++)
         {
             var slot = new OptionButton { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+            // Item order mirrors SlotSpec numerically (BuildGenerationConfig casts).
             slot.AddItem("ATTACK", 0);
             slot.AddItem("SHIELD", 1);
             slot.AddItem("DASH", 2);
-            slot.AddItem("RANDOM", 3);
+            slot.AddItem("PROJECTILE", 3); // 2026-07-14
+            slot.AddItem("RANDOM", 4);
             slot.Selected = b switch { 2 => 1, 3 => 2, _ => 0 }; // seed from the pinned layout
             _buttonSlots[b] = slot;
             var cell = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };

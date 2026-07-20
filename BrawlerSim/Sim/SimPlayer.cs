@@ -69,9 +69,13 @@ public sealed class SimPlayer
     /// <summary>Dash slots resolved to tick-domain values; NULL elsewhere.</summary>
     public IReadOnlyList<SimDash?> Dashes => _dashes;
 
+    /// <summary>Per-slot resolved projectile moves (2026-07-14); null at non-projectile slots.</summary>
+    public IReadOnlyList<SimProjectileMove?> ProjectileMoves => _projectileMoves;
+
     public MoveType MoveTypeAt(int index) =>
         _shields[index] is not null ? MoveType.Shield
         : _dashes[index] is not null ? MoveType.Dash
+        : _projectileMoves[index] is not null ? MoveType.Projectile
         : MoveType.Attack;
 
     /// <summary>Genome button→move mapping: ButtonMoves[b] = move triggered by button b.</summary>
@@ -86,6 +90,7 @@ public sealed class SimPlayer
     private readonly SimMove?[] _moves;
     private readonly SimShield?[] _shields;
     private readonly SimDash?[] _dashes;
+    private readonly SimProjectileMove?[] _projectileMoves;
     private readonly int[] _buttonMoves;
 
     // Character constants, resolved once from the genome.
@@ -183,6 +188,14 @@ public sealed class SimPlayer
     public int CrouchTicks;
     public int DIInfluencedHits;
 
+    // Projectile stats (2026-07-14, research-only).
+    public int ProjectilesFired;
+    public int ProjectileHits;
+
+    /// <summary>Set on the WarmUp→Attack transition of a projectile move; consumed by
+    /// SimWorld's projectile phase the SAME tick (never persists — not hashed).</summary>
+    public bool ProjectileSpawnPending;
+
     public SimPlayer(int index, CharacterGenome genome, Vec2 spawn, MatchConfig config)
     {
         Index = index;
@@ -190,6 +203,8 @@ public sealed class SimPlayer
         _moves = genome.Moves.Select(m => m.Type == MoveType.Attack ? new SimMove(m, config) : null).ToArray();
         _shields = genome.Moves.Select(m => m.Type == MoveType.Shield ? new SimShield(m, config) : null).ToArray();
         _dashes = genome.Moves.Select(m => m.Type == MoveType.Dash ? new SimDash(m, config) : null).ToArray();
+        // Projectile resolution needs the scaled body (owner-size cap + launch point),
+        // so it happens after the ParamSet block below.
         _buttonMoves = genome.ButtonMoves.ToArray();
         MoveUses = new int[_moves.Length];
         ShieldHealths = _shields.Select(sh => sh?.InitialRadius ?? 0f).ToArray();
@@ -219,6 +234,9 @@ public sealed class SimPlayer
         BodyHalf = new Vec2(
             config.PlayerBaseWidth * WidthScalar / 2f,
             config.PlayerBaseHeight * HeightScalar / 2f);
+        _projectileMoves = genome.Moves
+            .Select(m => m.Type == MoveType.Projectile ? new SimProjectileMove(m, config, BodyHalf) : null)
+            .ToArray();
 
         SpawnPosition = spawn;
         Position = spawn;
@@ -323,7 +341,9 @@ public sealed class SimPlayer
     /// <summary>Break threshold: 1/5 of the character's (scaled) height.</summary>
     public float ShieldBreakRadius => _config.PlayerBaseHeight * HeightScalar * _config.ShieldBreakRadiusFraction;
 
-    public bool HitboxActive => State == PlayerState.Attack;
+    // Melee only: a projectile move's Attack state has no melee hitbox (its output
+    // is the spawned SimProjectile).
+    public bool HitboxActive => State == PlayerState.Attack && _moves[CurrentMoveIndex] is not null;
 
     /// <summary>World-space hitbox: offset mirrors with facing; size inherits player scale.</summary>
     public Aabb Hitbox => new(
@@ -372,7 +392,17 @@ public sealed class SimPlayer
                 if (--PhaseTicksLeft <= 0)
                 {
                     State = PlayerState.Attack;
-                    PhaseTicksLeft = Move.ExecuteTicks;
+                    if (_projectileMoves[CurrentMoveIndex] is { } firing)
+                    {
+                        // The projectile launches as execution begins; SimWorld's
+                        // projectile phase consumes the flag this same tick.
+                        PhaseTicksLeft = firing.ExecuteTicks;
+                        ProjectileSpawnPending = true;
+                    }
+                    else
+                    {
+                        PhaseTicksLeft = Move.ExecuteTicks;
+                    }
                 }
                 return;
 
@@ -380,7 +410,7 @@ public sealed class SimPlayer
                 if (--PhaseTicksLeft <= 0)
                 {
                     State = PlayerState.CoolDown;
-                    PhaseTicksLeft = Move.CoolDownTicks;
+                    PhaseTicksLeft = _projectileMoves[CurrentMoveIndex]?.CoolDownTicks ?? Move.CoolDownTicks;
                 }
                 return;
 
@@ -745,7 +775,9 @@ public sealed class SimPlayer
         CurrentMoveIndex = moveIndex;
         MoveUses[moveIndex]++;
         State = PlayerState.WarmUp;
-        PhaseTicksLeft = Move.WarmUpTicks;
+        // Projectile moves ride the same WarmUp/Attack/CoolDown FSM (they ARE
+        // attacks per spec); only the timing source differs.
+        PhaseTicksLeft = _projectileMoves[moveIndex]?.WarmUpTicks ?? Move.WarmUpTicks;
     }
 
     /// <summary>

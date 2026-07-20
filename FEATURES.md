@@ -151,3 +151,74 @@ The fast fall mechanic allows a player to increase the rate of their descent by 
 - Agent
 	- Agents should be imperfect - they might still be holding a direction they were holding before they were attempting to influence, but they may also directionally influence perfectly.
 	- Agents should try and influence towards the farthest line to die to minimize risk of death.
+
+
+# Projectiles
+Projectiles are a new type of attack - they should have similar properties to melee attacks (warm-up, execute, cool-down) but instead of generating a sprite next to them, they should generate a moving object that will follow some trajectory. This is the most complicated feature yet, and will likely carry the most parameters along side it.
+
+- Global
+	- Projectiles start from a point on the character and travel in a direction.
+	- They have many of the same properties as attacks - warm-up, execute, cool-down. 
+	- This is a new state. 
+	- We are not using sprites for the projectile for now - we will use generic shapes as placeholders.
+	- We will have multiple types of path shapes.
+	- Projectiles despawn after they go off-screen past the boundary of the level.
+	- Transparency should be incorporated during damage decay only. If a projectile does not decay in damage, it should stay solid and visible.
+	- Projectiles need to be differentiated from shields.
+	- Execution state is independent from how long the projectile is on screen (e.g. multiple projectiles may be on screen at the same time)
+	- Projectiles should never damage the user on fire, but they might.
+	- Projectiles should be assigned as an attack type and be considered one.
+- Parameters
+	- Path Shape
+		- Sinusoidal, Linear, Exponential/Quadratic
+		- Determines the path of the projectile as it moves.
+	- Path Shape Scalar
+		- Determines characteristics of non-linear paths
+		- E.G. frequency for waves, scalars for exponents/quadratics.
+	- Time to Decay
+		- Determines how long a projectile will stay on screen before it disappears.
+	- Velocity
+		- How quickly a projectile travels. The starting speed of the projectile.
+	- Does accelerate
+		- Determines if a projectile has acceleration (bool)
+	- Acceleration
+		- How much a projectile speeds up/slows down while it travels.
+		- Only relevant if accelerate is true.
+	- Affected by Gravity
+		- Determines if the projectile is impacted by gravity or not.
+	- Warm-Up
+		- How much time it takes to start shooting a projectile
+	- Execute
+		- How long the execution step of the projectile takes
+	- Cool-Down
+		- How much time it takes to recover before other actions are possible.
+	- Hitbox Size
+		- How big the hitbox of the projectile is
+		- Never should be larger than the shooting character.
+	- Hitbox Shape
+		- Basic shape of the projectile
+		- Square, Circle, Triangle
+	- Hitbox Rotation
+		- Determines if the projectile is rotating or not as it travels (bool)
+	- Hitbox Rotation rate
+		- Determines how quickly the rotation is for the projectile.
+	- Knockback Magnitude
+		- How much knockback a player will take when being hit by the projectile.
+	- Knockback Direction
+		- The direction of knockback on collision with a projectile
+		- Knockback calculation should match the same behaviors as a melee attack, except it's applied to the disjointed hitbox of the projectile.
+	- Damage Decay
+		- Determines if the projectile damage/knockback is decreased as the projectile travels (bool)
+	- Rate of Damage Decay
+		- The speed at which damage/knockback is decreased (if damage decay is on)
+	- Damage
+		- The damage the projectile deals.
+	- Hits Self
+		- Determines if the projectile hits the originating player if they run into it after using it
+	- Launch location
+		- The point around the player that the projectile originates from. It should be overlapping with some element of the player (such that you are not starting a projectile from a disjoint position)
+- Agent
+	- Agents should attempt to shoot projectiles when at a distance, predicting a loose range of hits based on projectile shape
+	- Agents should avoid using projectiles at close range
+	- Agents should attempt to dodge incoming projectiles
+	- Zoning should be possible but not overly selected for

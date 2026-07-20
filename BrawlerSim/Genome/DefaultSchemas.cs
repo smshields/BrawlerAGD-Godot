@@ -54,6 +54,36 @@ public static class DashParams
     public const string DurationInvulnerable = "durationInvulnerable";
 }
 
+/// <summary>Stable param keys for the projectile schema (2026-07-14,
+/// FEATURES.md §Projectiles; docs/features/projectiles.md).</summary>
+public static class ProjectileParams
+{
+    public const string PathShape = "pathShape";
+    public const string PathScalar = "pathScalar";
+    public const string TimeToDecay = "timeToDecay";
+    public const string Velocity = "velocity";
+    public const string DoesAccelerate = "doesAccelerate";
+    public const string Acceleration = "acceleration";
+    public const string AffectedByGravity = "affectedByGravity";
+    public const string WarmUpDuration = "warmUpDuration";
+    public const string ExecutionDuration = "executionDuration";
+    public const string CoolDownDuration = "coolDownDuration";
+    public const string HitboxSize = "hitboxSize";
+    public const string HitboxShape = "hitboxShape";
+    public const string DoesRotate = "doesRotate";
+    public const string RotationRate = "rotationRate";
+    public const string KnockbackScalar = "knockbackScalar";
+    public const string KnockbackModX = "knockbackModX";
+    public const string KnockbackModY = "knockbackModY";
+    public const string DamageFactor = "damageFactor";
+    public const string DamageDecay = "damageDecay";
+    public const string DecayRate = "decayRate";
+    public const string HitstunDuration = "hitstunDuration";
+    public const string HitsSelf = "hitsSelf";
+    public const string LaunchX = "launchX";
+    public const string LaunchY = "launchY";
+}
+
 /// <summary>Stable param keys for the move schema.</summary>
 public static class MoveParams
 {
@@ -162,5 +192,47 @@ public static class DefaultSchemas
         new ParamSpec(DashParams.Duration, 0.1f, 0.4f),
         new ParamSpec(DashParams.WarmUpInvulnerable, 0f, 1f),
         new ParamSpec(DashParams.DurationInvulnerable, 0f, 1f),
+    });
+
+    /// <summary>
+    /// Projectile move type (2026-07-14, FEATURES.md §Projectiles;
+    /// docs/features/projectiles.md — designer sketch is authoritative for path
+    /// shapes). Bools ride as floats (active ≥ 0.5); the two SHAPE selectors are
+    /// ints-as-floats (floor of the value, generated in [0, 3)). Knockback and
+    /// damage genes mirror the melee move's semantics and ranges ("knockback
+    /// calculation should match a melee attack"); FSM timings mirror the melee
+    /// ranges. HitboxSize is a full extent in world units, capped below
+    /// PlayerBaseWidth (0.74) per "never larger than the shooting character".
+    /// Launch offsets are half-body fractions, clamped at resolve time so the
+    /// spawn overlaps the player (the sketch's EXIT point).
+    /// </summary>
+    public static readonly ParamSchema Projectile = new("projectile", new[]
+    {
+        new ParamSpec(ProjectileParams.PathShape, 0f, 3f),      // floor → 0 linear, 1 sine, 2 quadratic
+        new ParamSpec(ProjectileParams.PathScalar, 0.5f, 6f),   // sine freq (Hz) / quadratic curvature
+        new ParamSpec(ProjectileParams.TimeToDecay, 0.5f, 4f),  // TTL seconds
+        new ParamSpec(ProjectileParams.Velocity, 3f, 15f),
+        new ParamSpec(ProjectileParams.DoesAccelerate, 0f, 1f),
+        new ParamSpec(ProjectileParams.Acceleration, -10f, 10f),
+        new ParamSpec(ProjectileParams.AffectedByGravity, 0f, 1f),
+        new ParamSpec(ProjectileParams.WarmUpDuration, 0.1f, 0.6f),
+        new ParamSpec(ProjectileParams.ExecutionDuration, 0.1f, 0.4f),
+        new ParamSpec(ProjectileParams.CoolDownDuration, 0.1f, 0.6f),
+        new ParamSpec(ProjectileParams.HitboxSize, 0.2f, 0.7f),
+        new ParamSpec(ProjectileParams.HitboxShape, 0f, 3f),    // floor → 0 square, 1 circle, 2 triangle
+        new ParamSpec(ProjectileParams.DoesRotate, 0f, 1f),
+        new ParamSpec(ProjectileParams.RotationRate, 0.5f, 8f), // rad/s
+        new ParamSpec(ProjectileParams.KnockbackScalar, 1f, 16f),
+        // No ConstrainKnockback for projectiles (that lerp is hitbox-location-relative,
+        // a melee concept) — so no widened valid domain either; genes stay as generated.
+        new ParamSpec(ProjectileParams.KnockbackModX, 0f, 1f),
+        new ParamSpec(ProjectileParams.KnockbackModY, -1f, 1f),
+        new ParamSpec(ProjectileParams.DamageFactor, 0f, 10f),
+        new ParamSpec(ProjectileParams.DamageDecay, 0f, 1f),
+        new ParamSpec(ProjectileParams.DecayRate, 0.1f, 1f),    // damage-scale units per second
+        new ParamSpec(ProjectileParams.HitstunDuration, 0f, 1f),
+        new ParamSpec(ProjectileParams.HitsSelf, 0f, 1f),
+        new ParamSpec(ProjectileParams.LaunchX, -0.5f, 0.5f),   // × body half extents
+        new ParamSpec(ProjectileParams.LaunchY, -0.5f, 0.5f),
     });
 }

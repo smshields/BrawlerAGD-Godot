@@ -214,7 +214,9 @@ internal static class Commands
                 $"dash(n/dodge) {result.Players[0].DashCount}-{result.Players[0].DashInvulnDodges}/" +
                 $"{result.Players[1].DashCount}-{result.Players[1].DashInvulnDodges}  " +
                 $"ff/crouch/di {result.Players[0].FastFallTicks}-{result.Players[0].CrouchTicks}-{result.Players[0].DIInfluencedHits}/" +
-                $"{result.Players[1].FastFallTicks}-{result.Players[1].CrouchTicks}-{result.Players[1].DIInfluencedHits}");
+                $"{result.Players[1].FastFallTicks}-{result.Players[1].CrouchTicks}-{result.Players[1].DIInfluencedHits}  " +
+                $"proj(fired/hit) {result.Players[0].ProjectilesFired}-{result.Players[0].ProjectileHits}/" +
+                $"{result.Players[1].ProjectilesFired}-{result.Players[1].ProjectileHits}");
             if (breakdown && fitness is ComposedFitness composed)
             {
                 Console.WriteLine("           " + string.Join("  ",

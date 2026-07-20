@@ -63,6 +63,46 @@ public static class TestGames
         return ParamSet.FromDictionary(DefaultSchemas.Move, values);
     }
 
+    /// <summary>Projectile params (2026-07-14): a plain rightward bolt — linear path,
+    /// 8 u/s, no acceleration/gravity/rotation/decay, circle Ø0.5, melee-matching
+    /// timings (12/6/12 ticks) and damage (5 + 0.5·5 = 7.5), knockback straight up
+    /// like the default melee move, launch at the leading edge (0.3, 0).</summary>
+    public static ParamSet Projectile(params (string Key, float Value)[] overrides)
+    {
+        var values = new Dictionary<string, float>
+        {
+            [ProjectileParams.PathShape] = 0f,       // linear
+            [ProjectileParams.PathScalar] = 1f,
+            [ProjectileParams.TimeToDecay] = 2f,     // 120 ticks
+            [ProjectileParams.Velocity] = 8f,
+            [ProjectileParams.DoesAccelerate] = 0f,
+            [ProjectileParams.Acceleration] = 0f,
+            [ProjectileParams.AffectedByGravity] = 0f,
+            [ProjectileParams.WarmUpDuration] = 0.2f,
+            [ProjectileParams.ExecutionDuration] = 0.1f,
+            [ProjectileParams.CoolDownDuration] = 0.2f,
+            [ProjectileParams.HitboxSize] = 0.5f,
+            [ProjectileParams.HitboxShape] = 1f,     // circle
+            [ProjectileParams.DoesRotate] = 0f,
+            [ProjectileParams.RotationRate] = 1f,
+            [ProjectileParams.KnockbackScalar] = 8f,
+            [ProjectileParams.KnockbackModX] = 0f,
+            [ProjectileParams.KnockbackModY] = 1f,
+            [ProjectileParams.DamageFactor] = 5f,
+            [ProjectileParams.DamageDecay] = 0f,
+            [ProjectileParams.DecayRate] = 0.5f,
+            [ProjectileParams.HitstunDuration] = 0.5f,
+            [ProjectileParams.HitsSelf] = 0f,
+            [ProjectileParams.LaunchX] = 0.3f,
+            [ProjectileParams.LaunchY] = 0f,
+        };
+        foreach ((string key, float value) in overrides)
+        {
+            values[key] = value;
+        }
+        return ParamSet.FromDictionary(DefaultSchemas.Projectile, values);
+    }
+
     /// <summary>
     /// Two identical characters over one wide floor platform (top at y = −2, spanning
     /// x ∈ [−8, 8]). Spawns land at x = 0 (both) so tests generally reposition players.

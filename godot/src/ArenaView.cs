@@ -23,6 +23,7 @@ public partial class ArenaView : Node2D
     private InputTrace _trace = null!;
     private readonly InputFrame[] _inputs = new InputFrame[2];
     private PlayerView[] _views = null!;
+    private ProjectileLayer _projectiles = null!;
     private HudView _hud = null!;
     private bool _paused;
     private bool _traceSaved;
@@ -60,6 +61,10 @@ public partial class ArenaView : Node2D
             view.Sync();
             _views[i] = view;
         }
+
+        _projectiles = new ProjectileLayer();
+        AddChild(_projectiles);
+        _projectiles.Setup(_world, Ppu);
 
         _hud = new HudView();
         AddChild(_hud);
@@ -119,6 +124,7 @@ public partial class ArenaView : Node2D
         {
             view.Sync();
         }
+        _projectiles.Sync();
         _hud.Sync(_paused);
     }
 

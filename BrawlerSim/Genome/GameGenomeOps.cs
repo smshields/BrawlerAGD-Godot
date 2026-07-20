@@ -75,7 +75,7 @@ public static class GameGenomeOps
             if (i < composition.Count && composition[i] == SlotSpec.Random
                 && rng.NextFloat() < config.TypeRerollRate)
             {
-                moves.Add(MoveGenome.GenerateOfType((MoveType)rng.NextInt(3), config, rng));
+                moves.Add(MoveGenome.GenerateOfType((MoveType)rng.NextInt(4), config, rng));
                 continue;
             }
             moves.Add(new MoveGenome(GenomeOps.Mutate(m.Params, rng), rng.NextInt(config.MoveSpriteCount), m.Type));

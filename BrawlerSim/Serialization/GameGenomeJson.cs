@@ -18,10 +18,11 @@ namespace BrawlerSim.Serialization;
 ///   3 — 2026-07-12 shields: moves gained "type" ("attack" | "shield"); shield moves'
 ///       params use the shield schema. v1/v2 moves load as attacks.
 ///   4 — 2026-07-13 dashes: "dash" joins the type values (dash params schema).
+///   5 — 2026-07-14 projectiles: "projectile" joins the type values (projectile schema).
 /// </summary>
 public static class GameGenomeJson
 {
-    public const int CurrentFormatVersion = 4;
+    public const int CurrentFormatVersion = 5; // 2026-07-14 projectiles: "projectile" joins the move type values
     private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = new()
@@ -51,6 +52,7 @@ public static class GameGenomeJson
                     {
                         MoveType.Shield => "shield",
                         MoveType.Dash => "dash",
+                        MoveType.Projectile => "projectile",
                         _ => "attack",
                     },
                     SpriteIndex = m.SpriteIndex,
@@ -97,6 +99,9 @@ public static class GameGenomeJson
                 "dash" => new MoveGenome(
                     ParamSet.FromDictionary(config.DashSchema, Require(m.Params, "dash params")),
                     m.SpriteIndex, MoveType.Dash),
+                "projectile" => new MoveGenome(
+                    ParamSet.FromDictionary(config.ProjectileSchema, Require(m.Params, "projectile params")),
+                    m.SpriteIndex, MoveType.Projectile),
                 _ => new MoveGenome(
                     ParamSet.FromDictionary(config.MoveSchema, Require(m.Params, "move params")),
                     m.SpriteIndex),

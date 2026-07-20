@@ -21,5 +21,6 @@ Reports in `docs/reports/` reference these by their old `runs/<name>` paths.
 | `stun-*-50x` | v2 — stun-cap experiments (0.75/1.5/3.0/inf) |
 | `jump-0xx-60x` | v2 — jump-reward fitness term sweep |
 | `shield-701/702`, `shieldrw-701/702` | v3 — shield feature smoke + shield-reward fitness |
+| `comp-rand-1001/1002` | v4, RANDOM composition from the 3-TYPE pool era (moved 2026-07-14 when projectiles joined the pool: the same seeds now draw over four types, so these populations are not regenerable under current code; their run.json remains self-describing) |
 | `gamea–f.json` | v1 — Unity-imported reference games |
 | `shield-demo.json`, `shield-scripted.json` (+trace), `twomove-demo.json` | v2–v3 hand-built feature demo games |

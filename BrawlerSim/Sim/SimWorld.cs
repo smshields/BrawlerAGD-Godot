@@ -23,6 +23,11 @@ public sealed class SimWorld
     private readonly SimPlayer[] _players;
     private readonly Aabb _blastZone;
 
+    /// <summary>Live projectiles in spawn order — the first non-player entities in
+    /// the sim (2026-07-14). List order is part of the determinism contract.</summary>
+    public IReadOnlyList<SimProjectile> Projectiles => _projectiles;
+    private readonly List<SimProjectile> _projectiles = new();
+
     public SimWorld(GameGenome genome, MatchConfig? config = null)
     {
         Config = config ?? MatchConfig.Default;
@@ -71,6 +76,13 @@ public sealed class SimWorld
             PushWithShield(shielder: _players[i], opponent: _players[1 - i]);
         }
 
+        // 3.5. Projectiles (2026-07-14): step lives (closed-form reposition, then the
+        //      despawn checks — TTL, decayed-to-nothing, past the blast boundary,
+        //      platform contact [platforms DESTROY projectiles, designer]), consume
+        //      pending spawns, then projectile-vs-player hits. Fixed list order,
+        //      victims in player order — all part of the tick-order contract.
+        StepProjectiles();
+
         // 4. Hit detection, fixed attacker order.
         for (int i = 0; i < _players.Length; i++)
         {
@@ -107,6 +119,147 @@ public sealed class SimWorld
         {
             IsOver = true; // timeout draw, LoserIndex stays -1
         }
+    }
+
+    private void StepProjectiles()
+    {
+        for (int i = 0; i < _projectiles.Count; i++)
+        {
+            SimProjectile proj = _projectiles[i];
+            proj.AgeTicks++;
+            proj.Position = proj.Move.PositionAt(proj.Origin, proj.Facing, proj.AgeTicks, Config);
+            proj.Angle = proj.Move.RotationRate * proj.AgeTicks * Config.Dt;
+            proj.DamageScale = proj.Move.DamageScaleAt(proj.AgeTicks, Config);
+            if (proj.AgeTicks >= proj.Move.TtlTicks
+                || proj.DamageScale <= 0f
+                || !InsideBlastZone(proj.Position)
+                || CenterInsidePlatform(proj.Position))
+            {
+                proj.Alive = false;
+            }
+        }
+        _projectiles.RemoveAll(p => !p.Alive);
+
+        foreach (SimPlayer player in _players)
+        {
+            if (!player.ProjectileSpawnPending)
+            {
+                continue;
+            }
+            player.ProjectileSpawnPending = false;
+            SimProjectileMove move = player.ProjectileMoves[player.CurrentMoveIndex]!;
+            // The sketch's EXIT point: launch fractions × body half extents, the X
+            // side mirrored by facing. Age 0 at the origin this tick; motion begins
+            // next tick.
+            Vec2 origin = player.Position + new Vec2(
+                move.LaunchFraction.X * player.BodyHalf.X * player.Facing,
+                move.LaunchFraction.Y * player.BodyHalf.Y);
+            _projectiles.Add(new SimProjectile(move, player.Index, player.CurrentMoveIndex, origin, player.Facing));
+            player.ProjectilesFired++;
+        }
+
+        foreach (SimProjectile proj in _projectiles)
+        {
+            TryProjectileHit(proj);
+        }
+        _projectiles.RemoveAll(p => !p.Alive);
+    }
+
+    /// <summary>
+    /// Projectile hit resolution mirrors TryHit's pipeline stage for stage:
+    /// invincibility skip → dash i-frames negate-and-count (the projectile PASSES
+    /// THROUGH — evasion beats the bullet) → shield full-coverage block (degrades
+    /// the shield, consumes the projectile) → clean hit (melee knockback formula ×
+    /// the decay scale, DI, capped stun). A projectile is spent by any hit or block.
+    /// The owner is immune until the projectile first clears their body, then only
+    /// the hitsSelf gene exposes them.
+    /// </summary>
+    private void TryProjectileHit(SimProjectile proj)
+    {
+        for (int v = 0; v < _players.Length && proj.Alive; v++)
+        {
+            SimPlayer victim = _players[v];
+            bool overlaps = proj.OverlapsBody(victim.Body);
+            if (v == proj.Owner)
+            {
+                if (!proj.ClearedOwner)
+                {
+                    if (!overlaps)
+                    {
+                        proj.ClearedOwner = true;
+                    }
+                    continue; // still leaving the barrel — never a self-hit yet
+                }
+                if (!proj.Move.HitsSelf)
+                {
+                    continue;
+                }
+            }
+            if (!overlaps || victim.InvincibleTicksLeft > 0)
+            {
+                continue;
+            }
+            if (victim.DashInvulnerable)
+            {
+                victim.DashInvulnDodges++;
+                continue;
+            }
+
+            float scaledDamage = proj.Move.DamageGiven * proj.DamageScale;
+            SimShield? shield = victim.ActiveShield;
+            if (shield is not null && victim.ShieldRadius > 0f
+                && OverlapFullyInsideShield(proj.Bounds, victim.Body,
+                    victim.Position + victim.ShieldOffset, victim.ShieldRadius))
+            {
+                float blockedDamageAfter = victim.Damage + scaledDamage;
+                Vec2 blockedKnockback = ComputeKnockback(
+                    victim.Position, proj.Position, proj.Move.KnockbackDirection,
+                    proj.Facing, proj.Move.KnockbackScalar * proj.DamageScale, blockedDamageAfter);
+                victim.Velocity += blockedKnockback * (1f - shield.KnockbackReduction);
+                victim.BlockedHits++;
+                victim.InvincibleTicksLeft = Config.InvincibilityTicks;
+                victim.ShieldHealths[victim.CurrentMoveIndex] -= scaledDamage * shield.HitDegradationScalar;
+                if (victim.ShieldHealths[victim.CurrentMoveIndex] <= victim.ShieldBreakRadius)
+                {
+                    victim.BreakShield();
+                }
+                proj.Alive = false;
+                return;
+            }
+
+            float damageAfterHit = victim.Damage + scaledDamage;
+            Vec2 knockback = ComputeKnockback(
+                victim.Position, proj.Position, proj.Move.KnockbackDirection,
+                proj.Facing, proj.Move.KnockbackScalar * proj.DamageScale, damageAfterHit);
+            knockback = ApplyDirectionalInfluence(victim, knockback);
+            int stunTicks = Config.ToTicks(
+                proj.Move.HitstunDuration * damageAfterHit * victim.HitstunDamageScalar);
+            if (!float.IsPositiveInfinity(Config.MaxStunSeconds))
+            {
+                stunTicks = Math.Min(stunTicks, Config.ToTicks(Config.MaxStunSeconds));
+            }
+            victim.ApplyHit(scaledDamage, knockback, stunTicks);
+            victim.InvincibleTicksLeft = Config.InvincibilityTicks;
+            _players[proj.Owner].ProjectileHits++;
+            proj.Alive = false;
+        }
+    }
+
+    private bool InsideBlastZone(Vec2 p) =>
+        p.X >= _blastZone.Left && p.X <= _blastZone.Right
+        && p.Y >= _blastZone.Bottom && p.Y <= _blastZone.Top;
+
+    private bool CenterInsidePlatform(Vec2 p)
+    {
+        foreach (Aabb platform in Platforms)
+        {
+            if (p.X >= platform.Left && p.X <= platform.Right
+                && p.Y >= platform.Bottom && p.Y <= platform.Top)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void PushWithShield(SimPlayer shielder, SimPlayer opponent)
@@ -323,6 +476,25 @@ public sealed class SimWorld
                 hash = Fnv1a.Add(hash, health);
             }
         }
+        // 2026-07-14 projectiles: the section is appended ONLY when projectiles are
+        // live — projectile-less matches (every pre-v5 game) hash exactly as before,
+        // which is what keeps the golden pins valid without re-pinning. Safe because
+        // gated sections are suffixes: "no section" and "count 0" cannot collide.
+        if (_projectiles.Count > 0)
+        {
+            hash = Fnv1a.Add(hash, _projectiles.Count);
+            foreach (SimProjectile proj in _projectiles)
+            {
+                hash = Fnv1a.Add(hash, proj.Owner);
+                hash = Fnv1a.Add(hash, proj.MoveIndex);
+                hash = Fnv1a.Add(hash, proj.AgeTicks);
+                hash = Fnv1a.Add(hash, proj.Position.X);
+                hash = Fnv1a.Add(hash, proj.Position.Y);
+                hash = Fnv1a.Add(hash, proj.Angle);
+                hash = Fnv1a.Add(hash, proj.DamageScale);
+                hash = Fnv1a.Add(hash, proj.ClearedOwner ? 1 : 0);
+            }
+        }
         return hash;
     }
 
@@ -334,7 +506,8 @@ public sealed class SimWorld
                 p.MoveUses.ToArray(), p.StunTicks, p.Jumps,
                 p.ShieldActivations, p.BlockedHits, p.ShieldBreaks, p.ShieldTicks,
                 p.DashCount, p.DashInvulnDodges,
-                p.FastFallTicks, p.CrouchTicks, p.DIInfluencedHits)).ToArray(),
+                p.FastFallTicks, p.CrouchTicks, p.DIInfluencedHits,
+                p.ProjectilesFired, p.ProjectileHits)).ToArray(),
             LoserIndex,
             TickCount,
             TickCount / (float)Config.TicksPerSecond,

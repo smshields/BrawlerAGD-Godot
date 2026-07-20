@@ -40,6 +40,12 @@ public sealed record MatchConfig
     /// <summary>Post-hit invincibility (Unity: 0.1 s coroutine).</summary>
     public int InvincibilityTicks { get; init; } = 6;
 
+    /// <summary>Projectile path constants (2026-07-14, docs/features/projectiles.md).
+    /// One scalar gene per spec ("frequency for waves, scalars for quadratics"), so
+    /// the sine amplitude and the quadratic unit scale are fixed here.</summary>
+    public float ProjectileSineAmplitude { get; init; } = 0.8f;
+    public float ProjectileQuadraticScale { get; init; } = 0.05f;
+
     /// <summary>
     /// Upper bound on a single hit's stun (2026-07-10, docs/features/second-move.md):
     /// stun scales with victim damage, so uncapped it grows into multi-second locks
