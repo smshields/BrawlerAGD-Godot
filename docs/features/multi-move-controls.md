@@ -102,3 +102,23 @@ Disabled state shows a "CONNECT A CONTROLLER" hint.
 - Visual evidence: runs/media/shots/menu-new-controls.png (gated 2P button + new
   hints), tick screenshots of an AI match (WarmUp tint via the new button path),
   runs/media/gamec_seed11_new-controls.mp4.
+
+## Amendment 2026-07-20: five assignable buttons (designer-directed)
+
+Jump shrank to a SINGLE button (pad B; Space unchanged), freeing pad Y:
+`InputFrame.ActionCount` is now 5. Layout: I/J/K/U/L keys ↔ L1/X/A/Y/R1 pad —
+U/Y is the NEW slot at index 3 so L/R1 stays the LAST button (the dash pin's
+physical home, unchanged). Compatibility contract, hash-verified end to end on a
+real evolved champion + trace (identical final hash under the pre- and
+post-change builds):
+
+- game.json → v6; 4-entry buttonMoves migrate as [b0, b1, b2, b0, b3] — the new
+  slot duplicates button 0's move (no legacy trace ever presses it), and the old
+  button 3 (R1/L) keeps its move at the new last index.
+- Traces: 8 values/player; 7-value rows (4-button era) upgrade with a0..a2 in
+  place and old a3 → NEW BIT 4, mirroring the buttonMoves migration; 3-value
+  rows (v1) unchanged.
+- Composed checkpoints recording 4-slot compositions refuse to resume with an
+  explicit error (archived; their artifacts stay loadable/replayable).
+- Population fingerprint re-pinned (the pinned mapping gene now draws over four
+  mappable buttons); the DT and utility match goldens did not move.

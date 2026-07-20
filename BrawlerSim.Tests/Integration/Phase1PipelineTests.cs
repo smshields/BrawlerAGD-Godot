@@ -70,13 +70,13 @@ public class Phase1PipelineTests
     [Fact]
     public void PopulationFingerprintMatchesGoldenValue()
     {
-        // Re-pinned 2026-07-14: SERIALIZATION BYTES ONLY — game.json formatVersion
-        // 4→5 (projectiles) changes the hashed JSON prefix; the pinned generation
-        // RNG streams are untouched (the match goldens did NOT move, which proves
-        // the genomes are bit-identical). Prior pins: 5768454974650524447
-        // (fast fall/crouch/DI), 16079587979934170348 (dash slot),
-        // 10607725140721060960 (shield), 5432710911100783110 (two moves),
-        // 13551893661434631362, 9300943650238635838.
-        Assert.Equal(6139255332495310431UL, RunPipeline(20260707));
+        // Re-pinned 2026-07-20: FIVE BUTTONS (designer: single jump button freed pad
+        // Y) — a REAL generation change: the pinned mapping gene now draws over four
+        // mappable buttons (was three) plus formatVersion 6 bytes. Prior pins:
+        // 6139255332495310431 (v5 bytes only), 5768454974650524447 (fast fall/
+        // crouch/DI), 16079587979934170348 (dash slot), 10607725140721060960
+        // (shield), 5432710911100783110 (two moves), 13551893661434631362,
+        // 9300943650238635838.
+        Assert.Equal(11998549590211428551UL, RunPipeline(20260707));
     }
 }

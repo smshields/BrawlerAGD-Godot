@@ -205,7 +205,7 @@ public class FastFallCrouchDiTests
         var moves = new[] { new MoveGenome(TestGames.Move(
             (MoveParams.MoveAngle, 0.6f), (MoveParams.MoveDist, 1.2f)), 0) };
         CharacterGenome Make(string name, (string, float)[] o) =>
-            new(name, 3, 0, TestGames.Character(o), moves, new[] { 0, 0, 0, 0 });
+            new(name, 3, 0, TestGames.Character(o), moves, new[] { 0, 0, 0, 0, 0 });
         var genome = new GameGenome(new[]
         {
             Make("Ducker", new[] { (CharacterParams.CrouchHeightRatio, 0.4f) }),
@@ -294,7 +294,7 @@ public class FastFallCrouchDiTests
             TestGames.Character(
                 (CharacterParams.DirectionalInfluence, 0.10f),
                 (CharacterParams.DiKnockbackReduction, 0.20f)),
-            moves, new[] { 0, 0, 1, 1 });
+            moves, new[] { 0, 0, 1, 1, 0 });
         var genome = new GameGenome(new[] { Make("P1"), Make("P2") },
             new StageGenome(new[] { new PlatformGene(-8, -3, 16, 1) }));
 
@@ -341,7 +341,7 @@ public class FastFallCrouchDiTests
             (MoveParams.MoveAngle, 1.0f), (MoveParams.MoveDist, 1.8f)), 0) };
         CharacterGenome Make(string name) => new(name, 3, 0,
             TestGames.Character((CharacterParams.CrouchHeightRatio, 0.4f)),
-            moves, new[] { 0, 0, 0, 0 });
+            moves, new[] { 0, 0, 0, 0, 0 });
         var genome = new GameGenome(new[] { Make("P1"), Make("P2") },
             new StageGenome(new[] { new PlatformGene(-8, -3, 16, 1) }));
 

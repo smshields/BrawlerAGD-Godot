@@ -49,7 +49,7 @@ public class MultiMoveControlsTests
     [Fact]
     public void ButtonsDispatchTheirMappedMoves()
     {
-        SimWorld world = GroundedWorld(TwoMoveArena(new[] { 0, 1, 0, 1 }), out SimPlayer player);
+        SimWorld world = GroundedWorld(TwoMoveArena(new[] { 0, 1, 0, 1, 0 }), out SimPlayer player);
 
         TickWith(world, new InputFrame(0f, 0f, false, InputFrame.ActionBit(1)));
         Assert.Equal(PlayerState.WarmUp, player.State);
@@ -60,7 +60,7 @@ public class MultiMoveControlsTests
     [Fact]
     public void SimultaneousButtonsResolveToTheLowestIndex()
     {
-        SimWorld world = GroundedWorld(TwoMoveArena(new[] { 0, 1, 0, 1 }), out SimPlayer player);
+        SimWorld world = GroundedWorld(TwoMoveArena(new[] { 0, 1, 0, 1, 0 }), out SimPlayer player);
 
         var both = new InputFrame(0f, 0f, false,
             (byte)(InputFrame.ActionBit(2) | InputFrame.ActionBit(3)));
@@ -72,7 +72,7 @@ public class MultiMoveControlsTests
     [Fact]
     public void ButtonForMoveReturnsTheLowestMappedButton()
     {
-        GroundedWorld(TwoMoveArena(new[] { 1, 0, 1, 0 }), out SimPlayer player);
+        GroundedWorld(TwoMoveArena(new[] { 1, 0, 1, 0, 1 }), out SimPlayer player);
         Assert.Equal(1, player.ButtonForMove(0)); // buttons 1 and 3 map to move 0
         Assert.Equal(0, player.ButtonForMove(1)); // buttons 0 and 2 map to move 1
         Assert.Equal(-1, player.ButtonForMove(9));
@@ -87,7 +87,7 @@ public class MultiMoveControlsTests
             new CharacterGenome("X", 3, 0, TestGames.Character(), moves, new[] { 0, 0 }));
         // Index outside the move list (single move → only 0 is legal).
         Assert.Throws<ArgumentException>(() =>
-            new CharacterGenome("X", 3, 0, TestGames.Character(), moves, new[] { 0, 0, 0, 1 }));
+            new CharacterGenome("X", 3, 0, TestGames.Character(), moves, new[] { 0, 0, 0, 0, 1 }));
         Assert.Throws<ArgumentException>(() =>
             new CharacterGenome("X", 3, 0, TestGames.Character(), moves, new[] { -1, 0, 0, 0 }));
     }
@@ -216,12 +216,12 @@ public class MultiMoveControlsTests
     public void EnsureButtonCoverageRepairsWithoutUnmappingAnything()
     {
         // Pigeonhole repair: fixing one unmapped move must never orphan another.
-        Assert.Equal(new[] { 1, 0, 0, 0 }, CharacterGenome.EnsureButtonCoverage(new[] { 0, 0, 0, 0 }, 2));
-        Assert.Equal(new[] { 0, 1, 1, 1 }, CharacterGenome.EnsureButtonCoverage(new[] { 1, 1, 1, 1 }, 2));
+        Assert.Equal(new[] { 1, 0, 0, 0, 0 }, CharacterGenome.EnsureButtonCoverage(new[] { 0, 0, 0, 0, 0 }, 2));
+        Assert.Equal(new[] { 0, 1, 1, 1, 1 }, CharacterGenome.EnsureButtonCoverage(new[] { 1, 1, 1, 1, 1 }, 2));
         // 3 moves, move 0 only at a button that move 2's repair must NOT steal.
-        Assert.Equal(new[] { 2, 1, 0, 1 }, CharacterGenome.EnsureButtonCoverage(new[] { 1, 1, 0, 1 }, 3));
+        Assert.Equal(new[] { 2, 1, 0, 1, 1 }, CharacterGenome.EnsureButtonCoverage(new[] { 1, 1, 0, 1, 1 }, 3));
         // Already covering → untouched.
-        Assert.Equal(new[] { 1, 0, 1, 0 }, CharacterGenome.EnsureButtonCoverage(new[] { 1, 0, 1, 0 }, 2));
+        Assert.Equal(new[] { 1, 0, 1, 0, 1 }, CharacterGenome.EnsureButtonCoverage(new[] { 1, 0, 1, 0, 1 }, 2));
     }
 
     private static MatchResult RunAiMatch(GameGenome genome, ulong seed, bool recordTrace = false)

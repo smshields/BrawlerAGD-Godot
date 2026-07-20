@@ -42,12 +42,12 @@ public class DashTests
             new MoveGenome(DashSet(warmInv, durInv), 0, MoveType.Dash),
         };
         CharacterGenome Make(string name) =>
-            new(name, 3, 0, TestGames.Character(), moves, new[] { 0, 0, 0, 1 });
+            new(name, 3, 0, TestGames.Character(), moves, new[] { 0, 0, 0, 0, 1 });
         var stage = new StageGenome(new[] { new PlatformGene(-8, -3, 16, 1) });
         return new GameGenome(new[] { Make("P1"), Make("P2") }, stage);
     }
 
-    private static readonly InputFrame PressDash = new(0f, 0f, false, InputFrame.ActionBit(3));
+    private static readonly InputFrame PressDash = new(0f, 0f, false, InputFrame.ActionBit(4));
 
     /// <summary>Travel 0.35 s (21 ticks) so the whole opposing execute window falls
     /// inside the dash for the i-frame test.</summary>
@@ -59,7 +59,7 @@ public class DashTests
             new MoveGenome(DashSet(0f, durInv, (DashParams.Duration, 0.35f)), 0, MoveType.Dash),
         };
         CharacterGenome Make(string name) =>
-            new(name, 3, 0, TestGames.Character(), moves, new[] { 0, 0, 0, 1 });
+            new(name, 3, 0, TestGames.Character(), moves, new[] { 0, 0, 0, 0, 1 });
         var stage = new StageGenome(new[] { new PlatformGene(-8, -3, 16, 1) });
         return new GameGenome(new[] { Make("P1"), Make("P2") }, stage);
     }
@@ -95,7 +95,7 @@ public class DashTests
         Assert.Equal(1, p.DashCount);
 
         // Hold RIGHT through warm-up end: direction captured at travel start.
-        Tick(world, 6, new InputFrame(1f, 0f, false, InputFrame.ActionBit(3)));
+        Tick(world, 6, new InputFrame(1f, 0f, false, InputFrame.ActionBit(4)));
         Assert.Equal(DashStage.Travel, p.DashPhase);
         float startX = p.Position.X;
         // Mid-travel: inputs (including reverse) are ignored; speed stays locked.
@@ -126,7 +126,7 @@ public class DashTests
         SimWorld world = Grounded(DashArena(), -6f, 6f);
         SimPlayer p = world.Players[0];
         Tick(world, 1, PressDash);
-        Tick(world, 6, new InputFrame(0f, 1f, false, InputFrame.ActionBit(3))); // hold UP
+        Tick(world, 6, new InputFrame(0f, 1f, false, InputFrame.ActionBit(4))); // hold UP
         Assert.Equal(DashStage.Travel, p.DashPhase);
         float y0 = p.Position.Y;
         Tick(world, 6, InputFrame.Neutral);
@@ -157,7 +157,7 @@ public class DashTests
         }
         Assert.False(p.AirDashUsed); // grounding reset
         Tick(world, 1, PressDash);
-        Tick(world, 6, new InputFrame(0f, 1f, false, InputFrame.ActionBit(3)));
+        Tick(world, 6, new InputFrame(0f, 1f, false, InputFrame.ActionBit(4)));
         Tick(world, 13, InputFrame.Neutral); // travel out, now airborne
         Assert.False(p.IsGrounded);
         Tick(world, 1, new InputFrame(0f, 0f, true, 0)); // air jump 1 (ground jump unused → this is the air jump)
@@ -180,7 +180,7 @@ public class DashTests
         frame[1] = new InputFrame(0f, 0f, false, InputFrame.ActionBit(0));
         world.Tick(frame); // P1 warm-up starts (12 ticks), P0 dash warm-up (6)
         frame[1] = InputFrame.Neutral;
-        frame[0] = new InputFrame(1f, 0f, false, InputFrame.ActionBit(3));
+        frame[0] = new InputFrame(1f, 0f, false, InputFrame.ActionBit(4));
         for (int t = 0; t < 24; t++)
         {
             world.Tick(frame);
@@ -201,7 +201,7 @@ public class DashTests
         frame[1] = new InputFrame(0f, 0f, false, InputFrame.ActionBit(0));
         world.Tick(frame);
         frame[1] = InputFrame.Neutral;
-        frame[0] = new InputFrame(1f, 0f, false, InputFrame.ActionBit(3));
+        frame[0] = new InputFrame(1f, 0f, false, InputFrame.ActionBit(4));
         for (int t = 0; t < 24; t++)
         {
             world.Tick(frame);
@@ -217,7 +217,7 @@ public class DashTests
         SimWorld world = Grounded(DashArena(), -2.5f, -0.5f); // opponent in the path
         SimPlayer opponent = world.Players[1];
         Tick(world, 1, PressDash);
-        Tick(world, 6, new InputFrame(1f, 0f, false, InputFrame.ActionBit(3)));
+        Tick(world, 6, new InputFrame(1f, 0f, false, InputFrame.ActionBit(4)));
         float maxSpeedWhileDashing = 0f;
         for (int t = 0; t < 14; t++)
         {
@@ -260,7 +260,7 @@ public class DashTests
                 Assert.Equal(last, c.ButtonMoves[InputFrame.ActionCount - 1]); // the pin
                 for (int m = 0; m < last; m++)
                 {
-                    Assert.Contains(m, c.ButtonMoves.Take(3)); // others covered on 0–2
+                    Assert.Contains(m, c.ButtonMoves.Take(InputFrame.ActionCount - 1)); // others covered on the non-pin buttons
                 }
             }
         }
@@ -297,7 +297,7 @@ public class DashTests
 
         var agent = new UtilityAgent(new Pcg32(1), new AgentConfig { Randomness = 0f, DecisionIntervalTicks = 1 });
         InputFrame input = agent.GetInput(world, 0);
-        Assert.True(input.ActionPressed(3), "agent did not dash to recover");
+        Assert.True(input.ActionPressed(4), "agent did not dash to recover");
         Assert.Equal(1f, input.Vertical);   // UP — the whole point
         Assert.Equal(1f, input.Horizontal); // toward the platform on the right
     }
@@ -317,7 +317,7 @@ public class DashTests
 
         var agent = new UtilityAgent(new Pcg32(1), new AgentConfig { Randomness = 0f, DecisionIntervalTicks = 1 });
         InputFrame input = agent.GetInput(world, 0);
-        Assert.False(input.ActionPressed(3), "agent wasted the dash while already above the platform");
+        Assert.False(input.ActionPressed(4), "agent wasted the dash while already above the platform");
         Assert.Equal(1f, input.Horizontal); // normal recovery drift continues
     }
 
@@ -335,7 +335,7 @@ public class DashTests
 
         var agent = new UtilityAgent(new Pcg32(1), new AgentConfig { Randomness = 0f, DecisionIntervalTicks = 1 });
         InputFrame input = agent.GetInput(world, 0);
-        if (input.ActionPressed(3))
+        if (input.ActionPressed(4))
         {
             Assert.True(input.Vertical >= 0f, "recovery dash aimed DOWNWARD");
         }

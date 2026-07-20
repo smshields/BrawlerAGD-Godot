@@ -159,3 +159,17 @@ Everything in the plan landed; deltas and findings:
   hazard of platform destruction, not a bug.
 - Dead-json sweep: comp-rand-1001/1002 moved to archive/ (3-type-pool era,
   non-regenerable now that Random draws over four types).
+
+## Amendment 2026-07-20: wind-up telegraph (designer follow-up)
+
+Play-test review surfaced ZERO shield activations against a projectile champion
+(shield-vs-zoner franken match, instrumented: 26 threat ticks over 172 bolt-live
+ticks, and the defender was never grounded-Idle inside the 0.5 s dodge horizon —
+zoners also never triggered the melee telegraph, so there was no early signal at
+all). Designer ruling: warm-up phases signal defensive counterplay ACROSS THE
+BOARD. A winding-up projectile now telegraphs exactly like a melee wind-up — the
+"arc" is the shot's predicted corridor at the defender's column (the shooter's own
+aim test, reversed), crouch-clear reads the corridor bottom, and the melee
+trade-commit gate applies (interrupting the shooter cancels the shot). The same
+franken match now shows real raises/blocks/breaks. DEVIATIONS #24; pinned by
+AgentShieldsDuringAProjectileWindUp.

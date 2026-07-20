@@ -149,6 +149,13 @@ public static class RunStore
         GenerationConfig generation = GenerationConfig.Default;
         if (manifest.Composition is { } composition)
         {
+            if (composition.Count != Sim.InputFrame.ActionCount)
+            {
+                throw new NotSupportedException(
+                    $"run.json records a {composition.Count}-button composition — this checkpoint " +
+                    $"predates the {Sim.InputFrame.ActionCount}-button control scheme (2026-07-20) " +
+                    "and cannot resume; its game.json files remain loadable for Play/Watch.");
+            }
             generation = generation with
             {
                 ButtonComposition = composition.Select(s => Enum.Parse<SlotSpec>(s, ignoreCase: true)).ToArray(),

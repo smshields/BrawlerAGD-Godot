@@ -516,6 +516,29 @@ public sealed class UtilityAgent : IInputSource
                 crouchClearsThreat = arc.Bottom > crouchedTop + 0.05f;
             }
         }
+        // A winding-up PROJECTILE telegraphs exactly like melee (2026-07-20, designer:
+        // warm-up phases signal defensive counterplay across the board). The "arc" is
+        // the shot's predicted corridor at our column — the same loose test the shooter
+        // aimed with, seen from the receiving end. This is what makes shields viable
+        // against zoners: the defender now has warm-up + flight time, not just the
+        // last half-second of flight. Trade-commit still applies (interrupting the
+        // shooter during warm-up cancels the shot, exactly like a melee trade).
+        else if (opponent.State == PlayerState.WarmUp
+            && opponent.ProjectileMoves[opponent.CurrentMoveIndex] is SimProjectileMove windingShot)
+        {
+            telegraphThreat = ProjectileCorridorHit(windingShot, opponent, self, world.Config);
+            if (telegraphThreat && self.IsGrounded && self.State == PlayerState.Idle)
+            {
+                // Duck only if the corridor's center (at our column, launch height +
+                // path drop) passes above the crouched silhouette by the bolt's half
+                // extent — same geometry rule as the melee arc bottom.
+                float corridorBottom = ProjectileCorridorCenterY(
+                    windingShot, opponent, self, world.Config) - windingShot.HalfExtent;
+                float feetY = self.Position.Y - self.BodyHalf.Y;
+                float crouchedTop = feetY + 2f * self.BodyHalf.Y * self.CrouchHeightRatio;
+                crouchClearsThreat = corridorBottom > crouchedTop + 0.05f;
+            }
+        }
 
         // Incoming projectiles (2026-07-14): sample each dangerous projectile's
         // closed-form path over the lookahead; a predicted overlap with our body
@@ -635,9 +658,9 @@ public sealed class UtilityAgent : IInputSource
     /// coarse — precision comes from the sim, misses are the humanizing noise.
     /// </summary>
     private static bool ProjectileCorridorHit(
-        SimProjectileMove ranged, SimPlayer self, SimPlayer opponent, MatchConfig config)
+        SimProjectileMove ranged, SimPlayer shooter, SimPlayer target, MatchConfig config)
     {
-        float dx = MathF.Abs(opponent.Position.X - self.Position.X);
+        float dx = MathF.Abs(target.Position.X - shooter.Position.X);
         if (dx < MinProjectileRange)
         {
             return false;
@@ -656,10 +679,21 @@ public sealed class UtilityAgent : IInputSource
         {
             return false;
         }
-        // Where does the path sit vertically when it reaches the opponent's column?
-        float t = dx / MathF.Max(ranged.LaunchSpeed, 0.5f); // loose: ignores acceleration
-        float launchY = self.Position.Y + ranged.LaunchFraction.Y * self.BodyHalf.Y;
-        float centerY = launchY;
+        float centerY = ProjectileCorridorCenterY(ranged, shooter, target, config);
+        float tolerance = ProjectileCorridorSlack + target.BodyHalf.Y
+            + (ranged.Path == ProjectilePath.Sine ? ranged.SineAmplitude : 0f);
+        return MathF.Abs(target.Position.Y - centerY) <= tolerance;
+    }
+
+    /// <summary>Where the shot's path sits vertically when it reaches the target's
+    /// column (loose: time from launch speed alone). Shared by the shooter's aim test
+    /// and the defender's wind-up telegraph (2026-07-20).</summary>
+    private static float ProjectileCorridorCenterY(
+        SimProjectileMove ranged, SimPlayer shooter, SimPlayer target, MatchConfig config)
+    {
+        float dx = MathF.Abs(target.Position.X - shooter.Position.X);
+        float t = dx / MathF.Max(ranged.LaunchSpeed, 0.5f);
+        float centerY = shooter.Position.Y + ranged.LaunchFraction.Y * shooter.BodyHalf.Y;
         if (ranged.Path == ProjectilePath.Quadratic)
         {
             centerY -= ranged.PathScalar * ranged.QuadraticScale * dx * dx;
@@ -668,9 +702,7 @@ public sealed class UtilityAgent : IInputSource
         {
             centerY -= 0.5f * config.Gravity * t * t;
         }
-        float tolerance = ProjectileCorridorSlack + opponent.BodyHalf.Y
-            + (ranged.Path == ProjectilePath.Sine ? ranged.SineAmplitude : 0f);
-        return MathF.Abs(opponent.Position.Y - centerY) <= tolerance;
+        return centerY;
     }
 
     /// <summary>

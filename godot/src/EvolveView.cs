@@ -243,7 +243,8 @@ public partial class EvolveView : Control
 
         _perButtonRow = new HBoxContainer { Visible = false };
         _perButtonRow.AddThemeConstantOverride("separation", 4);
-        string[] buttonNames = { "I", "J", "K", "L" };
+        // 2026-07-20 five buttons: U (pad Y) is the new slot 3; L (R1) stays LAST.
+        string[] buttonNames = { "I", "J", "K", "U", "L" };
         for (int b = 0; b < _buttonSlots.Length; b++)
         {
             var slot = new OptionButton { SizeFlagsHorizontal = SizeFlags.ExpandFill };
@@ -253,7 +254,8 @@ public partial class EvolveView : Control
             slot.AddItem("DASH", 2);
             slot.AddItem("PROJECTILE", 3); // 2026-07-14
             slot.AddItem("RANDOM", 4);
-            slot.Selected = b switch { 2 => 1, 3 => 2, _ => 0 }; // seed from the pinned layout
+            // Seed from the pinned layout (attack/attack/shield/attack/dash).
+            slot.Selected = b switch { 2 => 1, 4 => 2, _ => 0 };
             _buttonSlots[b] = slot;
             var cell = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
             var name = new Label { Text = buttonNames[b], HorizontalAlignment = HorizontalAlignment.Center };

@@ -14,8 +14,12 @@ namespace BrawlerSim.Sim;
 /// </summary>
 public readonly record struct InputFrame(float Horizontal, float Vertical, bool Jump, byte Actions)
 {
-    /// <summary>Number of assignable action buttons in the control scheme.</summary>
-    public const int ActionCount = 4;
+    /// <summary>Number of assignable action buttons in the control scheme.
+    /// 2026-07-20 (designer): jump reduced to a SINGLE button (pad B; Space), freeing
+    /// pad Y as a fifth assignable slot — button 3 = U key / pad Y (the new slot),
+    /// button 4 = L key / R1 (the old button 3, so the dash's "last button" pin stays
+    /// on the right shoulder). Legacy traces and buttonMoves migrate old 3 → new 4.</summary>
+    public const int ActionCount = 5;
 
     public static readonly InputFrame Neutral = new(0f, 0f, false, 0);
 

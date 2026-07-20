@@ -19,10 +19,14 @@ namespace BrawlerSim.Serialization;
 ///       params use the shield schema. v1/v2 moves load as attacks.
 ///   4 — 2026-07-13 dashes: "dash" joins the type values (dash params schema).
 ///   5 — 2026-07-14 projectiles: "projectile" joins the type values (projectile schema).
+///   6 — 2026-07-20 five buttons: buttonMoves grew 4 → 5 (single jump button freed
+///       pad Y). ≤5 files migrate: old[0..2] stay, NEW index 3 duplicates button 0's
+///       move (the new physical button, never pressed by old traces), old[3] → 4 (the
+///       R1/L dash-pin button keeps its move at the new last index).
 /// </summary>
 public static class GameGenomeJson
 {
-    public const int CurrentFormatVersion = 5; // 2026-07-14 projectiles: "projectile" joins the move type values
+    public const int CurrentFormatVersion = 6; // 2026-07-20 five buttons (see header)
     private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = new()
@@ -69,6 +73,19 @@ public static class GameGenomeJson
         return JsonSerializer.Serialize(doc, Options);
     }
 
+    /// <summary>Four-button-era (v2–v5) buttonMoves → five slots: new index 3 (pad Y,
+    /// previously a jump button — no legacy trace ever presses it) duplicates button
+    /// 0's move; old index 3 (R1/L) keeps its move at the new LAST index, preserving
+    /// the dash pin's physical home. Mirrored by InputTraceJson's 7-value upgrade.</summary>
+    private static List<int>? MigrateButtonMoves(List<int>? buttonMoves)
+    {
+        if (buttonMoves is null || buttonMoves.Count != 4)
+        {
+            return buttonMoves;
+        }
+        return new List<int> { buttonMoves[0], buttonMoves[1], buttonMoves[2], buttonMoves[0], buttonMoves[3] };
+    }
+
     public static GameRecord Deserialize(string json, GenerationConfig? config = null)
     {
         config ??= GenerationConfig.Default;
@@ -106,7 +123,7 @@ public static class GameGenomeJson
                     ParamSet.FromDictionary(config.MoveSchema, Require(m.Params, "move params")),
                     m.SpriteIndex),
             }),
-            c.ButtonMoves)); // null (v1 files) → all-zeros default in the ctor
+            MigrateButtonMoves(c.ButtonMoves))); // null (v1 files) → all-zeros default in the ctor
 
         var stage = new StageGenome(doc.Stage.Platforms.Select(p => new PlatformGene(p.X, p.Y, p.XSize, p.YSize)));
         return new GameRecord(doc.Name ?? "Unnamed", doc.Origin, new GameGenome(characters, stage));

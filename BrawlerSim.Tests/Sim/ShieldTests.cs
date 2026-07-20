@@ -51,7 +51,7 @@ public class ShieldTests
             new MoveGenome(ShieldSet(shieldOverrides), 0, MoveType.Shield),
         };
         CharacterGenome Make(string name) =>
-            new(name, 3, 0, TestGames.Character(), moves, new[] { 0, 0, 1, 1 });
+            new(name, 3, 0, TestGames.Character(), moves, new[] { 0, 0, 1, 1, 0 });
         var stage = new StageGenome(new[] { new PlatformGene(-8, -3, 16, 1) });
         return new GameGenome(new[] { Make("P1"), Make("P2") }, stage);
     }

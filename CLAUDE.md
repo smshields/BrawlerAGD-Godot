@@ -138,8 +138,10 @@ Conversion phases 0–5 complete: schema/genome layer, deterministic sim core, e
 engine + CLI, full Godot app (Play/Watch/Evolve/Manage), export pipeline, replication
 study validating dynamics against the paper (plateau criterion + both design motifs
 reproduced). Designer has play-confirmed core combat + solid-contact physics.
-Phase 6 feature 1 (multi-move control scheme: 4 assignable action buttons, button→move
-genome gene, WASD + Space + IJKL, 2P requires a controller — see
+Phase 6 feature 1 (multi-move control scheme: assignable action buttons, button→move
+genome gene, WASD + Space + I/J/K/U/L — FIVE buttons since 2026-07-20 (pad: L1/X/A/Y/R1,
+B = the single jump; game.json v6, trace rows 8-wide, old artifacts migrate + replay
+bit-identically), 2P requires a controller — see
 docs/features/multi-move-controls.md) and feature 2 (**UtilityAgent is now the fitness
 instrument**, replacing the decision tree as default everywhere; DEVIATIONS.md #18,
 docs/features/utility-agent.md, comparison report in docs/reports/) are implemented
@@ -167,3 +169,6 @@ rendering, agent corridor-fire/zoning/dodge (defense fires regardless of
 counter-hit vs bolts), SlotSpec.Projectile in the RANDOM pool, game.json v5,
 fitness-blind stats — docs/features/projectiles.md, DEVIATIONS #23. Match goldens
 unmoved (hash section gated on live bolts); fingerprint re-pinned (bytes only).
+2026-07-20 follow-ups (designer): projectile WIND-UPS telegraph exactly like
+melee (closes the zero-shields-vs-zoners gap — DEVIATIONS #24) and the FIVE-button
+control scheme (single jump button; DEVIATIONS #25 — see feature 1 above).

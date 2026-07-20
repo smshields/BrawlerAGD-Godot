@@ -22,5 +22,6 @@ Reports in `docs/reports/` reference these by their old `runs/<name>` paths.
 | `jump-0xx-60x` | v2 — jump-reward fitness term sweep |
 | `shield-701/702`, `shieldrw-701/702` | v3 — shield feature smoke + shield-reward fitness |
 | `comp-rand-1001/1002` | v4, RANDOM composition from the 3-TYPE pool era (moved 2026-07-14 when projectiles joined the pool: the same seeds now draw over four types, so these populations are not regenerable under current code; their run.json remains self-describing) |
+| `proj-1101/1102`, `projrand-1103` | v5, the projectile-feature smokes from the FOUR-BUTTON era (moved 2026-07-20 when the fifth assignable button landed: composed checkpoints with 4-slot compositions cannot resume under the 5-button scheme — RunStore refuses them explicitly; their game.json + traces still load and replay bit-identically via the button/trace migration) |
 | `gamea–f.json` | v1 — Unity-imported reference games |
 | `shield-demo.json`, `shield-scripted.json` (+trace), `twomove-demo.json` | v2–v3 hand-built feature demo games |

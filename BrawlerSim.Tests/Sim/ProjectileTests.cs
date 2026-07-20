@@ -23,7 +23,7 @@ public class ProjectileTests
     {
         CharacterGenome Make(string name) => new(name, 3, 0, TestGames.Character(),
             new[] { new MoveGenome(TestGames.Projectile(overrides), 0, MoveType.Projectile) },
-            new[] { 0, 0, 0, 0 });
+            new[] { 0, 0, 0, 0, 0 });
         var stage = new StageGenome(new[] { new PlatformGene(-8, -3, 16, 1) });
         return new GameGenome(new[] { Make("P1"), Make("P2") }, stage);
     }
@@ -315,10 +315,10 @@ public class ProjectileTests
         });
         var shooter = new CharacterGenome("Shooter", 3, 0, TestGames.Character(),
             new[] { new MoveGenome(TestGames.Projectile(), 0, MoveType.Projectile) },
-            new[] { 0, 0, 0, 0 });
+            new[] { 0, 0, 0, 0, 0 });
         var blocker = new CharacterGenome("Blocker", 3, 0, TestGames.Character(),
             new[] { new MoveGenome(shieldParams, 0, MoveType.Shield) },
-            new[] { 0, 0, 0, 0 });
+            new[] { 0, 0, 0, 0, 0 });
         var genome = new GameGenome(new[] { shooter, blocker },
             new StageGenome(new[] { new PlatformGene(-8, -3, 16, 1) }));
 
@@ -343,7 +343,7 @@ public class ProjectileTests
     {
         var shooter = new CharacterGenome("Shooter", 3, 0, TestGames.Character(),
             new[] { new MoveGenome(TestGames.Projectile((ProjectileParams.Velocity, 6f)), 0, MoveType.Projectile) },
-            new[] { 0, 0, 0, 0 });
+            new[] { 0, 0, 0, 0, 0 });
         var dashParams = ParamSet.FromDictionary(DefaultSchemas.Dash, new Dictionary<string, float>
         {
             ["windUpDuration"] = 0.05f, ["acceleration"] = 6f, ["duration"] = 0.4f,
@@ -351,7 +351,7 @@ public class ProjectileTests
         });
         var dodger = new CharacterGenome("Dodger", 3, 0, TestGames.Character(),
             new[] { new MoveGenome(dashParams, 0, MoveType.Dash) },
-            new[] { 0, 0, 0, 0 });
+            new[] { 0, 0, 0, 0, 0 });
         var genome = new GameGenome(new[] { shooter, dodger },
             new StageGenome(new[] { new PlatformGene(-8, -3, 16, 1) }));
 
@@ -424,7 +424,7 @@ public class ProjectileTests
         var config = GenerationConfig.Default with
         {
             ButtonComposition = new[]
-                { SlotSpec.Attack, SlotSpec.Projectile, SlotSpec.Shield, SlotSpec.Dash },
+                { SlotSpec.Attack, SlotSpec.Projectile, SlotSpec.Shield, SlotSpec.Attack, SlotSpec.Dash },
         };
         GameGenome genome = GameGenome.Generate(config, new Pcg32(99));
         foreach (CharacterGenome c in genome.Characters)
@@ -498,6 +498,52 @@ public class ProjectileTests
             }
         }
         Assert.True(defended >= 8, $"agent ignores incoming projectiles ({defended}/25)");
+    }
+
+    [Fact]
+    public void AgentShieldsDuringAProjectileWindUp()
+    {
+        // 2026-07-20 designer: warm-ups telegraph across the board. A shield-bearing
+        // defender watching a shooter WIND UP (no bolt exists yet) must sometimes
+        // raise the shield — the failure mode this pins: zoners never triggered the
+        // melee telegraph, so shields were never selected against them (0 activations
+        // in the shield-vs-zoner franken match).
+        var shooter = new CharacterGenome("Shooter", 3, 0, TestGames.Character(),
+            new[] { new MoveGenome(TestGames.Projectile(
+                (ProjectileParams.WarmUpDuration, 0.6f)), 0, MoveType.Projectile) },
+            new[] { 0, 0, 0, 0, 0 });
+        var shieldParams = ParamSet.FromDictionary(DefaultSchemas.Shield, new Dictionary<string, float>
+        {
+            ["windUpDuration"] = 0.1f, ["coolDownDuration"] = 0.1f, ["initialSize"] = 1.6f,
+            ["holdDegradationRate"] = 0.05f, ["hitDegradationScalar"] = 0.02f,
+            ["knockbackReduction"] = 0.8f, ["spacingPush"] = 0.5f, ["regenRate"] = 0.3f,
+            ["breakStunDuration"] = 1f,
+        });
+        var defender = new CharacterGenome("Defender", 3, 0, TestGames.Character(),
+            new[] { new MoveGenome(shieldParams, 0, MoveType.Shield) },
+            new[] { 0, 0, 0, 0, 0 });
+        var genome = new GameGenome(new[] { shooter, defender },
+            new StageGenome(new[] { new PlatformGene(-8, -3, 16, 1) }));
+
+        int shielded = 0;
+        for (ulong seed = 0; seed < 25; seed++)
+        {
+            SimWorld world = Grounded(genome, -5f, 0f);
+            // Shooter starts its 36-tick wind-up; NO projectile exists yet.
+            world.Tick(stackalloc[] { new InputFrame(0f, 0f, false, InputFrame.ActionBit(0)), InputFrame.Neutral });
+            for (int t = 0; t < 6; t++)
+            {
+                world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
+            }
+            Assert.Equal(PlayerState.WarmUp, world.Players[0].State);
+            Assert.Empty(world.Projectiles);
+            var agent = new UtilityAgent(new Pcg32(seed), new AgentConfig { Randomness = 0.3f, DecisionIntervalTicks = 1 });
+            if (agent.GetInput(world, 1).ActionPressed(0)) // button 0 = the shield slot
+            {
+                shielded++;
+            }
+        }
+        Assert.True(shielded >= 8, $"defender never pre-shields a wind-up ({shielded}/25)");
     }
 
     [Fact]

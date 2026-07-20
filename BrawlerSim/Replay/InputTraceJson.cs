@@ -14,10 +14,16 @@ namespace BrawlerSim.Replay;
 /// attack maps to action button 0 (which triggers move 0 on every pre-feature genome)
 /// and vertical to 0, so old traces replay with identical behavior. Old traces are
 /// research artifacts; this reader must keep accepting them.
+///
+/// 2026-07-20 five buttons: 7 → 8 values per player. Legacy-7 rows upgrade with
+/// a0..a2 in place and OLD BUTTON 3 → NEW BUTTON 4, mirroring the buttonMoves
+/// migration (old last button = R1/L keeps its move at the new last index), so
+/// v≤5 game + trace pairs replay bit-identically.
 /// </summary>
 public static class InputTraceJson
 {
-    private const int ValuesPerPlayer = 7;
+    private const int ValuesPerPlayer = 8;
+    private const int FourButtonValuesPerPlayer = 7;
     private const int LegacyValuesPerPlayer = 3;
 
     public static string Serialize(InputTrace trace)
@@ -76,6 +82,25 @@ public static class InputTraceJson
             }
             return new InputFrame(row[o], row[o + 1], row[o + 2] != 0f, actions);
         }
+        if (row.Length == players * FourButtonValuesPerPlayer)
+        {
+            // 2026-07-08..07-20 era: four buttons. Old button 3 was R1/L, whose move
+            // migrated to index 4 — route the press with it.
+            int o = player * FourButtonValuesPerPlayer;
+            byte actions = 0;
+            for (int b = 0; b < 3; b++)
+            {
+                if (row[o + 3 + b] != 0f)
+                {
+                    actions |= InputFrame.ActionBit(b);
+                }
+            }
+            if (row[o + 6] != 0f)
+            {
+                actions |= InputFrame.ActionBit(4);
+            }
+            return new InputFrame(row[o], row[o + 1], row[o + 2] != 0f, actions);
+        }
         if (row.Length == players * LegacyValuesPerPlayer)
         {
             int o = player * LegacyValuesPerPlayer;
@@ -85,7 +110,8 @@ public static class InputTraceJson
         }
         throw new JsonException(
             $"trace row has {row.Length} values for {players} players — expected " +
-            $"{players * ValuesPerPlayer} (current) or {players * LegacyValuesPerPlayer} (legacy).");
+            $"{players * ValuesPerPlayer} (current), {players * FourButtonValuesPerPlayer} (4-button era), " +
+            $"or {players * LegacyValuesPerPlayer} (legacy).");
     }
 
     public static void Save(InputTrace trace, string path) => File.WriteAllText(path, Serialize(trace));

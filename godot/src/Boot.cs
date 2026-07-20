@@ -86,7 +86,9 @@ public partial class Boot : Node
     private static void RegisterActions()
     {
         // P1 keyboard: WASD movement (W/S = the captured-but-inert vertical axis),
-        // SPACE jump, I/J/K/L = assignable action buttons 0..3.
+        // SPACE jump, I/J/K/U/L = assignable action buttons 0..4 (2026-07-20: jump
+        // shrank to one pad button, freeing a fifth slot; U is the new key at
+        // index 3 so the L key stays the LAST button — the dash pin's home).
         AddKey("p1_left", Key.A);
         AddKey("p1_right", Key.D);
         AddKey("p1_up", Key.W);
@@ -95,7 +97,8 @@ public partial class Boot : Node
         AddKey("p1_action0", Key.I);
         AddKey("p1_action1", Key.J);
         AddKey("p1_action2", Key.K);
-        AddKey("p1_action3", Key.L);
+        AddKey("p1_action3", Key.U);
+        AddKey("p1_action4", Key.L);
 
         // Pads: P2 gets the FIRST pad (2P requires a controller; the keyboard is P1's);
         // P1 can use a second pad. Same layout on both.
@@ -106,9 +109,11 @@ public partial class Boot : Node
     }
 
     /// <summary>
-    /// Designer-specified pad layout: face diamond Y (top) / B (right) = jump; X (left
-    /// face) and A (bottom face) = action buttons 1 (J) and 2 (K); the shoulders carry
-    /// the remaining two — L1 = action 0 (I), R1 = action 3 (L). Stick + dpad move.
+    /// Designer-specified pad layout (2026-07-20 revision: ONE jump button): B (right
+    /// face) = jump; X (left face) and A (bottom face) = action buttons 1 (J) and
+    /// 2 (K); Y (top face) = the NEW action button 3 (U); the shoulders carry
+    /// L1 = action 0 (I) and R1 = action 4 (L — the last button, the dash pin's
+    /// home). Stick + dpad move.
     /// </summary>
     private static void RegisterPadLayout(int playerNumber, int device)
     {
@@ -117,11 +122,12 @@ public partial class Boot : Node
         AddPadAxis(p + "right", device, JoyAxis.LeftX, 1f); AddPadButton(p + "right", device, JoyButton.DpadRight);
         AddPadAxis(p + "up", device, JoyAxis.LeftY, -1f); AddPadButton(p + "up", device, JoyButton.DpadUp);
         AddPadAxis(p + "down", device, JoyAxis.LeftY, 1f); AddPadButton(p + "down", device, JoyButton.DpadDown);
-        AddPadButton(p + "jump", device, JoyButton.Y); AddPadButton(p + "jump", device, JoyButton.B);
+        AddPadButton(p + "jump", device, JoyButton.B);
         AddPadButton(p + "action0", device, JoyButton.LeftShoulder);
         AddPadButton(p + "action1", device, JoyButton.X);
         AddPadButton(p + "action2", device, JoyButton.A);
-        AddPadButton(p + "action3", device, JoyButton.RightShoulder);
+        AddPadButton(p + "action3", device, JoyButton.Y);
+        AddPadButton(p + "action4", device, JoyButton.RightShoulder);
     }
 
     private void HandleAutoplay()

@@ -19,22 +19,23 @@ public class CompositionAndRangesTests
     private static GenerationConfig Composed(params SlotSpec[] slots) =>
         GenerationConfig.Default with { ButtonComposition = slots };
 
-    private static readonly SlotSpec[] AllRandom =
-        { SlotSpec.Random, SlotSpec.Random, SlotSpec.Random, SlotSpec.Random };
+    private static readonly SlotSpec[] AllRandom = // 5 buttons since 2026-07-20
+        { SlotSpec.Random, SlotSpec.Random, SlotSpec.Random, SlotSpec.Random, SlotSpec.Random };
 
     // ── Composed generation ────────────────────────────────────────────────────
 
     [Fact]
     public void ComposedGenerationHonorsFixedSpecsWithIdentityButtons()
     {
-        var config = Composed(SlotSpec.Attack, SlotSpec.Shield, SlotSpec.Dash, SlotSpec.Attack);
+        var config = Composed(
+            SlotSpec.Attack, SlotSpec.Shield, SlotSpec.Dash, SlotSpec.Projectile, SlotSpec.Attack);
         GameGenome genome = GameGenome.Generate(config, new Pcg32(11));
         foreach (CharacterGenome c in genome.Characters)
         {
             Assert.Equal(
-                new[] { MoveType.Attack, MoveType.Shield, MoveType.Dash, MoveType.Attack },
+                new[] { MoveType.Attack, MoveType.Shield, MoveType.Dash, MoveType.Projectile, MoveType.Attack },
                 c.Moves.Select(m => m.Type).ToArray());
-            Assert.Equal(new[] { 0, 1, 2, 3 }, c.ButtonMoves);
+            Assert.Equal(new[] { 0, 1, 2, 3, 4 }, c.ButtonMoves);
         }
         Assert.Empty(genome.Validate());
     }
@@ -100,7 +101,7 @@ public class CompositionAndRangesTests
             Assert.Equal(source.Params.ToArray(), slot.Params.ToArray());
             foreach (CharacterGenome c in child.Characters)
             {
-                Assert.Equal(new[] { 0, 1, 2, 3 }, c.ButtonMoves);
+                Assert.Equal(new[] { 0, 1, 2, 3, 4 }, c.ButtonMoves);
             }
             return;
         }
@@ -112,7 +113,8 @@ public class CompositionAndRangesTests
     {
         // Slot 0 fixed Attack, slots 1–3 Random, reroll rate 1: every mutation must
         // regenerate slots 1–3 (types drawn fresh) and never change slot 0's type.
-        var always = Composed(SlotSpec.Attack, SlotSpec.Random, SlotSpec.Random, SlotSpec.Random)
+        var always = Composed(
+                SlotSpec.Attack, SlotSpec.Random, SlotSpec.Random, SlotSpec.Random, SlotSpec.Random)
             with { TypeRerollRate = 1f };
         GameGenome genome = GameGenome.Generate(always, new Pcg32(3));
         var rng = new Pcg32(4);
@@ -124,7 +126,7 @@ public class CompositionAndRangesTests
             foreach (CharacterGenome c in genome.Characters)
             {
                 Assert.Equal(MoveType.Attack, c.Moves[0].Type);
-                Assert.Equal(new[] { 0, 1, 2, 3 }, c.ButtonMoves);
+                Assert.Equal(new[] { 0, 1, 2, 3, 4 }, c.ButtonMoves);
                 rerolledTypes.Add(c.Moves[1].Type);
             }
         }
@@ -148,7 +150,7 @@ public class CompositionAndRangesTests
     [InlineData(SlotSpec.Dash)]
     public void SingleTypeCompositionsRunMatchesDeterministically(SlotSpec spec)
     {
-        var config = Composed(spec, spec, spec, spec);
+        var config = Composed(spec, spec, spec, spec, spec);
         GameGenome genome = GameGenome.Generate(config, new Pcg32(21));
         MatchResult a = Run(genome, 55);
         MatchResult b = Run(genome, 55);
@@ -232,7 +234,7 @@ public class CompositionAndRangesTests
                 Generation = (GenerationConfig.Default with
                 {
                     ButtonComposition = new[]
-                        { SlotSpec.Attack, SlotSpec.Random, SlotSpec.Shield, SlotSpec.Random },
+                        { SlotSpec.Attack, SlotSpec.Random, SlotSpec.Shield, SlotSpec.Random, SlotSpec.Random },
                     TypeRerollRate = 0.35f,
                 }).WithRangeOverrides(new[]
                 {

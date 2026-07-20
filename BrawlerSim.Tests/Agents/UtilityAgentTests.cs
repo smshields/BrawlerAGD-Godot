@@ -63,7 +63,7 @@ public class UtilityAgentTests
             new MoveGenome(TestGames.Move(), 0),                                      // straight ahead
         };
         CharacterGenome Make(string name) =>
-            new(name, 3, 0, TestGames.Character(), moves, new[] { 0, 1, 0, 1 });
+            new(name, 3, 0, TestGames.Character(), moves, new[] { 0, 1, 0, 1, 0 });
         var genome = new GameGenome(
             new[] { Make("P1"), Make("P2") },
             new StageGenome(new[] { new PlatformGene(-8, -3, 16, 1) }));
@@ -85,7 +85,7 @@ public class UtilityAgentTests
             new MoveGenome(TestGames.Move((MoveParams.DamageFactor, 9f)), 0),
         };
         CharacterGenome Make(string name) =>
-            new(name, 3, 0, TestGames.Character(), moves, new[] { 0, 1, 0, 1 });
+            new(name, 3, 0, TestGames.Character(), moves, new[] { 0, 1, 0, 1, 0 });
         var genome = new GameGenome(
             new[] { Make("P1"), Make("P2") },
             new StageGenome(new[] { new PlatformGene(-8, -3, 16, 1) }));
