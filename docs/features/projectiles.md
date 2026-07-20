@@ -172,4 +172,9 @@ BOARD. A winding-up projectile now telegraphs exactly like a melee wind-up — t
 aim test, reversed), crouch-clear reads the corridor bottom, and the melee
 trade-commit gate applies (interrupting the shooter cancels the shot). The same
 franken match now shows real raises/blocks/breaks. DEVIATIONS #24; pinned by
-AgentShieldsDuringAProjectileWindUp.
+AgentShieldsDuringAProjectileWindUp. Evolution result (tele5-1201/1202 smokes,
+random pool): shield adoption jumped from 1% of final-population slots to
+49%/39%, with shield+projectile champions on both sides of a match — the
+telegraph made shields answer ranged threats, and ranged threats made shields
+worth a slot. Fitness plateau dropped ~76 → ~63 (defense works — the
+stricter-instrument pattern).

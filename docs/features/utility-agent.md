@@ -152,3 +152,42 @@ These weights are v1 calibration targets — the comparison study is the feedbac
 - Comparison study delivered: docs/reports/2026-07-09-utility-agent-comparison.md
   (+ battery CSV, runs/compare-*, clips in runs/media/).
 - DEVIATIONS.md #18. DT archival deferred until designer confirmation.
+
+## Instrument change log, consolidated 2026-07-20 (entries 2026-07-12 → 2026-07-20)
+
+Full design detail lives in the per-feature docs; this list keeps the
+instrument's history in one place (CLAUDE.md points here).
+
+- **2026-07-12 shield behaviors** (shield.md): raise on telegraph scaled by shield
+  health, windowed+noisy hold/release ("someone would not execute every time" —
+  designer), directional aim toward the opponent, break-stun punish preferring the
+  most powerful move, dodge-vs-shield health-weighted coin. DEVIATIONS #19.
+- **2026-07-13 unified defense channel** (dash.md): the pairwise coin became ONE
+  weighted-random Select over {nothing, hop, shield, dash}; all defensive
+  stochasticity now flows from the randomness knob. Dash recovery/approach/punish
+  behaviors; recovery reachability gains dash range. DEVIATIONS #20.
+- **2026-07-13 recovery landing aim + vulnerable disengage** (dash.md amendment):
+  recovery dashes target a landing point ABOVE the platform (never the underside or
+  lip, never downward); ctx.Vulnerable = CoolDown OR AirJumpsExhausted gates all
+  chase behaviors off regardless of a dash in hand (designer playtest reports).
+- **2026-07-13 vertical channel + 6-option defense** (fastfall-crouch-di.md):
+  Vertical {down, neutral, up} became a real selected channel; defense grew fast-fall
+  (favored while vulnerable, per spec) and crouch-under (only when the arc clears the
+  crouched silhouette); VerticalUtilityBehavior (fast-fall pursuit, crouch brake,
+  slide approach) and DI pre-positioning toward stage center under threat.
+  DEVIATIONS #21.
+- **2026-07-14 projectiles** (projectiles.md): loose-corridor fire-from-range with a
+  hard close-range gate (2.5 u), moderate zoning weights (findable, not forced),
+  incoming-bolt closed-form prediction (0.5 s horizon) feeding the defense channel,
+  bolt-appearance added to the salient re-decision events. DEVIATIONS #23.
+- **2026-07-20 defense-vs-bolt asymmetry** (projectiles.md Shipped): an in-flight
+  bolt triggers defense REGARDLESS of counter-hit options — counter-firing cannot
+  stop committed damage, unlike the melee trade-commit. DEVIATIONS #23.
+- **2026-07-20 projectile wind-up telegraph** (projectiles.md amendment): a
+  winding-up projectile telegraphs exactly like a melee wind-up — the corridor is
+  the arc; crouch-clear reads the corridor bottom; trade-commit applies. Fixes the
+  measured zero-shields-vs-zoners gap. DEVIATIONS #24.
+- **2026-07-20 reflect awareness** (shield.md/dash.md amendments): RangedThreat
+  context flag; reflect-equipped shield/dash defense options score ×1.5 against
+  ranged threats (designer: reflectability should raise defensive usage).
+  DEVIATIONS #26.

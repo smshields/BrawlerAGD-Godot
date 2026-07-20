@@ -130,3 +130,13 @@ Everything above landed; findings:
   evolve-advanced.png (ranges panel).
 - Also this session: pre-v4 runs and demo jsons moved to `archive/` (README catalog;
   gitignored except the README).
+
+## Amendments (2026-07-14 → 2026-07-20): the numbers in this doc moved
+
+- 2026-07-14 projectiles: `SlotSpec.Projectile` joined the pool — RANDOM slots draw
+  uniformly over FOUR move types, and the advanced-ranges panel gained the fifth
+  schema ("projectile") automatically. 3-type-era composed runs archived.
+- 2026-07-20 five buttons: `ButtonComposition` is `SlotSpec[5]` (the per-button row
+  shows I/J/K/U/L), and composed checkpoints recording 4-slot compositions refuse
+  to resume with an explicit error. Where this doc says "SlotSpec[4]", "four
+  dropdowns", or "the four ParamSchemas", read 5 / five / five.
