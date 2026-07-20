@@ -311,7 +311,7 @@ public class ProjectileTests
             ["windUpDuration"] = 0.05f, ["coolDownDuration"] = 0.1f, ["initialSize"] = 2.0f,
             ["holdDegradationRate"] = 0.05f, ["hitDegradationScalar"] = 0.02f,
             ["knockbackReduction"] = 0.8f, ["spacingPush"] = 0.5f, ["regenRate"] = 0.3f,
-            ["breakStunDuration"] = 1f,
+            ["breakStunDuration"] = 1f, ["reflect"] = 0f,
         });
         var shooter = new CharacterGenome("Shooter", 3, 0, TestGames.Character(),
             new[] { new MoveGenome(TestGames.Projectile(), 0, MoveType.Projectile) },
@@ -347,7 +347,7 @@ public class ProjectileTests
         var dashParams = ParamSet.FromDictionary(DefaultSchemas.Dash, new Dictionary<string, float>
         {
             ["windUpDuration"] = 0.05f, ["acceleration"] = 6f, ["duration"] = 0.4f,
-            ["warmUpInvulnerable"] = 1f, ["durationInvulnerable"] = 1f,
+            ["warmUpInvulnerable"] = 1f, ["durationInvulnerable"] = 1f, ["reflect"] = 0f,
         });
         var dodger = new CharacterGenome("Dodger", 3, 0, TestGames.Character(),
             new[] { new MoveGenome(dashParams, 0, MoveType.Dash) },
@@ -517,7 +517,7 @@ public class ProjectileTests
             ["windUpDuration"] = 0.1f, ["coolDownDuration"] = 0.1f, ["initialSize"] = 1.6f,
             ["holdDegradationRate"] = 0.05f, ["hitDegradationScalar"] = 0.02f,
             ["knockbackReduction"] = 0.8f, ["spacingPush"] = 0.5f, ["regenRate"] = 0.3f,
-            ["breakStunDuration"] = 1f,
+            ["breakStunDuration"] = 1f, ["reflect"] = 0f,
         });
         var defender = new CharacterGenome("Defender", 3, 0, TestGames.Character(),
             new[] { new MoveGenome(shieldParams, 0, MoveType.Shield) },

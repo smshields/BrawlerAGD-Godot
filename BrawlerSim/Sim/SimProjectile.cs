@@ -122,16 +122,31 @@ public sealed class SimProjectileMove
 /// One live projectile — the first non-player entity in SimWorld. Position, angle,
 /// and damage scale are recomputed from age each tick (closed form); the only
 /// integrated state is age itself plus the owner-clearance latch.
+///
+/// 2026-07-20 reflection (designer): a reflect-shield or reflect-dash RE-FIRES the
+/// bolt from the reflection point — Owner becomes the reflector (it can now hit the
+/// original shooter, and stats credit the reflector), Origin/Facing re-seat, and the
+/// PATH age restarts while the LIFETIME age keeps counting (TTL and damage decay
+/// stay on their original clocks, per the designer's spec).
 /// </summary>
 public sealed class SimProjectile
 {
     public readonly SimProjectileMove Move;
-    public readonly int Owner;
     public readonly int MoveIndex;
-    public readonly Vec2 Origin;
-    public readonly int Facing;
 
+    public int Owner;
+    public Vec2 Origin;
+    public int Facing;
+
+    /// <summary>Lifetime ticks since the ORIGINAL launch — drives TTL and damage decay.</summary>
     public int AgeTicks;
+
+    /// <summary>Ticks since the last (re-)launch — drives the path function.</summary>
+    public int PathAgeTicks;
+
+    /// <summary>TickCount of the last reflection, or -1 — view flash + hashed state.</summary>
+    public int ReflectTick = -1;
+
     public Vec2 Position;
     public float Angle;
     public float DamageScale = 1f;
@@ -151,6 +166,19 @@ public sealed class SimProjectile
         Origin = origin;
         Facing = facing;
         Position = origin;
+    }
+
+    /// <summary>Re-fire from the current position, mirrored, owned by the reflector.
+    /// The path restarts (fresh kinematics from the genes — sine phase and gravity
+    /// drop included); TTL/decay clocks are untouched.</summary>
+    public void ReflectFrom(int reflector, int tick)
+    {
+        Owner = reflector;
+        Origin = Position;
+        Facing = -Facing;
+        PathAgeTicks = 0;
+        ClearedOwner = false;
+        ReflectTick = tick;
     }
 
     public bool OverlapsBody(Aabb body) => Move.Shape switch

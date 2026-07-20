@@ -23,6 +23,10 @@ public sealed class SimShield
     public float RegenPerTick { get; }
     public int BreakStunTicks { get; }
 
+    /// <summary>2026-07-20 (designer): a fully-covered projectile is re-fired at its
+    /// shooter instead of absorbed. Blocking geometry is unchanged — pokes still hit.</summary>
+    public bool Reflect { get; }
+
     public SimShield(MoveGenome genome, MatchConfig config)
     {
         Params.ParamSet p = genome.Params;
@@ -35,5 +39,6 @@ public sealed class SimShield
         SpacingPush = p.Get(ShieldParams.SpacingPush);
         RegenPerTick = p.Get(ShieldParams.RegenRate) * config.Dt;
         BreakStunTicks = config.ToTicks(p.Get(ShieldParams.BreakStunDuration)); // cap-EXEMPT
+        Reflect = p.Get(ShieldParams.Reflect) >= 0.5f;
     }
 }

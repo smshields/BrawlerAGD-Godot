@@ -192,6 +192,9 @@ public sealed class SimPlayer
     public int ProjectilesFired;
     public int ProjectileHits;
 
+    /// <summary>Bolts re-fired by this player's reflect shield/dash (2026-07-20).</summary>
+    public int ProjectilesReflected;
+
     /// <summary>Set on the WarmUp→Attack transition of a projectile move; consumed by
     /// SimWorld's projectile phase the SAME tick (never persists — not hashed).</summary>
     public bool ProjectileSpawnPending;

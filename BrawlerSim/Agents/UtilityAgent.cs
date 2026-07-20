@@ -100,6 +100,10 @@ public sealed class UtilityAgent : IInputSource
     private const float DefenseFastFall = 2.0f;
     private const float DefenseFastFallVulnerable = 2.8f; // favored in warm-up/cool-down/exhausted (spec)
     private const float DefenseCrouch = 2.5f;       // only when the crouched hurtbox clears the arc
+    // 2026-07-20 reflect genes: knowing the shield/dash SENDS THE BOLT BACK makes it
+    // the better answer to a ranged threat (designer: reflect should increase
+    // defensive usage of these options).
+    private const float ReflectDefenseBoost = 1.5f;
     private const float BaselineVerticalNeutral = 0.5f;
     private const float FastFallPursuit = 1.2f;     // opponent below → drop onto them
     private const float CrouchBrake = 2.0f;         // negative-accel crouch at high slide speed
@@ -221,8 +225,13 @@ public sealed class UtilityAgent : IInputSource
                 or PlayerState.CoolDown or PlayerState.AirJumpsExhausted;
             _defenseScores[0] = DefenseNone;
             _defenseScores[1] = jumpAvailable ? DefenseJump : 0f;
-            _defenseScores[2] = shieldUsable ? DefenseShield * shieldMargin : 0f;
-            _defenseScores[3] = ctx.DashUsable ? DefenseDash : 0f;
+            // Reflect awareness (2026-07-20): against a RANGED threat, an option that
+            // re-fires the bolt outranks one that merely avoids it.
+            float shieldBoost = ctx.RangedThreat && FirstShieldReflects(ctx.Self) ? ReflectDefenseBoost : 1f;
+            float dashBoost = ctx.RangedThreat && ctx.DashSlot >= 0
+                && ctx.Self.Dashes[ctx.DashSlot] is { Reflect: true } ? ReflectDefenseBoost : 1f;
+            _defenseScores[2] = shieldUsable ? DefenseShield * shieldMargin * shieldBoost : 0f;
+            _defenseScores[3] = ctx.DashUsable ? DefenseDash * dashBoost : 0f;
             _defenseScores[4] = airborne && ctx.Self.FastFallAcceleration > 0f
                 ? (fastFallVulnState ? DefenseFastFallVulnerable : DefenseFastFall) : 0f;
             _defenseScores[5] = ctx.CrouchClearsThreat ? DefenseCrouch : 0f;
@@ -281,6 +290,20 @@ public sealed class UtilityAgent : IInputSource
             ? InputFrame.ActionBit(scores.AttackButtons[attackChoice])
             : (byte)0;
         return new InputFrame(_heldHorizontal, _heldVertical, jumpChoice == 1, actions);
+    }
+
+    /// <summary>Does the shield the defense channel would raise (the first shield
+    /// slot — ShieldCandidate's convention) carry the reflect gene?</summary>
+    private static bool FirstShieldReflects(SimPlayer self)
+    {
+        foreach (SimShield? shield in self.Shields)
+        {
+            if (shield is not null)
+            {
+                return shield.Reflect;
+            }
+        }
+        return false;
     }
 
     private static int ShieldCandidate(UtilityScores scores, SimPlayer self)
@@ -523,10 +546,12 @@ public sealed class UtilityAgent : IInputSource
         // against zoners: the defender now has warm-up + flight time, not just the
         // last half-second of flight. Trade-commit still applies (interrupting the
         // shooter during warm-up cancels the shot, exactly like a melee trade).
-        else if (opponent.State == PlayerState.WarmUp
+        bool rangedTelegraph = false;
+        if (!telegraphThreat && opponent.State == PlayerState.WarmUp
             && opponent.ProjectileMoves[opponent.CurrentMoveIndex] is SimProjectileMove windingShot)
         {
             telegraphThreat = ProjectileCorridorHit(windingShot, opponent, self, world.Config);
+            rangedTelegraph = telegraphThreat;
             if (telegraphThreat && self.IsGrounded && self.State == PlayerState.Idle)
             {
                 // Duck only if the corridor's center (at our column, launch height +
@@ -563,7 +588,7 @@ public sealed class UtilityAgent : IInputSource
                 for (int k = ProjectileLookaheadStep; k <= ProjectileLookaheadTicks; k += ProjectileLookaheadStep)
                 {
                     Vec2 predicted = incoming.Move.PositionAt(
-                        incoming.Origin, incoming.Facing, incoming.AgeTicks + k, world.Config);
+                        incoming.Origin, incoming.Facing, incoming.PathAgeTicks + k, world.Config);
                     if (predicted.X >= threatBox.Left && predicted.X <= threatBox.Right
                         && predicted.Y >= threatBox.Bottom && predicted.Y <= threatBox.Top)
                     {
@@ -647,7 +672,8 @@ public sealed class UtilityAgent : IInputSource
             OpponentStunned: opponent.State == PlayerState.Stun,
             recoverAim,
             crouchClearsThreat,
-            projectileThreat);
+            projectileThreat,
+            RangedThreat: rangedTelegraph || projectileThreat);
     }
 
     /// <summary>
@@ -1283,7 +1309,8 @@ public readonly record struct UtilityContext(
     bool OpponentStunned,
     Vec2 RecoverAim,
     bool CrouchClearsThreat,
-    bool ProjectileThreat);
+    bool ProjectileThreat,
+    bool RangedThreat);
 
 /// <summary>
 /// The per-decision score sheet. Horizontal = {left, neutral, right}; Jump = {no, yes};

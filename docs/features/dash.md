@@ -127,3 +127,17 @@ exploit-closure) — but champion quality under the fixed agent jumps: re-evals
 3/5 draws — they had adapted to opponents who fumbled recovery). Dash usage rose
 further (95/109 per evaluation; one champion lands 38 i-frame dodges). Clip:
 runs/media/dashfix801_best.mp4.
+
+## Amendment 2026-07-20: the reflect gene (designer)
+
+Sixth dash parameter: `reflect` (bool-as-float, active ≥ 0.5). Any projectile
+contact during the DASH STATE (either stage, independent of — and checked
+before — the invulnerability genes) re-fires the bolt at its shooter, with the
+same semantics as the shield reflect (ownership transfer, mirrored path restart,
+lifetime/decay clocks continuous, no ping-pong via the owner latch). A
+reflect-dash therefore answers projectiles even with both i-frame genes off.
+Agent: ×1.5 defense-score boost for a reflect-dash against ranged threats.
+View additions (designer): dash INVULNERABILITY now strobes the body alpha
+(fast 1.0↔0.6, distinct from post-hit invincibility's steady 0.4), and a
+reflected bolt strobes toward white. Loader default 0 = off; stat shared with
+the shield reflect (ProjectilesReflected).

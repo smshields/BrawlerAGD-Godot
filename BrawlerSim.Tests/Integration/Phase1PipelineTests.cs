@@ -70,13 +70,13 @@ public class Phase1PipelineTests
     [Fact]
     public void PopulationFingerprintMatchesGoldenValue()
     {
-        // Re-pinned 2026-07-20: FIVE BUTTONS (designer: single jump button freed pad
-        // Y) — a REAL generation change: the pinned mapping gene now draws over four
-        // mappable buttons (was three) plus formatVersion 6 bytes. Prior pins:
-        // 6139255332495310431 (v5 bytes only), 5768454974650524447 (fast fall/
-        // crouch/DI), 16079587979934170348 (dash slot), 10607725140721060960
-        // (shield), 5432710911100783110 (two moves), 13551893661434631362,
+        // Re-pinned 2026-07-20 (2nd): REFLECT genes appended to the shield and dash
+        // schemas (one extra generation draw each) — a real design-space change.
+        // Prior pins: 11998549590211428551 (five buttons), 6139255332495310431
+        // (v5 bytes only), 5768454974650524447 (fast fall/crouch/DI),
+        // 16079587979934170348 (dash slot), 10607725140721060960 (shield),
+        // 5432710911100783110 (two moves), 13551893661434631362,
         // 9300943650238635838.
-        Assert.Equal(11998549590211428551UL, RunPipeline(20260707));
+        Assert.Equal(10906770023368156630UL, RunPipeline(20260707));
     }
 }

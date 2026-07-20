@@ -25,6 +25,7 @@ public class DashTests
             [DashParams.Duration] = 0.2f,
             [DashParams.WarmUpInvulnerable] = warmInv,
             [DashParams.DurationInvulnerable] = durInv,
+            [DashParams.Reflect] = 0f,
         };
         foreach ((string key, float value) in overrides)
         {

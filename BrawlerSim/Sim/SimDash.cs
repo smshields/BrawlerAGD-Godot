@@ -16,6 +16,10 @@ public sealed class SimDash
     public bool WarmUpInvulnerable { get; }
     public bool DurationInvulnerable { get; }
 
+    /// <summary>2026-07-20 (designer): projectiles touching the dasher during the Dash
+    /// state (either stage) are re-fired at their shooter — independent of i-frames.</summary>
+    public bool Reflect { get; }
+
     public SimDash(MoveGenome genome, MatchConfig config)
     {
         Params.ParamSet p = genome.Params;
@@ -24,5 +28,6 @@ public sealed class SimDash
         Speed = p.Get(DashParams.Acceleration);
         WarmUpInvulnerable = p.Get(DashParams.WarmUpInvulnerable) >= 0.5f;
         DurationInvulnerable = p.Get(DashParams.DurationInvulnerable) >= 0.5f;
+        Reflect = p.Get(DashParams.Reflect) >= 0.5f;
     }
 }

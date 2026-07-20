@@ -126,8 +126,9 @@ public sealed class SimWorld
         for (int i = 0; i < _projectiles.Count; i++)
         {
             SimProjectile proj = _projectiles[i];
-            proj.AgeTicks++;
-            proj.Position = proj.Move.PositionAt(proj.Origin, proj.Facing, proj.AgeTicks, Config);
+            proj.AgeTicks++;      // lifetime clock: TTL + damage decay (survives reflection)
+            proj.PathAgeTicks++;  // path clock: resets when a reflect re-fires the bolt
+            proj.Position = proj.Move.PositionAt(proj.Origin, proj.Facing, proj.PathAgeTicks, Config);
             proj.Angle = proj.Move.RotationRate * proj.AgeTicks * Config.Dt;
             proj.DamageScale = proj.Move.DamageScaleAt(proj.AgeTicks, Config);
             if (proj.AgeTicks >= proj.Move.TtlTicks
@@ -199,6 +200,15 @@ public sealed class SimWorld
             {
                 continue;
             }
+            // Dash reflection (2026-07-20): any contact during the Dash state with the
+            // reflect gene re-fires the bolt — independent of (and checked before)
+            // i-frames, so a reflect-dash reflects even in a non-invulnerable stage.
+            if (victim.State == PlayerState.Dash && victim.ActiveDash is { Reflect: true })
+            {
+                proj.ReflectFrom(victim.Index, TickCount);
+                victim.ProjectilesReflected++;
+                return; // re-seated: resume against it next tick from the new path
+            }
             if (victim.DashInvulnerable)
             {
                 victim.DashInvulnDodges++;
@@ -211,6 +221,21 @@ public sealed class SimWorld
                 && OverlapFullyInsideShield(proj.Bounds, victim.Body,
                     victim.Position + victim.ShieldOffset, victim.ShieldRadius))
             {
+                // Shield reflection (2026-07-20): the full-coverage geometry that
+                // would BLOCK instead re-fires the bolt at its shooter. The shield
+                // still degrades as if it blocked (the work isn't free — designer
+                // can veto); pokes through partial cover still hit either way.
+                if (shield.Reflect)
+                {
+                    proj.ReflectFrom(victim.Index, TickCount);
+                    victim.ProjectilesReflected++;
+                    victim.ShieldHealths[victim.CurrentMoveIndex] -= scaledDamage * shield.HitDegradationScalar;
+                    if (victim.ShieldHealths[victim.CurrentMoveIndex] <= victim.ShieldBreakRadius)
+                    {
+                        victim.BreakShield();
+                    }
+                    return;
+                }
                 float blockedDamageAfter = victim.Damage + scaledDamage;
                 Vec2 blockedKnockback = ComputeKnockback(
                     victim.Position, proj.Position, proj.Move.KnockbackDirection,
@@ -493,6 +518,12 @@ public sealed class SimWorld
                 hash = Fnv1a.Add(hash, proj.Angle);
                 hash = Fnv1a.Add(hash, proj.DamageScale);
                 hash = Fnv1a.Add(hash, proj.ClearedOwner ? 1 : 0);
+                // 2026-07-20 reflection made origin/facing/path-age mutable state.
+                hash = Fnv1a.Add(hash, proj.PathAgeTicks);
+                hash = Fnv1a.Add(hash, proj.Origin.X);
+                hash = Fnv1a.Add(hash, proj.Origin.Y);
+                hash = Fnv1a.Add(hash, proj.Facing);
+                hash = Fnv1a.Add(hash, proj.ReflectTick);
             }
         }
         return hash;
@@ -507,7 +538,7 @@ public sealed class SimWorld
                 p.ShieldActivations, p.BlockedHits, p.ShieldBreaks, p.ShieldTicks,
                 p.DashCount, p.DashInvulnDodges,
                 p.FastFallTicks, p.CrouchTicks, p.DIInfluencedHits,
-                p.ProjectilesFired, p.ProjectileHits)).ToArray(),
+                p.ProjectilesFired, p.ProjectileHits, p.ProjectilesReflected)).ToArray(),
             LoserIndex,
             TickCount,
             TickCount / (float)Config.TicksPerSecond,

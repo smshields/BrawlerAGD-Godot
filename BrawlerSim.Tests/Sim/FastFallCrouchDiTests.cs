@@ -287,7 +287,7 @@ public class FastFallCrouchDiTests
                 ["windUpDuration"] = 0.1f, ["coolDownDuration"] = 0.1f, ["initialSize"] = 0.6f,
                 ["holdDegradationRate"] = 0.05f, ["hitDegradationScalar"] = 0.02f,
                 ["knockbackReduction"] = 0.8f, ["spacingPush"] = 0.5f, ["regenRate"] = 0.3f,
-                ["breakStunDuration"] = 1f,
+                ["breakStunDuration"] = 1f, ["reflect"] = 0f,
             }), 0, MoveType.Shield),
         };
         CharacterGenome Make(string name) => new(name, 3, 0,

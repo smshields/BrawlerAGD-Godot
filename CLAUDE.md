@@ -91,6 +91,10 @@ recordings), then wait for their confirmation.
   Dash orange (2026-07-13) · Crouch purple with the body squished feet-planted
   (2026-07-13; distinct from Stun magenta).
   These ARE the game's readability system — new states need a tint decision.
+  Flash vocabulary (2026-07-20): post-hit invincibility = steady 0.4 alpha ·
+  dash i-frames = fast body-alpha strobe (1.0↔0.6) · a just-reflected projectile
+  strobes gold↔white for ~¼ s. Projectiles are gold FILLED shapes; the shield is
+  a white→red OUTLINE circle.
 - ALL-CAPS for menu/UI labels. 1280×720 design viewport, `canvas_items` stretch,
   fixed 16:9 world view (players die off-screen at the blast zone — that hidden-death
   design is intentional; do not reveal the blast zone to players).
@@ -172,3 +176,8 @@ unmoved (hash section gated on live bolts); fingerprint re-pinned (bytes only).
 2026-07-20 follow-ups (designer): projectile WIND-UPS telegraph exactly like
 melee (closes the zero-shields-vs-zoners gap — DEVIATIONS #24) and the FIVE-button
 control scheme (single jump button; DEVIATIONS #25 — see feature 1 above).
+REFLECT genes on shield & dash (2026-07-20, DEVIATIONS #26): fully-covered /
+dash-contacted PROJECTILES are re-fired at their shooter (ownership transfers,
+path restarts mirrored, TTL/decay clocks continuous); reflected bolts strobe
+white, dash i-frames strobe body alpha; agents prefer reflect options ×1.5 vs
+ranged threats; stat ProjectilesReflected, fitness blind.

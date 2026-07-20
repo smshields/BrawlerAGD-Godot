@@ -42,6 +42,7 @@ public static class ShieldParams
     public const string SpacingPush = "spacingPush";
     public const string RegenRate = "regenRate";
     public const string BreakStunDuration = "breakStunDuration";
+    public const string Reflect = "reflect"; // 2026-07-20 (projectile reflection)
 }
 
 /// <summary>Stable param keys for the dash schema (2026-07-13, FEATURES.md §Dash).</summary>
@@ -52,6 +53,7 @@ public static class DashParams
     public const string Duration = "duration";
     public const string WarmUpInvulnerable = "warmUpInvulnerable";
     public const string DurationInvulnerable = "durationInvulnerable";
+    public const string Reflect = "reflect"; // 2026-07-20 (projectile reflection)
 }
 
 /// <summary>Stable param keys for the projectile schema (2026-07-14,
@@ -177,6 +179,9 @@ public static class DefaultSchemas
         new ParamSpec(ShieldParams.SpacingPush, 0.5f, 3.0f),
         new ParamSpec(ShieldParams.RegenRate, 0.05f, 0.5f),
         new ParamSpec(ShieldParams.BreakStunDuration, 0.5f, 2.5f),
+        // 2026-07-20 append (designer): a fully-covered PROJECTILE is re-fired back
+        // at its shooter instead of absorbed (bool-as-float; docs/features/shield.md).
+        new ParamSpec(ShieldParams.Reflect, 0f, 1f),
     });
 
     /// <summary>
@@ -192,6 +197,9 @@ public static class DefaultSchemas
         new ParamSpec(DashParams.Duration, 0.1f, 0.4f),
         new ParamSpec(DashParams.WarmUpInvulnerable, 0f, 1f),
         new ParamSpec(DashParams.DurationInvulnerable, 0f, 1f),
+        // 2026-07-20 append (designer): projectiles touching the dasher during the
+        // Dash state are re-fired at their shooter (bool-as-float; docs/features/dash.md).
+        new ParamSpec(DashParams.Reflect, 0f, 1f),
     });
 
     /// <summary>

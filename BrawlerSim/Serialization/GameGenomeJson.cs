@@ -111,10 +111,12 @@ public static class GameGenomeJson
             (c.Moves ?? new List<MoveDoc>()).Select(m => m.Type switch
             {
                 "shield" => new MoveGenome(
-                    ParamSet.FromDictionary(config.ShieldSchema, Require(m.Params, "shield params")),
+                    ParamSet.FromDictionary(config.ShieldSchema,
+                        WithReflectDefault(Require(m.Params, "shield params"))),
                     m.SpriteIndex, MoveType.Shield),
                 "dash" => new MoveGenome(
-                    ParamSet.FromDictionary(config.DashSchema, Require(m.Params, "dash params")),
+                    ParamSet.FromDictionary(config.DashSchema,
+                        WithReflectDefault(Require(m.Params, "dash params"))),
                     m.SpriteIndex, MoveType.Dash),
                 "projectile" => new MoveGenome(
                     ParamSet.FromDictionary(config.ProjectileSchema, Require(m.Params, "projectile params")),
@@ -161,6 +163,15 @@ public static class GameGenomeJson
         {
             dict.TryAdd(key, value);
         }
+        return dict;
+    }
+
+    /// <summary>2026-07-20 shield/dash schema append: pre-reflect files read as
+    /// reflect OFF (0) — same neutral-default pattern as the character appends.
+    /// ShieldParams.Reflect and DashParams.Reflect share the key string.</summary>
+    private static Dictionary<string, float> WithReflectDefault(Dictionary<string, float> dict)
+    {
+        dict.TryAdd(ShieldParams.Reflect, 0f);
         return dict;
     }
 

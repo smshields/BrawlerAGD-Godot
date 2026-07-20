@@ -17,6 +17,7 @@ public partial class PlayerView : Node2D
     private Sprite2D _move = null!;
     private Label _name = null!;
     private float _ppu;
+    private int _flashClock; // cosmetic strobe phase (view-only, not sim state)
 
     public void Setup(SimPlayer player, int spriteIndex, int[] moveSpriteIndices, float ppu)
     {
@@ -65,10 +66,14 @@ public partial class PlayerView : Node2D
         _body.Scale = new Vector2(_player.WidthScalar, _player.HeightScalar * crouch) * (_ppu / 16f);
         _body.Position = new Vector2(0f, _player.BodyHalf.Y * (1f - crouch) * _ppu);
         _body.FlipH = _player.Facing < 0;
-        _body.Modulate = StateColor(_player.State) with
-        {
-            A = _player.InvincibleTicksLeft > 0 ? 0.4f : 1f,
-        };
+        // Dash i-frames flash (2026-07-20, designer): a subtle fast alpha strobe,
+        // distinct from post-hit invincibility's steady 0.4 and from the projectile
+        // reflect flash (which whitens the BOLT, not the body).
+        _flashClock++;
+        float alpha = _player.InvincibleTicksLeft > 0 ? 0.4f
+            : _player.DashInvulnerable ? (_flashClock % 6 < 3 ? 1f : 0.6f)
+            : 1f;
+        _body.Modulate = StateColor(_player.State) with { A = alpha };
 
         _move.Visible = _player.HitboxActive;
         if (_player.HitboxActive)

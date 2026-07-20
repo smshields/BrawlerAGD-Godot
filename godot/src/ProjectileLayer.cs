@@ -55,7 +55,13 @@ public partial class ProjectileLayer : Node2D
             poly.Position = new Vector2(proj.Position.X * _ppu, -proj.Position.Y * _ppu);
             poly.Rotation = -proj.Angle; // sim CCW (y-up) → Godot CW (y-down)
             float alpha = proj.Move.DamageDecay ? 0.2f + 0.8f * proj.DamageScale : 1f;
-            poly.Color = new Color(Gold.R, Gold.G, Gold.B, alpha);
+            // Reflect flash (2026-07-20, designer): a just-reflected bolt strobes
+            // toward white for ~a quarter second — the "it's coming BACK" read.
+            int sinceReflect = proj.ReflectTick < 0 ? int.MaxValue : _world.TickCount - proj.ReflectTick;
+            Color color = sinceReflect < 14 && sinceReflect / 3 % 2 == 0
+                ? new Color(1f, 1f, 1f)
+                : Gold;
+            poly.Color = new Color(color.R, color.G, color.B, alpha);
         }
     }
 

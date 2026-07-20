@@ -142,3 +142,23 @@ Designer-directed follow-up to the two findings above:
   rarely — the spacing/zoning value of a raised shield is doing work even without
   blocks, which is exactly the surprising-builds space the designer wanted open.
 
+
+## Amendment 2026-07-20: the reflect gene (designer)
+
+Tenth shield parameter: `reflect` (bool-as-float, active ≥ 0.5). When active, a
+projectile that the coverage geometry would BLOCK is instead RE-FIRED at its
+shooter: ownership transfers to the reflector (the return bolt can hit the
+original shooter and credits the reflector's ProjectileHits), the path restarts
+mirrored from the reflection point with fresh kinematics from the bolt's genes,
+and the TTL + damage-decay clocks keep counting from the ORIGINAL launch
+(designer: "keeping damage decay and lifetime decay constant"). Pokes through
+partial cover still hit exactly as before; melee is untouched (projectiles only).
+Judgment call held open for the designer: a reflect still DEGRADES the shield
+like a block — the work isn't free. The owner-clearance latch prevents
+ping-pong re-reflection while the bolt leaves. Agent: against a RANGED threat
+(wind-up telegraph or bolt in flight), a reflect-shield's defense score is
+boosted ×1.5 — knowing it sends the bolt back makes it the better answer
+(designer intent). View: a just-reflected bolt strobes toward white for ~a
+quarter second. Loader default 0 = off for all pre-append files (no format
+bump); stat: ProjectilesReflected (+ evaluate `proj(fired/hit/refl)`).
+Pre-reflect smokes remain valid as PRE-change baselines only.

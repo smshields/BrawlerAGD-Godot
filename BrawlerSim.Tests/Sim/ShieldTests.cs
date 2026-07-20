@@ -33,6 +33,7 @@ public class ShieldTests
             [ShieldParams.SpacingPush] = 2f,
             [ShieldParams.RegenRate] = 0.3f,
             [ShieldParams.BreakStunDuration] = 1.0f,
+            [ShieldParams.Reflect] = 0f,
         };
         foreach ((string key, float value) in overrides)
         {

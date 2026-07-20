@@ -25,7 +25,8 @@ public sealed record PlayerStats(
     int CrouchTicks = 0,
     int DIInfluencedHits = 0,
     int ProjectilesFired = 0,
-    int ProjectileHits = 0);
+    int ProjectileHits = 0,
+    int ProjectilesReflected = 0);
 
 /// <summary>
 /// Outcome of one simulated match. LoserIndex is -1 for a timeout draw. FinalHash
