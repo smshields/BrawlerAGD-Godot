@@ -222,3 +222,76 @@ Projectiles are a new type of attack - they should have similar properties to me
 	- Agents should avoid using projectiles at close range
 	- Agents should attempt to dodge incoming projectiles
 	- Zoning should be possible but not overly selected for
+
+# Map Size
+Right now, maps are limited to a static size, causing a limited range of maps and game styles. Creating a maps that have a wider variety of sizes and platform numbers/constructions offer unique interactions and gameplay styles that we would want to see in a game. This feature is relatively simple in terms of parameters, but opens up the design and evolution space quite a bit. 
+
+Global:
+- Maps should scale in size, always be big enough to have meaningful space between characters, but scale large enough for substantial navigation between maps.
+- Platform number should be dynamic, and should have a more varied manner of positions based on the larger size. Some rules still need to be obeyed:
+	- Characters must spawn over a platform
+	- Platforms must be traversable based on character jumps and dashes
+	- Platforms should not overlap
+	- Platforms should be able to extend even to the kill zone off screen
+- Platform asymmetry should be possible, verticality should be possible.
+- Characters must always be visually legible. 
+- We should implement a camera to help zoom in/out based on character locations - they should both be on screen, but on large maps, we shouldn't be completely zoomed out. Irrelevant on headless sim. 
+	- A minimap (toggleable in settings) should show the current camera vs. the overall map in the corner in a semi-transparent view - make characteristics of this minimap configurable in settings (location, size, transparency).
+- The "KO" barrier should always be outside of the visible map, and should not be so far that there is significant lack of visibility when off stage.
+- Many of these parameters already exist, just need a little modification.
+- Existing level generation system should be used, unless an alteration is needed - we want to make sure that we can get surprising outputs, so if the generator is overly biased, we should consider tweaks.
+
+Parameters:
+- Number of Platforms
+- Platform coordinates/sizes
+- Visible map size
+- KO Boundary
+- Spawn positions
+
+Agent:
+- Backwards compatibility check - but should work as expected.
+
+
+# Gameplay Polish
+
+## Spawning Behaviors
+- Characters should spawn on a platform, where they remain invulnerable for a set amount of time.
+- Spawn locations should be unaffected.
+- Invulnerable should have its own state - the player cannot be impacted by damage/knockback, but still has collision with other characters and platforms. Other agents shouldn't attempt to attack an invulnerable enemy.
+- Platform Spawning should have a game parameter tied to the level, with a minimum of 1 second and a maximum of 5 seconds. 
+- Once the player leaves contact with the platform, the platform should immediately become intangible and quickly fade into the background.
+- The player is also intangible when on the platform - they cannot be pushed off by the opponent until they leave the platform or the platform disappears.
+- Use rounded oval with a small, upward facing, white gradient on the topside.
+- There should be a 3-second delay before spawning the player in on the platform.
+
+## Death Animations
+- There should be a ellipse-shaped, semi-transparent white flash when a character is knocked out of the arena, telegraphing when a character has died.
+- The flash should scale with the speed and damage of the character when knocked off. The increase of radius should not be an even circle - it should elongate the circle towards the middle of the arena.
+- The flash should originate from exactly where the character died, and it should be directionally stretched in the opposite direction of travel to indicate direction.
+
+## Movement Blur
+- Fast moving characters are extremely difficult to track. To fix this, we should implement a scaling motion blur on characters. At slow, easy to track speeds, blur should be nearly non-existent.
+- As speed increases, motion trails of characters should be more prominent and last longer.
+- Motion trails should match color of character state.
+- Motion trails should fade quickly based on the speed the character was at when moving.
+- Motion trails should never be so solid that it appears like a real character or introduces visual clutter.
+
+# Visual Polish
+
+## HUD
+
+1. Support four HUDs (for up to 4 players) along the bottom of the screen, evenly sized. Size is static (each HUD is ALWAYS 1/4th of screen)
+2. Have a debug panel above that shows active buttons, what the buttons do, and the state.
+3. Update state strings into human-readable instead of our machine-readable state enums. Make the state readout match character color. 
+	1. Not in the image - but add timing bars in the state section to represent invulnerable/intangible timers.
+	2. Not in the image - but add directional influence arrow to the state section.
+	3. Background of this panel should be semi-transparent.
+4. Have a sprite in the HUD so you know which player is which.
+5. HUD outlines match character name, have solid background.
+6. Stocks are still dots, but will switch to number (10 STOCKS) if they won't fit.
+7. Percentage changes animate and roll through interim numbers very quickly.
+8. HUDs very slightly shake on hits. Never obscures readability or becomes too distracting. Scales with current damage percentage.
+9. HUDs shake greatly on deaths, HUD flashes to show a death has occurred.
+10. Player labels now have a slight transparent pill-shaped background, and have an assigned color that matches the HUD element.
+11. Debug panel is default on for now, but is configurable in the pause menu.
+(See BrawlerAGDHUD.jpg in design folder for layout and additional notes on implementation.)

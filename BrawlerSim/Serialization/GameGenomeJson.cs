@@ -23,10 +23,18 @@ namespace BrawlerSim.Serialization;
 ///       pad Y). ≤5 files migrate: old[0..2] stay, NEW index 3 duplicates button 0's
 ///       move (the new physical button, never pressed by old traces), old[3] → 4 (the
 ///       R1/L dash-pin button keeps its move at the new last index).
+///   7 — 2026-07-21 map size: stage gained "params" (the stage schema — map dimensions,
+///       KO margin, symmetry, spawn genes; docs/features/map-size.md). ≤6 files load
+///       with StageRules.LegacyParams: the pre-feature dimensions plus spawns derived
+///       by the old ComputeSpawn rule, so old games and traces replay bit-identically.
+///   8 — 2026-07-22 spawning behaviors: stage gained platformSpawnDuration +
+///       spawnInvulnDuration (docs/features/spawn-and-polish.md). ≤7 files default both
+///       to 0 (spawning feature OFF = instant vulnerable spawn), so they replay
+///       bit-identically.
 /// </summary>
 public static class GameGenomeJson
 {
-    public const int CurrentFormatVersion = 6; // 2026-07-20 five buttons (see header)
+    public const int CurrentFormatVersion = 8; // 2026-07-22 spawning behaviors (see header)
     private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = new()
@@ -65,6 +73,7 @@ public static class GameGenomeJson
             }).ToList(),
             Stage = new StageDoc
             {
+                Params = record.Genome.Stage.Params.ToDictionary(),
                 Platforms = record.Genome.Stage.Platforms
                     .Select(p => new PlatformDoc { X = p.X, Y = p.Y, XSize = p.XSize, YSize = p.YSize })
                     .ToList(),
@@ -127,7 +136,13 @@ public static class GameGenomeJson
             }),
             MigrateButtonMoves(c.ButtonMoves))); // null (v1 files) → all-zeros default in the ctor
 
-        var stage = new StageGenome(doc.Stage.Platforms.Select(p => new PlatformGene(p.X, p.Y, p.XSize, p.YSize)));
+        var platforms = doc.Stage.Platforms
+            .Select(p => new PlatformGene(p.X, p.Y, p.XSize, p.YSize)).ToList();
+        // ≤ v6: no stage params — the legacy dimensions + old derived spawns
+        // (bit-identical playback). v7+: read them (missing keys throw, as everywhere).
+        var stage = new StageGenome(platforms, doc.Stage.Params is null
+            ? StageRules.LegacyParams(platforms, config.StageSchema)
+            : ParamSet.FromDictionary(config.StageSchema, WithStageDefaults(doc.Stage.Params)));
         return new GameRecord(doc.Name ?? "Unnamed", doc.Origin, new GameGenome(characters, stage));
     }
 
@@ -175,6 +190,16 @@ public static class GameGenomeJson
         return dict;
     }
 
+    /// <summary>2026-07-22 spawning-behaviors stage append: ≤ v7 files (stage params
+    /// present but predating the spawn genes) read both durations as 0 = feature OFF,
+    /// so they replay as the instant vulnerable spawn they were recorded under.</summary>
+    private static Dictionary<string, float> WithStageDefaults(Dictionary<string, float> dict)
+    {
+        dict.TryAdd(StageParams.PlatformSpawnDuration, 0f);
+        dict.TryAdd(StageParams.SpawnInvulnDuration, 0f);
+        return dict;
+    }
+
     // DTOs — the on-disk shape. Do not reuse genome types here: the file format must be
     // able to evolve independently of the in-memory model.
     private sealed class GameDoc
@@ -205,6 +230,7 @@ public static class GameGenomeJson
 
     private sealed class StageDoc
     {
+        public Dictionary<string, float>? Params { get; set; } // absent in ≤ v6 files
         public List<PlatformDoc>? Platforms { get; set; }
     }
 

@@ -86,6 +86,30 @@ public static class ProjectileParams
     public const string LaunchY = "launchY";
 }
 
+/// <summary>Stable param keys for the stage schema (2026-07-21, FEATURES.md §Map Size;
+/// docs/features/map-size.md). The stage segment previously had no ParamSet — these
+/// genes make map dimensions, symmetry, and spawns evolvable.</summary>
+public static class StageParams
+{
+    public const string VisibleHalfWidth = "visibleHalfWidth";
+    public const string VisibleHalfHeight = "visibleHalfHeight";
+    public const string KoMarginFraction = "koMarginFraction";
+    public const string PlatformCount = "platformCount";
+    public const string MaxPlatformSize = "maxPlatformSize";
+    public const string Mirrored = "mirrored";
+    public const string MirrorSide = "mirrorSide";
+    public const string Spawn1X = "spawn1X";
+    public const string Spawn1Y = "spawn1Y";
+    public const string Spawn2X = "spawn2X";
+    public const string Spawn2Y = "spawn2Y";
+
+    // Spawning Behaviors (2026-07-22, FEATURES.md §Gameplay Polish;
+    // docs/features/spawn-and-polish.md). Both generate in their live range but
+    // validate down to 0 = mechanic off (the loader default for pre-v8 files).
+    public const string PlatformSpawnDuration = "platformSpawnDuration";
+    public const string SpawnInvulnDuration = "spawnInvulnDuration";
+}
+
 /// <summary>Stable param keys for the move schema.</summary>
 public static class MoveParams
 {
@@ -214,6 +238,39 @@ public static class DefaultSchemas
     /// Launch offsets are half-body fractions, clamped at resolve time so the
     /// spawn overlaps the player (the sketch's EXIT point).
     /// </summary>
+    /// <summary>
+    /// Stage schema (2026-07-21, FEATURES.md §Map Size; docs/features/map-size.md).
+    /// Size genes span 0.5×–5× the legacy dimensions (designer bounds), width and
+    /// height independent. The legacy visibleHalfWidth reference is 11·(16/9)/2 —
+    /// deliberately the blast width WITHOUT its second 1.1 factor (the preserved Unity
+    /// aspect quirk, see MatchConfig.BlastZoneHalfWidth) so that
+    /// visible × (1 + koMargin) reproduces the legacy blast zone bit-exactly.
+    /// Mirrored/mirrorSide are bools-as-floats (≥ 0.5); platformCount/maxPlatformSize
+    /// are ints-as-floats (floored). Spawn genes are raw world coordinates spanning
+    /// the largest generatable map; StageRules.RepairSpawn makes them legal for the
+    /// actual map at sim construction (over a platform, out of immediate KO bounds).
+    /// </summary>
+    public static readonly ParamSchema Stage = new("stage", new[]
+    {
+        new ParamSpec(StageParams.VisibleHalfWidth,
+            StageRules.LegacyVisibleHalfWidth * 0.5f, StageRules.LegacyVisibleHalfWidth * 5f),
+        new ParamSpec(StageParams.VisibleHalfHeight,
+            StageRules.LegacyVisibleHalfHeight * 0.5f, StageRules.LegacyVisibleHalfHeight * 5f),
+        new ParamSpec(StageParams.KoMarginFraction, 0.05f, 0.25f),
+        new ParamSpec(StageParams.PlatformCount, 2f, 16f),
+        new ParamSpec(StageParams.MaxPlatformSize, 3f, 14f),
+        new ParamSpec(StageParams.Mirrored, 0f, 1f),
+        new ParamSpec(StageParams.MirrorSide, 0f, 1f),
+        new ParamSpec(StageParams.Spawn1X, -49f, 49f),
+        new ParamSpec(StageParams.Spawn1Y, -25f, 26f),
+        new ParamSpec(StageParams.Spawn2X, -49f, 49f),
+        new ParamSpec(StageParams.Spawn2Y, -25f, 26f),
+        // Spawning Behaviors (2026-07-22): platform lifetime 1–5 s, character
+        // invulnerability 1–3 s. ValidMin 0 = mechanic off; pre-v8 files default there.
+        new ParamSpec(StageParams.PlatformSpawnDuration, 1f, 5f) { ValidMin = 0f },
+        new ParamSpec(StageParams.SpawnInvulnDuration, 1f, 3f) { ValidMin = 0f },
+    });
+
     public static readonly ParamSchema Projectile = new("projectile", new[]
     {
         new ParamSpec(ProjectileParams.PathShape, 0f, 3f),      // floor → 0 linear, 1 sine, 2 quadratic

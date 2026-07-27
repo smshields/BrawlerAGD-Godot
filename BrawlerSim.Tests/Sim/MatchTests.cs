@@ -88,10 +88,13 @@ public class MatchTests
     [Fact]
     public void PassiveInputsTimeOutAsADraw()
     {
+        // Pinned to 60 s explicitly since the default rose to 300 s (2026-07-21, Map
+        // Size): this test is about timeout SEMANTICS, not the default's magnitude.
+        var config = MatchConfig.Default with { MaxMatchSeconds = 60f };
         var sources = new IInputSource[] { ScriptedSource.Neutral, ScriptedSource.Neutral };
-        MatchResult result = MatchRunner.Run(TestGames.FlatArena(), sources);
+        MatchResult result = MatchRunner.Run(TestGames.FlatArena(), sources, config: config);
         Assert.Equal(-1, result.LoserIndex);
-        Assert.Equal(MatchConfig.Default.MaxTicks, result.Ticks);
+        Assert.Equal(config.MaxTicks, result.Ticks);
         Assert.Equal(60f, result.LengthSeconds, 0.001f);
     }
 
@@ -105,12 +108,15 @@ public class MatchTests
     public void GoldenMatchHashMatches()
     {
         MatchResult result = RunAiMatch(StudyGame("GameC"), seed: 20260707);
-        // Re-pinned 2026-07-13 (2nd): fast-fall/crouch/DI hash fields (FORMAT-only
-        // for this legacy genome — neutral loader defaults keep every new mechanic
-        // off). Prior pins: 14366357446713044105 (dash fields), 12579901790422998345
-        // (shield fields), 13546504710617393521 / 5450044395552427516 (stun caps),
+        // Re-pinned 2026-07-21: MaxMatchSeconds default 60 → 300 (Map Size, designer)
+        // — this match previously hit the 60 s draw (3600 ticks) and now ends by KO at
+        // tick 3717. Verified before pinning: with MaxMatchSeconds = 60 the hash still
+        // equals the prior pin bit-exactly, so legacy-genome sim behavior is unchanged.
+        // Prior pins: 13314293792061293361 (fast-fall/crouch/DI fields),
+        // 14366357446713044105 (dash fields), 12579901790422998345 (shield fields),
+        // 13546504710617393521 / 5450044395552427516 (stun caps),
         // 8640048477680184839, 1788087336528951335.
-        Assert.Equal(13314293792061293361UL, result.FinalHash);
+        Assert.Equal(14074722867888814238UL, result.FinalHash);
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 using BrawlerSim.Agents;
 using BrawlerSim.Determinism;
 using BrawlerSim.Genome;
+using BrawlerSim.Params;
 using BrawlerSim.Replay;
 using BrawlerSim.Serialization;
 using BrawlerSim.Sim;
@@ -39,6 +40,52 @@ public class UtilityAgentTests
         InputFrame input = agent.GetInput(world, 0);
         Assert.Equal(1f, input.Horizontal);
         Assert.Equal<byte>(0, input.Actions); // out of range: no swing
+    }
+
+    /// <summary>Builds a stage ParamSet with the given dimensions and spawn genes
+    /// (Map Size, 2026-07-21). Spawns land over the two test platforms.</summary>
+    private static ParamSet StageParamsFor(float visW, float visH, Vec2 spawn1, Vec2 spawn2)
+    {
+        var values = new float[DefaultSchemas.Stage.Count];
+        void Set(string key, float value) => values[DefaultSchemas.Stage.IndexOf(key)] = value;
+        Set(StageParams.VisibleHalfWidth, visW);
+        Set(StageParams.VisibleHalfHeight, visH);
+        Set(StageParams.KoMarginFraction, 0.1f);
+        Set(StageParams.PlatformCount, 2f);
+        Set(StageParams.MaxPlatformSize, 6f);
+        Set(StageParams.Mirrored, 1f);
+        Set(StageParams.Spawn1X, spawn1.X);
+        Set(StageParams.Spawn1Y, spawn1.Y);
+        Set(StageParams.Spawn2X, spawn2.X);
+        Set(StageParams.Spawn2Y, spawn2.Y);
+        return new ParamSet(DefaultSchemas.Stage, values);
+    }
+
+    /// <summary>
+    /// Regression for the 2026-07-22 air-jump-conservation fix (DEVIATIONS #28). Two
+    /// platforms adjacent at the SAME height (touching at x = 0) are one walkable
+    /// surface: an agent at the seam edge with the opponent on the far platform must
+    /// WALK across, not hop. The pre-fix traversal always jumped for a same-or-higher
+    /// next platform, burning the air jump between touching platforms — a primary
+    /// driver of the large-map oscillation (the agent stranded itself
+    /// AirJumpsExhausted and could neither attack nor jump).
+    /// </summary>
+    [Fact]
+    public void TraversalWalksBetweenAdjacentSameHeightPlatforms()
+    {
+        CharacterGenome Make(string name) =>
+            new(name, 3, 0, TestGames.Character(), new[] { new MoveGenome(TestGames.Move(), 0) });
+        var stage = new StageGenome(
+            new[] { new PlatformGene(-6, -3, 6, 1), new PlatformGene(0, -3, 6, 1) }, // tops both −2, touch at x=0
+            StageParamsFor(20f, 8f, new Vec2(-3f, 0f), new Vec2(3f, 0f)));
+        var genome = new GameGenome(new[] { Make("P1"), Make("P2") }, stage);
+
+        // Self at the seam edge on the left platform, opponent on the right platform.
+        SimWorld world = SettledWorld(genome, new Vec2(-0.3f, -1.4f), new Vec2(3f, -1.4f));
+        Assert.True(world.Players[0].IsGrounded);
+        InputFrame input = new UtilityAgent(new Pcg32(1), Greedy).GetInput(world, 0);
+        Assert.Equal(1f, input.Horizontal); // toward the far platform
+        Assert.False(input.Jump);           // …by walking across the seam, not hopping
     }
 
     [Fact]
@@ -297,12 +344,19 @@ public class UtilityAgentTests
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 0)),
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 1)),
         });
-        // Re-pinned 2026-07-13 (3rd): fast-fall/crouch/DI — hash format grew and the
-        // agent gained the vertical channel (one more RNG draw per decision). Prior
-        // pins: 11582576729381719023 (vulnerable disengage), 5206514131316504700
-        // (dash), 17369012423366605927 (shield), 2695584452249808183,
-        // 13063472053697347474, 4239894947699402948 / 8169156236120396373,
-        // 3417322836374644188, 15992591370472251803 (initial).
-        Assert.Equal(15547022023902356175UL, result.FinalHash);
+        // Re-pinned 2026-07-22: agent air-jump-conservation (DEVIATIONS #28 — the
+        // large-map oscillation fix). Two behavior refinements changed the utility
+        // instrument's decisions: ThreatDodge no longer spends the AIR jump to flinch
+        // (grounded hops only), and traversal only jumps for a real height gain or gap
+        // (walks between adjacent same-height platforms). GameC's match on the legacy
+        // map is materially unchanged (30-seed exhaustion/attack/damage steady), but
+        // individual decisions differ at the bit level, so the hash moves. Prior pins:
+        // 13491356924705028714 (300 s timeout), 15547022023902356175
+        // (fast-fall/crouch/DI), 11582576729381719023 (vulnerable disengage),
+        // 5206514131316504700 (dash), 17369012423366605927 (shield),
+        // 2695584452249808183, 13063472053697347474,
+        // 4239894947699402948 / 8169156236120396373, 3417322836374644188,
+        // 15992591370472251803 (initial).
+        Assert.Equal(6003077694252399340UL, result.FinalHash);
     }
 }

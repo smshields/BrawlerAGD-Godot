@@ -149,9 +149,9 @@ public sealed class DecisionTreeAgent : IInputSource
     /// </summary>
     private static Vec2 ClosestSensedPlatformPoint(SimWorld world, SimPlayer self)
     {
-        var sense = new Aabb(
-            self.Position,
-            new Vec2(world.Config.PlatformSenseHalfWidth, world.Config.PlatformSenseHalfHeight));
+        // 2026-07-21 (Map Size, DEVIATIONS #27): half extents scale with map size —
+        // exactly the Unity 20×15 box on legacy-size maps.
+        var sense = new Aabb(self.Position, world.PlatformSenseHalf);
 
         Vec2 nearest = Vec2.Zero;
         float best = float.PositiveInfinity;

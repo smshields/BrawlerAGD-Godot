@@ -70,13 +70,32 @@ public class Phase1PipelineTests
     [Fact]
     public void PopulationFingerprintMatchesGoldenValue()
     {
-        // Re-pinned 2026-07-20 (2nd): REFLECT genes appended to the shield and dash
-        // schemas (one extra generation draw each) — a real design-space change.
-        // Prior pins: 11998549590211428551 (five buttons), 6139255332495310431
-        // (v5 bytes only), 5768454974650524447 (fast fall/crouch/DI),
-        // 16079587979934170348 (dash slot), 10607725140721060960 (shield),
-        // 5432710911100783110 (two moves), 13551893661434631362,
-        // 9300943650238635838.
-        Assert.Equal(10906770023368156630UL, RunPipeline(20260707));
+        // Re-pinned 2026-07-27: the platform fit's body-gap pass became an ITERATIVE
+        // multi-strategy solver (designer: asymmetric gaps still appeared in play) —
+        // re-scans after every move, five strategies per corridor, force-dock fallback.
+        // RNG-free like its predecessor: only platform coordinates differ. Audited
+        // seeds 1-800: asymmetric corridors 248 stages → ZERO, connectivity unchanged,
+        // zero overlaps. Match goldens unmoved. Prior pin 10847440123006787147.
+        // Re-pinned 2026-07-22 (2nd): per-character platform fit — Generate/Crossover/
+        // Mutate now MOVE platforms so both characters can traverse (RNG-free, so draw
+        // order is unchanged; only platform coordinates differ). Match goldens unmoved.
+        // Re-pinned 2026-07-22: Spawning Behaviors appended two stage genes
+        // (platformSpawnDuration, spawnInvulnDuration) — two more generation draws per
+        // stage and two more serialized fields. Match goldens unmoved (feature defaults
+        // off on legacy games). Prior pins below.
+        // Re-pinned 2026-07-21 (3rd): Map Size — the stage grew an 11-gene ParamSet
+        // (new generation/crossover/mutation draws), the generator was rewritten for
+        // dynamic dimensions/symmetry, and game.json became v7 (stage params in the
+        // serialized bytes). Second pin same day: growth-stack RE-SEEDING so platform
+        // budgets actually fill (was 25% lone-pair stages; now 96% mean fill). Third:
+        // BODY-SAFE spawn columns + degenerate-layout regrow (the spawn-eject deaths
+        // found by the tall-narrow and seed-152 probes).
+        // Prior pins: 17408519500504785457 / 11630069815993670970 (map size, same
+        // day), 10906770023368156630 (reflect genes), 11998549590211428551 (five
+        // buttons), 6139255332495310431 (v5 bytes only), 5768454974650524447
+        // (fast fall/crouch/DI), 16079587979934170348 (dash slot),
+        // 10607725140721060960 (shield), 5432710911100783110 (two moves),
+        // 13551893661434631362, 9300943650238635838.
+        Assert.Equal(9743610122867389384UL, RunPipeline(20260707));
     }
 }

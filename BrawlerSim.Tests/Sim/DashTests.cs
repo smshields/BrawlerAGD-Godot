@@ -139,14 +139,17 @@ public class DashTests
     [Fact]
     public void AirBudgetAllowsAllThreeOrderingsThenExhausts()
     {
-        // jump - jump - dash: after both jumps (AirJumpsExhausted) the dash still fires;
-        // afterwards the character is fully exhausted until landing.
+        // jump - jump - dash: both jumps spent but the dash in hand keeps the
+        // character in Air (2026-07-23 exhaustion rule, DEVIATIONS #31); the dash
+        // still fires; afterwards the character is fully exhausted until landing.
         SimWorld world = Grounded(DashArena(), -6f, 6f);
         SimPlayer p = world.Players[0];
         Tick(world, 1, new InputFrame(0f, 0f, true, 0));
         Tick(world, 2, InputFrame.Neutral);
         Tick(world, 1, new InputFrame(0f, 0f, true, 0));
-        Assert.Equal(PlayerState.AirJumpsExhausted, p.State);
+        Assert.Equal(PlayerState.Air, p.State); // NOT exhausted — the dash remains
+        Assert.True(p.JumpsExhausted);
+        Assert.False(p.FullyAirExhausted);
         Tick(world, 1, PressDash);
         Assert.Equal(PlayerState.Dash, p.State); // the third air action
         Assert.True(p.AirDashUsed);
@@ -294,7 +297,8 @@ public class DashTests
         self.JumpsExhausted = true;
         world.Players[1].Position = new Vec2(6f, -1.4f);
         world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
-        Assert.Equal(PlayerState.AirJumpsExhausted, self.State);
+        // 2026-07-23 exhaustion rule: jumps spent + dash in hand = still Air.
+        Assert.Equal(PlayerState.Air, self.State);
 
         var agent = new UtilityAgent(new Pcg32(1), new AgentConfig { Randomness = 0f, DecisionIntervalTicks = 1 });
         InputFrame input = agent.GetInput(world, 0);
@@ -343,20 +347,42 @@ public class DashTests
     }
 
     [Fact]
-    public void ExhaustedJumpersWithADashInHandStillDisengage()
+    public void JumpsSpentWithADashInHandIsNotExhausted()
     {
-        // Designer playtest report (2026-07-13): AirJumpsExhausted characters chased
-        // again — the dash feature had re-keyed "exhausted" to jumps+dash spent, so a
-        // dash in hand re-enabled the chase. They cannot ATTACK in that state, so
-        // proximity is exposure regardless of the dash (which stays available for
-        // recovery/escape). Mid-air near the opponent: drift AWAY.
-        SimWorld world = Grounded(DashArena(), -2f, 1f);
+        // Designer bug report (2026-07-23, DEVIATIONS #31): air jumps were flipping
+        // the character into the EXHAUSTED state with the dash still unused. The
+        // exhausted state (and its movement-only lockout) must require jump, jump,
+        // AND dash — with a dash in hand the character stays in Air, where attacks
+        // still work.
+        SimWorld world = Grounded(DashArena(), -6f, 6f);
+        SimPlayer p = world.Players[0];
+        Tick(world, 1, new InputFrame(0f, 0f, true, 0));
+        Tick(world, 2, InputFrame.Neutral);
+        Tick(world, 1, new InputFrame(0f, 0f, true, 0)); // air jump — dash unspent
+        Assert.Equal(PlayerState.Air, p.State);
+        Assert.False(p.FullyAirExhausted);
+        // Attacks remain available in the window (the state carries its semantics).
+        Tick(world, 1, new InputFrame(0f, 0f, false, InputFrame.ActionBit(0)));
+        Assert.Equal(PlayerState.WarmUp, p.State);
+    }
+
+    [Fact]
+    public void FullyExhaustedJumpersDisengageInsteadOfChasing()
+    {
+        // The 2026-07-13 exhausted-disengage caution, re-keyed by the 2026-07-23
+        // exhaustion rule: it now fires when the WHOLE air budget is gone (jumps AND
+        // dash) — a dash in hand keeps the character in Air, where it can attack, so
+        // chasing there is legitimate. Fully spent mid-air near the opponent: drift
+        // AWAY.
+        var world = new SimWorld(DashArena());
         SimPlayer self = world.Players[0];
-        world.Tick(stackalloc[] { new InputFrame(0f, 0f, true, 0), InputFrame.Neutral });
+        self.Position = new Vec2(-2f, -0.5f); // mid-air near the opponent
+        self.JumpsExhausted = true;
+        self.AirDashUsed = true; // the whole budget is gone
+        world.Players[1].Position = new Vec2(1f, -1.4f);
         world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
-        world.Tick(stackalloc[] { new InputFrame(0f, 0f, true, 0), InputFrame.Neutral });
         Assert.Equal(PlayerState.AirJumpsExhausted, self.State);
-        Assert.True(self.CanDash); // the dash is unspent — and must not re-enable chasing
+        Assert.False(self.CanDash);
 
         var agent = new UtilityAgent(new Pcg32(1), new AgentConfig { Randomness = 0f, DecisionIntervalTicks = 1 });
         InputFrame input = agent.GetInput(world, 0);

@@ -23,10 +23,40 @@ public sealed class SimWorld
     private readonly SimPlayer[] _players;
     private readonly Aabb _blastZone;
 
+    // Spawning Behaviors (2026-07-22, docs/features/spawn-and-polish.md). The feature is
+    // a per-level property; off ⇒ every path below is bypassed and the sim is
+    // byte-for-byte pre-feature (including the state hash — its spawn section is gated).
+    private readonly bool _spawnFeatureActive;
+    private readonly int _platformSpawnTicks;
+    private readonly int _spawnInvulnTicks;
+    private readonly Aabb[] _spawnPads = new Aabb[2];          // per-player pad geometry (static)
+    private readonly Aabb[][] _platformsWithPad = new Aabb[2][]; // static platforms + that player's pad
+
+    /// <summary>The spawn pad for player i (2026-07-22) — a thin platform under the
+    /// spawn point, solid to its owner only. Active state lives on the player
+    /// (SpawnPadActive); this is the fixed geometry, for the view.</summary>
+    public Aabb SpawnPad(int playerIndex) => _spawnPads[playerIndex];
+
     /// <summary>Live projectiles in spawn order — the first non-player entities in
     /// the sim (2026-07-14). List order is part of the determinism contract.</summary>
     public IReadOnlyList<SimProjectile> Projectiles => _projectiles;
     private readonly List<SimProjectile> _projectiles = new();
+
+    /// <summary>The KO boundary, genome-driven since Map Size (2026-07-21): visible
+    /// half extents × (1 + koMargin). Legacy stage params reproduce the old
+    /// MatchConfig constants bit-exactly (regression-tested).</summary>
+    public Aabb BlastZone => _blastZone;
+
+    /// <summary>Visible-map half extents (the camera's max zoom-out box).</summary>
+    public Vec2 VisibleHalf { get; }
+
+    /// <summary>
+    /// AI platform-sensing half extents (2026-07-21, DEVIATIONS #27): the fixed Unity
+    /// 20×15 sense box scaled by how much larger than legacy this map is (never
+    /// scaled DOWN — small maps keep the full instrument). On legacy-size maps the
+    /// factor is exactly 1, leaving the fitness instrument untouched.
+    /// </summary>
+    public Vec2 PlatformSenseHalf { get; }
 
     public SimWorld(GameGenome genome, MatchConfig? config = null)
     {
@@ -34,13 +64,58 @@ public sealed class SimWorld
         Platforms = genome.Stage.Platforms
             .Select(p => Aabb.FromRect(p.X, p.Y, p.XSize, p.YSize))
             .ToArray();
-        _blastZone = new Aabb(Vec2.Zero, new Vec2(Config.BlastZoneHalfWidth, Config.BlastZoneHalfHeight));
 
-        Vec2 spawn1 = ComputeSpawn(genome.Stage);
-        Vec2 spawn2 = SafeSpawn(new Vec2(-spawn1.X, spawn1.Y), genome.Stage);
+        Params.ParamSet stage = genome.Stage.Params;
+        VisibleHalf = new Vec2(
+            stage.Get(StageParams.VisibleHalfWidth), stage.Get(StageParams.VisibleHalfHeight));
+        _blastZone = new Aabb(Vec2.Zero, StageRules.BlastHalfExtents(stage));
+        PlatformSenseHalf = new Vec2(
+            Config.PlatformSenseHalfWidth
+                * MathF.Max(1f, VisibleHalf.X / StageRules.LegacyVisibleHalfWidth),
+            Config.PlatformSenseHalfHeight
+                * MathF.Max(1f, VisibleHalf.Y / StageRules.LegacyVisibleHalfHeight));
+
+        // Spawn genes are consumed as stored (repair lives in the genetic ops, see
+        // StageRules.RepairSpawns) — only the legacy inside-a-platform nudge applies,
+        // exactly as the pre-feature sim did.
+        Vec2 spawn1 = StageRules.LegacySafeSpawn(
+            new Vec2(stage.Get(StageParams.Spawn1X), stage.Get(StageParams.Spawn1Y)),
+            genome.Stage.Platforms);
+        Vec2 spawn2 = StageRules.LegacySafeSpawn(
+            new Vec2(stage.Get(StageParams.Spawn2X), stage.Get(StageParams.Spawn2Y)),
+            genome.Stage.Platforms);
         _players = new SimPlayer[2];
         _players[0] = new SimPlayer(0, genome.Characters[0], spawn1, Config);
         _players[1] = new SimPlayer(1, genome.Characters[1], spawn2, Config);
+
+        // Spawning Behaviors (2026-07-22): per-level durations → tick counts + feature
+        // gate. The pad sits just under each spawn body's feet (SpawnPosition is the
+        // body center at the +2 hover point). _platformsWithPad[i] is the owner's
+        // collision set; the opponent's physics never receives it, so it phases through.
+        _platformSpawnTicks = Config.ToTicks(StageRules.PlatformSpawnSeconds(stage));
+        _spawnInvulnTicks = Config.ToTicks(StageRules.SpawnInvulnSeconds(stage));
+        _spawnFeatureActive = StageRules.SpawnFeatureActive(stage);
+        for (int i = 0; i < 2; i++)
+        {
+            SimPlayer p = _players[i];
+            var padCenter = new Vec2(
+                p.SpawnPosition.X, p.SpawnPosition.Y - p.BodyHalf.Y - Config.SpawnPadHalfHeight);
+            _spawnPads[i] = new Aabb(padCenter, new Vec2(Config.SpawnPadHalfWidth, Config.SpawnPadHalfHeight));
+            var withPad = new Aabb[Platforms.Count + 1];
+            for (int k = 0; k < Platforms.Count; k++)
+            {
+                withPad[k] = Platforms[k];
+            }
+            withPad[^1] = _spawnPads[i];
+            _platformsWithPad[i] = withPad;
+        }
+        if (_spawnFeatureActive)
+        {
+            // Match start (2026-07-22 designer): appear on the pad immediately — the 3 s
+            // blackout is respawns only.
+            _players[0].Materialize(_platformSpawnTicks, _spawnInvulnTicks);
+            _players[1].Materialize(_platformSpawnTicks, _spawnInvulnTicks);
+        }
     }
 
     public void Tick(ReadOnlySpan<InputFrame> inputs)
@@ -50,10 +125,31 @@ public sealed class SimWorld
             return;
         }
 
+        // 0. Spawn lifecycle (2026-07-22): blackout countdown → materialize on the pad;
+        //    spawn-timer countdowns for present players. Absent (blacked-out) players
+        //    take no input/FSM this tick. Whole block is a no-op when the feature is off.
         // 1. Input + state machines, fixed player order.
         for (int i = 0; i < _players.Length; i++)
         {
             SimPlayer player = _players[i];
+            if (player.RespawnBlackoutLeft > 0)
+            {
+                if (--player.RespawnBlackoutLeft == 0)
+                {
+                    player.Materialize(_platformSpawnTicks, _spawnInvulnTicks);
+                    player.StepStateMachine(inputs[i]); // fresh timers; skip this tick's countdowns
+                }
+                continue; // still absent, or just materialized (already stepped)
+            }
+            if (player.SpawnInvulnTicksLeft > 0)
+            {
+                player.SpawnInvulnTicksLeft--;
+            }
+            if (player.SpawnPadActive && --player.SpawnPadTicksLeft <= 0)
+            {
+                player.SpawnPadActive = false;  // platform lifetime expired
+                player.SpawnIntangible = false;
+            }
             if (player.InvincibleTicksLeft > 0)
             {
                 player.InvincibleTicksLeft--;
@@ -61,19 +157,41 @@ public sealed class SimWorld
             player.StepStateMachine(inputs[i]);
         }
 
-        // 2. Kinematics + collision (platforms and the opponent's body), fixed order.
+        // 2. Kinematics + collision. The spawn pad is solid to its OWNER only (the
+        //    opponent's step never receives it → phases through). Absent players skip.
         for (int i = 0; i < _players.Length; i++)
         {
-            SimPhysics.Step(_players[i], _players[1 - i], Platforms, Config);
+            if (_players[i].IsRespawning)
+            {
+                continue;
+            }
+            IReadOnlyList<Aabb> plats = _players[i].SpawnPadActive ? _platformsWithPad[i] : Platforms;
+            SimPhysics.Step(_players[i], _players[1 - i], plats, Config);
+        }
+
+        // 2.5. Spawn-pad leave detection (2026-07-22): once the owner is no longer
+        //      resting on the pad it despawns and intangibility ends immediately.
+        for (int i = 0; i < _players.Length; i++)
+        {
+            SimPlayer player = _players[i];
+            if (player.SpawnPadActive && LeftPad(player, _spawnPads[i]))
+            {
+                player.SpawnPadActive = false;
+                player.SpawnIntangible = false;
+            }
         }
 
         // 3. Body-vs-body contact, then shield spacing (2026-07-12: a raised shield
         //    expels the opponent — fixed player order, positional push capped per tick
         //    plus a low outward velocity floor; FEATURES.md "never enough to kill").
-        SimPhysics.ResolvePlayerContact(_players[0], _players[1], Config);
-        for (int i = 0; i < _players.Length; i++)
+        //    Skipped entirely when either player is absent.
+        if (!_players[0].IsRespawning && !_players[1].IsRespawning)
         {
-            PushWithShield(shielder: _players[i], opponent: _players[1 - i]);
+            SimPhysics.ResolvePlayerContact(_players[0], _players[1], Config);
+            for (int i = 0; i < _players.Length; i++)
+            {
+                PushWithShield(shielder: _players[i], opponent: _players[1 - i]);
+            }
         }
 
         // 3.5. Projectiles (2026-07-14): step lives (closed-form reposition, then the
@@ -97,6 +215,10 @@ public sealed class SimWorld
             {
                 break;
             }
+            if (player.IsRespawning)
+            {
+                continue; // absent during the blackout — cannot be KO'd
+            }
             if (!player.Body.Overlaps(_blastZone))
             {
                 // Unity parity: dying with 0 stocks ends the match; otherwise decrement
@@ -107,9 +229,14 @@ public sealed class SimWorld
                     IsOver = true;
                     LoserIndex = player.Index;
                 }
+                else if (_spawnFeatureActive)
+                {
+                    // 2026-07-22: go absent for the blackout, then Materialize on the pad.
+                    player.BeginRespawn(Config.RespawnBlackoutTicks);
+                }
                 else
                 {
-                    player.Respawn();
+                    player.Respawn(); // instant (pre-feature parity)
                 }
             }
         }
@@ -196,7 +323,11 @@ public sealed class SimWorld
                     continue;
                 }
             }
-            if (!overlaps || victim.InvincibleTicksLeft > 0)
+            // Spawn immunity (2026-07-22): an intangible or invulnerable victim takes no
+            // damage/knockback; an absent (blacked-out) one isn't on stage. The bolt
+            // passes THROUGH rather than being consumed (nothing was blocked).
+            if (!overlaps || victim.InvincibleTicksLeft > 0
+                || victim.SpawnDamageImmune || victim.IsRespawning)
             {
                 continue;
             }
@@ -270,6 +401,17 @@ public sealed class SimWorld
         }
     }
 
+    /// <summary>The owner is no longer resting on its spawn pad (2026-07-22): its feet
+    /// left the pad's span or lifted off the pad's top. Tolerance matches the physics
+    /// skin so a settled body reads as still-on.</summary>
+    private static bool LeftPad(SimPlayer player, in Aabb pad)
+    {
+        const float tol = 0.05f;
+        float feet = player.Body.Bottom;
+        return player.Position.X < pad.Left || player.Position.X > pad.Right
+            || feet > pad.Top + tol || feet < pad.Top - tol;
+    }
+
     private bool InsideBlastZone(Vec2 p) =>
         p.X >= _blastZone.Left && p.X <= _blastZone.Right
         && p.Y >= _blastZone.Bottom && p.Y <= _blastZone.Top;
@@ -333,7 +475,10 @@ public sealed class SimWorld
     /// </summary>
     private void TryHit(SimPlayer attacker, SimPlayer victim)
     {
-        if (!attacker.HitboxActive || victim.InvincibleTicksLeft > 0)
+        // Spawn immunity / blackout (2026-07-22): no damage to an intangible/invulnerable
+        // or absent victim; an absent attacker has no live hitbox.
+        if (!attacker.HitboxActive || victim.InvincibleTicksLeft > 0
+            || victim.SpawnDamageImmune || victim.IsRespawning || attacker.IsRespawning)
         {
             return;
         }
@@ -526,6 +671,21 @@ public sealed class SimWorld
                 hash = Fnv1a.Add(hash, proj.ReflectTick);
             }
         }
+        // 2026-07-22 spawning behaviors: another gated suffix, appended ONLY when the
+        // per-level feature is active — feature-off matches (every pre-v8 game, all the
+        // golden pins) hash exactly as before. Safe for the same suffix reason as the
+        // projectile section: "no section" cannot collide with a present one.
+        if (_spawnFeatureActive)
+        {
+            foreach (SimPlayer p in _players)
+            {
+                hash = Fnv1a.Add(hash, p.RespawnBlackoutLeft);
+                hash = Fnv1a.Add(hash, p.SpawnPadActive ? 1 : 0);
+                hash = Fnv1a.Add(hash, p.SpawnPadTicksLeft);
+                hash = Fnv1a.Add(hash, p.SpawnIntangible ? 1 : 0);
+                hash = Fnv1a.Add(hash, p.SpawnInvulnTicksLeft);
+            }
+        }
         return hash;
     }
 
@@ -545,38 +705,4 @@ public sealed class SimWorld
             StateHash(),
             trace);
 
-    /// <summary>
-    /// Unity spawn rules (ArenaManager): player 1 spawns centered above the initial
-    /// platform, +2 above its top, nudged upward while inside any platform; player 2
-    /// mirrors across x = 0 with the same nudge.
-    /// </summary>
-    private static Vec2 ComputeSpawn(StageGenome stage)
-    {
-        PlatformGene initial = stage.Platforms[0];
-        int x = initial.X + (initial.XSize + 1) / 2;
-        int y = initial.Y + initial.YSize + 2;
-        return SafeSpawn(new Vec2(x, y), stage);
-    }
-
-    private static Vec2 SafeSpawn(Vec2 candidate, StageGenome stage)
-    {
-        float y = candidate.Y;
-        while (SpawnInsideAnyPlatform(candidate.X, y, stage))
-        {
-            y += 1f;
-        }
-        return new Vec2(candidate.X, y);
-    }
-
-    private static bool SpawnInsideAnyPlatform(float x, float y, StageGenome stage)
-    {
-        foreach (PlatformGene p in stage.Platforms)
-        {
-            if (x >= p.X && x <= p.X + p.XSize && y >= p.Y && y <= p.Y + p.YSize)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
 }

@@ -352,6 +352,8 @@ public partial class EvolveView : Control
             ("move", DefaultSchemas.Move),
             ("shield", DefaultSchemas.Shield),
             ("dash", DefaultSchemas.Dash),
+            ("projectile", DefaultSchemas.Projectile), // 2026-07-22 (designer)
+            ("stage", DefaultSchemas.Stage), // 2026-07-21 Map Size
         })
         {
             var section = new Label { Text = name.ToUpperInvariant() };

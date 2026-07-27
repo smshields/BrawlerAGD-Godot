@@ -82,6 +82,37 @@ public class ParamSchemaTests
         AssertSchema(DefaultSchemas.Move, expected);
     }
 
+    /// <summary>
+    /// Regression pin of the stage design space (2026-07-21, Map Size —
+    /// docs/features/map-size.md). Size genes span 0.5×–5× the legacy dimensions;
+    /// the legacy visibleHalfWidth reference is 11·(16/9)/2 (the blast width without
+    /// its second 1.1 Unity-quirk factor) so legacy blast zones reconstruct
+    /// bit-exactly. Order matters: single-point crossover operates on indices.
+    /// </summary>
+    [Fact]
+    public void StageSchemaMatchesDesignRecord()
+    {
+        const float legacyHalfWidth = 11f * (16f / 9f) / 2f;
+        var expected = new (string Key, float Min, float Max)[]
+        {
+            ("visibleHalfWidth", legacyHalfWidth * 0.5f, legacyHalfWidth * 5f),
+            ("visibleHalfHeight", 2.5f, 25f),
+            ("koMarginFraction", 0.05f, 0.25f),
+            ("platformCount", 2f, 16f),
+            ("maxPlatformSize", 3f, 14f),
+            ("mirrored", 0f, 1f),
+            ("mirrorSide", 0f, 1f),
+            ("spawn1X", -49f, 49f),
+            ("spawn1Y", -25f, 26f),
+            ("spawn2X", -49f, 49f),
+            ("spawn2Y", -25f, 26f),
+            // Spawning Behaviors (2026-07-22): platform lifetime + character invuln.
+            ("platformSpawnDuration", 1f, 5f),
+            ("spawnInvulnDuration", 1f, 3f),
+        };
+        AssertSchema(DefaultSchemas.Stage, expected);
+    }
+
     private static void AssertSchema(ParamSchema schema, (string Key, float Min, float Max)[] expected)
     {
         Assert.Equal(expected.Length, schema.Count);

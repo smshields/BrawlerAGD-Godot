@@ -47,12 +47,9 @@ public partial class StageView : Node2D
         {
             DrawPlatform(platform);
         }
-
-        var blast = new SimAabb(
-            BrawlerSim.Determinism.Vec2.Zero,
-            new BrawlerSim.Determinism.Vec2(
-                _world.Config.BlastZoneHalfWidth, _world.Config.BlastZoneHalfHeight));
-        DrawRect(ToScreen(blast), new Color(1f, 0.4f, 0.35f, 0.25f), filled: false, width: 2f);
+        // The blast boundary is deliberately NOT drawn (2026-07-21): pre-camera it sat
+        // off-screen by construction; the zooming camera can now reach the KO box on
+        // small maps, and hidden off-screen death is an intentional design rule.
     }
 
     private void DrawPlatform(in SimAabb platform)
@@ -89,9 +86,4 @@ public partial class StageView : Node2D
         return cx == cols - 1 ? "D" : (cx == 0 ? "A" : "S");
     }
 
-    private Rect2 ToScreen(in SimAabb box) => new(
-        box.Left * _ppu,
-        -box.Top * _ppu,
-        (box.Right - box.Left) * _ppu,
-        (box.Top - box.Bottom) * _ppu);
 }

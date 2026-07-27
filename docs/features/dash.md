@@ -128,6 +128,22 @@ exploit-closure) — but champion quality under the fixed agent jumps: re-evals
 further (95/109 per evaluation; one champion lands 38 i-frame dodges). Clip:
 runs/media/dashfix801_best.mp4.
 
+## Amendment 2026-07-23: the exhaustion rule (designer bug report, DEVIATIONS #31)
+
+"Air Jumps are leading to exhausted states without dash usage — we should only
+exhaust on jump, jump and dash." The `AirJumpsExhausted` STATE had kept its
+pre-dash entry point (air jump spent ⇒ exhausted) even though the budget doc above
+promised full exhaustion = 2 jumps AND the dash. Now `SimPlayer.FullyAirExhausted`
+(jumps spent AND (dash spent OR no dash)) gates every entry into the state: a
+character with a dash in hand stays in `Air` with FULL air abilities — including
+attacks — until the dash resolves airborne. This supersedes the 2026-07-13
+"dash in hand must not re-enable chasing" rule, whose premise (cannot attack in
+that state) no longer exists; the agent's state-keyed reads stay correct
+unchanged, and the exhausted-disengage caution now keys on full exhaustion by
+construction. Dash-less characters reduce bit-for-bit to the old rule — all
+goldens and the fingerprint unmoved. Trial evolutions healthy
+(runs/media/charts/exhaustion-rule-trajectories.png).
+
 ## Amendment 2026-07-20: the reflect gene (designer)
 
 Sixth dash parameter: `reflect` (bool-as-float, active ≥ 0.5). Any projectile

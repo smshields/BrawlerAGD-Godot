@@ -63,6 +63,10 @@ public static class SimPhysics
         {
             return;
         }
+        // A spawn-intangible player (2026-07-22) phases through the opponent entirely —
+        // no body-vs-body clamp either way; an ABSENT (blacked-out) opponent isn't there
+        // to collide with at all.
+        bool phaseThrough = player.SpawnIntangible || opponent.SpawnIntangible || opponent.IsRespawning;
         bool overlappedBefore = player.Body.Overlaps(opponent.Body);
         player.Position += horizontal ? new Vec2(delta, 0f) : new Vec2(0f, delta);
 
@@ -71,7 +75,7 @@ public static class SimPhysics
         // belongs to the capped resolver, never to a face snap. The contact face comes
         // from relative position (nearest side), not motion direction: a squeezed
         // player moving "down" is not necessarily above the opponent.
-        if (!overlappedBefore && player.Body.Overlaps(opponent.Body))
+        if (!phaseThrough && !overlappedBefore && player.Body.Overlaps(opponent.Body))
         {
             Aabb other = opponent.Body;
             if (horizontal)
@@ -151,6 +155,11 @@ public static class SimPhysics
     /// </summary>
     public static void ResolvePlayerContact(SimPlayer a, SimPlayer b, MatchConfig config)
     {
+        // Either player spawn-intangible (2026-07-22) ⇒ they phase through, no contact.
+        if (a.SpawnIntangible || b.SpawnIntangible)
+        {
+            return;
+        }
         Aabb bodyA = a.Body;
         Aabb bodyB = b.Body;
         if (!bodyA.Overlaps(bodyB))

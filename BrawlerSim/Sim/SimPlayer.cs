@@ -90,6 +90,7 @@ public sealed class SimPlayer
     private readonly SimMove?[] _moves;
     private readonly SimShield?[] _shields;
     private readonly SimDash?[] _dashes;
+    private readonly bool _hasDash;
     private readonly SimProjectileMove?[] _projectileMoves;
     private readonly int[] _buttonMoves;
 
@@ -125,6 +126,19 @@ public sealed class SimPlayer
     public float Damage;
     public int Stocks;
     public int InvincibleTicksLeft;
+
+    // Spawning Behaviors (2026-07-22, docs/features/spawn-and-polish.md — all hashed
+    // only when the per-level spawn feature is active; 0/false otherwise = pre-feature
+    // sim byte-for-byte). RespawnBlackoutLeft > 0 ⇒ the character is ABSENT (no input,
+    // physics, contact, hits, or blast this tick — waiting to reappear). SpawnPadActive
+    // ⇒ the spawn platform exists and is solid to THIS player. SpawnIntangible ⇒ ignores
+    // damage AND character collision (opponent phases through). SpawnInvulnTicksLeft > 0
+    // ⇒ ignores damage but keeps collision — counts down independently, ends on timer.
+    public int RespawnBlackoutLeft;
+    public bool SpawnPadActive;
+    public int SpawnPadTicksLeft;
+    public bool SpawnIntangible;
+    public int SpawnInvulnTicksLeft;
     public int CurrentMoveIndex;         // index into Moves; set by StartMove/StartShield (hashed state)
 
     // Shield state (2026-07-12, all hashed): per-slot health persists across
@@ -206,6 +220,7 @@ public sealed class SimPlayer
         _moves = genome.Moves.Select(m => m.Type == MoveType.Attack ? new SimMove(m, config) : null).ToArray();
         _shields = genome.Moves.Select(m => m.Type == MoveType.Shield ? new SimShield(m, config) : null).ToArray();
         _dashes = genome.Moves.Select(m => m.Type == MoveType.Dash ? new SimDash(m, config) : null).ToArray();
+        _hasDash = _dashes.Any(d => d is not null);
         // Projectile resolution needs the scaled body (owner-size cap + launch point),
         // so it happens after the ParamSet block below.
         _buttonMoves = genome.ButtonMoves.ToArray();
@@ -303,6 +318,15 @@ public sealed class SimPlayer
     /// <summary>Gravity is suspended and velocity locked while travelling.</summary>
     public bool IsDashTraveling => State == PlayerState.Dash && DashPhase == DashStage.Travel;
 
+    /// <summary>Absent this tick — mid respawn blackout (2026-07-22). No input,
+    /// physics, contact, hits, or blast interaction while true.</summary>
+    public bool IsRespawning => RespawnBlackoutLeft > 0;
+
+    /// <summary>Damage-immune from a spawn (2026-07-22): intangible OR still inside the
+    /// invulnerability window. Distinct from the 0.1 s post-hit InvincibleTicksLeft so
+    /// the agent gate and hit skips can target only the spawn feature.</summary>
+    public bool SpawnDamageImmune => SpawnIntangible || SpawnInvulnTicksLeft > 0;
+
     /// <summary>Per-stage dash i-frames (FEATURES.md): distinct from post-hit
     /// invincibility; negated hits are counted as DashInvulnDodges.</summary>
     public bool DashInvulnerable
@@ -319,6 +343,14 @@ public sealed class SimPlayer
     /// <summary>Can a dash start right now? Grounded always; airborne once per
     /// airtime (the spec's third air action, usable even with jumps spent).</summary>
     public bool CanDash => IsGrounded || !AirDashUsed;
+
+    /// <summary>The air budget is FULLY spent (2026-07-23 designer rule, DEVIATIONS
+    /// #31): the AirJumpsExhausted state — and its movement-only lockout — now
+    /// requires the air jump AND the air dash when the character has one
+    /// (jump, jump, and dash in any order). Jumps spent with a dash still in hand
+    /// stays in Air with full air abilities. Dash-less characters reduce exactly
+    /// to the old jumps-only rule.</summary>
+    public bool FullyAirExhausted => JumpsExhausted && (AirDashUsed || !_hasDash);
 
     /// <summary>Effective (rendered AND blocking) radius: health scaled by the
     /// grow/shrink animation fraction. 0 when not shielding.</summary>
@@ -450,7 +482,13 @@ public sealed class SimPlayer
                     Jumps++;
                     Velocity = Velocity with { Y = AirJumpForce };
                     JumpsExhausted = true;
-                    State = PlayerState.AirJumpsExhausted;
+                    if (FullyAirExhausted)
+                    {
+                        State = PlayerState.AirJumpsExhausted;
+                    }
+                    // else (2026-07-23, DEVIATIONS #31): an unused air dash keeps the
+                    // character in Air with full air abilities — exhaustion requires
+                    // jump, jump, AND dash.
                 }
                 else if (input.Actions != 0)
                 {
@@ -459,18 +497,12 @@ public sealed class SimPlayer
                 return;
 
             case PlayerState.AirJumpsExhausted:
-                // Unity parity: movement only — no attacks once air jumps are spent.
-                // EXCEPT the dash (2026-07-13): it is the third air action and remains
-                // available here until used (jump-jump-dash).
+                // Unity parity: movement only — no attacks once the air budget is
+                // spent. Since the 2026-07-23 exhaustion rule (DEVIATIONS #31) this
+                // state is only entered FULLY spent (jumps AND dash), so the old
+                // dash-entry branch here is unreachable and gone — a dash in hand
+                // keeps the player in Air instead.
                 ApplyHorizontal(input.Horizontal);
-                if (input.Actions != 0)
-                {
-                    int slot = _buttonMoves[input.FirstAction];
-                    if (_dashes[slot] is not null && CanDash)
-                    {
-                        StartDash(slot);
-                    }
-                }
                 return;
         }
     }
@@ -495,7 +527,7 @@ public sealed class SimPlayer
         }
         else if (State == PlayerState.Idle)
         {
-            State = JumpsExhausted ? PlayerState.AirJumpsExhausted : PlayerState.Air;
+            State = FullyAirExhausted ? PlayerState.AirJumpsExhausted : PlayerState.Air;
         }
     }
 
@@ -514,6 +546,8 @@ public sealed class SimPlayer
         PhaseTicksLeft = stunTicks;
     }
 
+    /// <summary>Instant respawn (spawning feature OFF — Unity/pre-feature parity):
+    /// close out the stock and reappear immediately at the spawn point.</summary>
     public void Respawn()
     {
         CompletedStockDamage.Add(Damage);
@@ -524,6 +558,43 @@ public sealed class SimPlayer
         State = PlayerState.Idle;
         PhaseTicksLeft = 0;
         JumpsExhausted = false;
+    }
+
+    /// <summary>Death with the spawning feature ON (2026-07-22): close out the stock,
+    /// then go ABSENT for the blackout. Materialize() places the body on the spawn pad
+    /// when the blackout ends. Position parked at the spawn point (irrelevant while
+    /// absent, but deterministic and off the visible fight).</summary>
+    public void BeginRespawn(int blackoutTicks)
+    {
+        CompletedStockDamage.Add(Damage);
+        Stocks--;
+        Damage = 0f;
+        Velocity = Vec2.Zero;
+        Position = SpawnPosition;
+        State = PlayerState.Idle;
+        PhaseTicksLeft = 0;
+        JumpsExhausted = false;
+        RespawnBlackoutLeft = blackoutTicks;
+        SpawnPadActive = false;
+        SpawnIntangible = false;
+        SpawnInvulnTicksLeft = 0;
+    }
+
+    /// <summary>Appear on the spawn pad, intangible + invulnerable (2026-07-22). Used
+    /// both at match start (feature on, no blackout) and when a respawn blackout ends.</summary>
+    public void Materialize(int platformTicks, int invulnTicks)
+    {
+        Damage = 0f;
+        Velocity = Vec2.Zero;
+        Position = SpawnPosition;
+        State = PlayerState.Idle;
+        PhaseTicksLeft = 0;
+        JumpsExhausted = false;
+        RespawnBlackoutLeft = 0;
+        SpawnPadActive = platformTicks > 0;
+        SpawnPadTicksLeft = platformTicks;
+        SpawnIntangible = platformTicks > 0;
+        SpawnInvulnTicksLeft = invulnTicks;
     }
 
     /// <summary>Routes a pressed button to its slot's action: attacks start from Idle
@@ -778,6 +849,9 @@ public sealed class SimPlayer
         CurrentMoveIndex = moveIndex;
         MoveUses[moveIndex]++;
         State = PlayerState.WarmUp;
+        // Attacking (melee or projectile — this method) ends intangibility if still on
+        // the spawn platform (2026-07-22 designer); invulnerability keeps its timer.
+        SpawnIntangible = false;
         // Projectile moves ride the same WarmUp/Attack/CoolDown FSM (they ARE
         // attacks per spec); only the timing source differs.
         PhaseTicksLeft = _projectileMoves[moveIndex]?.WarmUpTicks ?? Move.WarmUpTicks;
@@ -805,7 +879,7 @@ public sealed class SimPlayer
         PhaseTicksLeft = 0;
         State = IsGrounded
             ? PlayerState.Idle
-            : (JumpsExhausted ? PlayerState.AirJumpsExhausted : PlayerState.Air);
+            : (FullyAirExhausted ? PlayerState.AirJumpsExhausted : PlayerState.Air);
     }
 
     /// <summary>

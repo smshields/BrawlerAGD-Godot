@@ -33,6 +33,7 @@ public sealed record GenerationConfig
     public ParamSchema ShieldSchema { get; init; } = DefaultSchemas.Shield;
     public ParamSchema DashSchema { get; init; } = DefaultSchemas.Dash;
     public ParamSchema ProjectileSchema { get; init; } = DefaultSchemas.Projectile;
+    public ParamSchema StageSchema { get; init; } = DefaultSchemas.Stage; // 2026-07-21 Map Size
 
     public int CharacterCount { get; init; } = 2;
     public int MovesPerCharacter { get; init; } = 2;
@@ -53,6 +54,12 @@ public sealed record GenerationConfig
 
     public int JumpHeight { get; init; } = 2;
     public int JumpLength { get; init; } = 2;
+
+    /// <summary>Legacy Unity MapGenerator inputs (pre-mirror count 3, max size 6).
+    /// Superseded 2026-07-21 by the stage schema's platformCount/maxPlatformSize
+    /// GENES (docs/features/map-size.md); kept as the documented legacy reference
+    /// (StageRules.LegacyPlatformCount/LegacyMaxPlatformSize hold the gene-space
+    /// equivalents) — no longer consumed by the generator.</summary>
     public int PlatformCount { get; init; } = 3;
     public int MaxPlatformSize { get; init; } = 6;
 
@@ -105,6 +112,7 @@ public sealed record GenerationConfig
             ShieldSchema = ApplyOverrides(ShieldSchema, overrides),
             DashSchema = ApplyOverrides(DashSchema, overrides),
             ProjectileSchema = ApplyOverrides(ProjectileSchema, overrides),
+            StageSchema = ApplyOverrides(StageSchema, overrides),
         };
     }
 
@@ -130,7 +138,7 @@ public sealed record GenerationConfig
     }
 
     public StageGenerator CreateStageGenerator() =>
-        new(JumpHeight, JumpLength, PlatformCount, MaxPlatformSize);
+        new(JumpHeight, JumpLength, StageSchema);
 
     public static readonly GenerationConfig Default = new();
 }

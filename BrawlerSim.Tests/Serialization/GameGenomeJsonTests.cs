@@ -87,6 +87,33 @@ public class GameGenomeJsonTests
     }
 
     [Fact]
+    public void PreV7FilesLoadWithLegacyStageParams()
+    {
+        // 2026-07-21 Map Size: a ≤ v6 file has no stage params — it must load with the
+        // legacy dimensions and the OLD derived spawns so replays stay bit-identical.
+        string json = GameGenomeJson.Serialize(NewRecord());
+        json = json.Replace($"\"formatVersion\": {GameGenomeJson.CurrentFormatVersion}", "\"formatVersion\": 6");
+        json = System.Text.RegularExpressions.Regex.Replace(
+            json, "\"stage\": \\{\\s*\"params\": \\{[^}]*\\},", "\"stage\": {");
+        Assert.DoesNotContain("visibleHalfWidth", json);
+
+        GameRecord loaded = GameGenomeJson.Deserialize(json);
+        var expected = StageRules.LegacyParams(loaded.Genome.Stage.Platforms);
+        Assert.Equal(expected.ToArray(), loaded.Genome.Stage.Params.ToArray());
+        Assert.Empty(loaded.Genome.Validate());
+    }
+
+    [Fact]
+    public void StageParamsRoundTripThroughJson()
+    {
+        GameRecord original = NewRecord();
+        string json = GameGenomeJson.Serialize(original);
+        Assert.Contains("\"visibleHalfWidth\"", json);
+        GameRecord loaded = GameGenomeJson.Deserialize(json);
+        Assert.Equal(original.Genome.Stage.Params.ToArray(), loaded.Genome.Stage.Params.ToArray());
+    }
+
+    [Fact]
     public void ButtonMovesRoundTripThroughJson()
     {
         GameRecord original = NewRecord();

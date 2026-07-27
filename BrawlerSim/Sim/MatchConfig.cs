@@ -12,15 +12,22 @@ public sealed record MatchConfig
     /// <summary>Downward gravity magnitude (Unity Physics2D gravity was (0, -9.81)).</summary>
     public float Gravity { get; init; } = 9.81f;
 
-    /// <summary>Match time limit; reaching it ends the match as a draw (Unity: 60 s).</summary>
-    public float MaxMatchSeconds { get; init; } = 60f;
+    /// <summary>Match time limit; reaching it ends the match as a draw. Unity: 60 s;
+    /// raised to 300 s on 2026-07-21 (designer, Map Size feature) as headroom for
+    /// large-map navigation — most matches still end early; run.json records the
+    /// per-run value, so old checkpoints resume with their original 60 s.</summary>
+    public float MaxMatchSeconds { get; init; } = 300f;
     public int MaxTicks => (int)(MaxMatchSeconds * TicksPerSecond);
 
     /// <summary>
-    /// Blast-zone half extents, centered on the origin. Unity sized this at runtime from
-    /// the camera: height = 2·orthoSize(5)·1.1 = 11, width = height·aspect·1.1 — i.e. the
-    /// blast zone DEPENDED ON THE WINDOW ASPECT RATIO. Fixed here to the 16:9 values so
-    /// every match, headless or rendered, plays in the same arena.
+    /// LEGACY blast-zone half extents. Unity sized this at runtime from the camera:
+    /// height = 2·orthoSize(5)·1.1 = 11, width = height·aspect·1.1 — i.e. the blast
+    /// zone DEPENDED ON THE WINDOW ASPECT RATIO (note width carries the 1.1 factor
+    /// twice — a preserved quirk). Fixed to the 16:9 values so every match plays the
+    /// same arena. Since Map Size (2026-07-21) the LIVE blast zone is genome-driven —
+    /// SimWorld computes visible × (1 + koMargin) from the stage params, which
+    /// reproduces these values bit-exactly for legacy games (regression-tested);
+    /// these constants remain only as the documented legacy reference.
     /// </summary>
     public float BlastZoneHalfWidth { get; init; } = 11f * (16f / 9f) * 1.1f / 2f;   // ≈ 10.756
     public float BlastZoneHalfHeight { get; init; } = 11f / 2f;
@@ -39,6 +46,16 @@ public sealed record MatchConfig
 
     /// <summary>Post-hit invincibility (Unity: 0.1 s coroutine).</summary>
     public int InvincibilityTicks { get; init; } = 6;
+
+    /// <summary>Spawning Behaviors (2026-07-22, FEATURES.md §Gameplay Polish;
+    /// docs/features/spawn-and-polish.md). Post-death blackout before the character
+    /// reappears on its spawn platform — fixed (not evolved), respawns only, and only
+    /// engaged when the per-level spawn feature is active. Spawn-platform GEOMETRY:
+    /// a thin pad just under the spawning body's feet (half extents in world units).</summary>
+    public float RespawnBlackoutSeconds { get; init; } = 3f;
+    public int RespawnBlackoutTicks => ToTicks(RespawnBlackoutSeconds);
+    public float SpawnPadHalfWidth { get; init; } = 1.0f;
+    public float SpawnPadHalfHeight { get; init; } = 0.15f;
 
     /// <summary>Projectile path constants (2026-07-14, docs/features/projectiles.md).
     /// One scalar gene per spec ("frequency for waves, scalars for quadratics"), so

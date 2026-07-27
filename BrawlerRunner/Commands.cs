@@ -23,7 +23,7 @@ internal static class Commands
         Console.WriteLine("           [--dropout 0.5] [--mutation 0.4] [--resume]");
         Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
         Console.WriteLine("           [--composition pinned|random|<attack,shield,dash,random x4>] [--type-reroll 0.2]");
-        Console.WriteLine("           [--range \"schema.key=min:max;...\"]  (schemas: character|move|shield|dash)");
+        Console.WriteLine("           [--range \"schema.key=min:max;...\"]  (schemas: character|move|shield|dash|projectile|stage)");
         Console.WriteLine("  evaluate --game <game.json> [--seed 7] [--rounds 5] [--fitness standard-v3|standard-v2]");
         Console.WriteLine("           [--breakdown] [--max-seconds 60] [--target-seconds 45]");
         Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");

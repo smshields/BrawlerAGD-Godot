@@ -72,7 +72,8 @@ recordings), then wait for their confirmation.
 - Headless visual verification (window flashes on screen; needed after any view change):
   env vars `BRAWLER_AUTOPLAY=ai:<seed>`, `BRAWLER_GAME=<abs path>`, `BRAWLER_TRACE`,
   `BRAWLER_SHOT[_DIR]`, `BRAWLER_SHOT_TICKS=60,300`, `BRAWLER_TICKS_PER_FRAME=10`,
-  `BRAWLER_QUIT_AFTER=<s>`, `BRAWLER_SCENE=evolve|manage`, `BRAWLER_AUTOEVOLVE=...`.
+  `BRAWLER_QUIT_AFTER=<s>`, `BRAWLER_SCENE=evolve|manage`, `BRAWLER_AUTOEVOLVE=...`,
+  `BRAWLER_PAUSE_AT=<tick>` (open the pause menu at a sim tick + shoot "paused").
   After adding assets: `Godot --path godot --headless --import` once.
 - Git: commit locally with clear messages; **do NOT push** — remote
   `smshields/BrawlerAGD-Godot` isn't created yet and pushing awaits designer go-ahead
@@ -93,8 +94,25 @@ recordings), then wait for their confirmation.
   These ARE the game's readability system — new states need a tint decision.
   Flash vocabulary (2026-07-20): post-hit invincibility = steady 0.4 alpha ·
   dash i-frames = fast body-alpha strobe (1.0↔0.6) · a just-reflected projectile
-  strobes gold↔white for ~¼ s. Projectiles are gold FILLED shapes; the shield is
-  a white→red OUTLINE circle.
+  strobes gold↔white for ~¼ s · spawn invulnerability = SLOW shimmer pulse
+  (0.7↔1.0, 2026-07-22; distinct from the two above). Projectiles are gold FILLED
+  shapes; the shield is a white→red OUTLINE circle. Spawn platform (2026-07-22) =
+  a SOLID white PILL (rounded rect, bright flat top edge, subtle darker underside —
+  reads as a platform; 2026-07-23 render), quick-fading on despawn. Death flash
+  (re-rendered 2026-07-23) = a tall, narrow, BORDERLESS white streak from the death
+  point, perpendicular-inward from the crossed screen edge (diagonal toward camera
+  center from a screen corner; always on screen), never wider than the character,
+  wrapped in an EXPANDING translucent flame cone; snap-out + hold + fade (0.65 s) +
+  base pop, length∝KO speed+damage. Motion trail (re-rendered 2026-07-23, 3 passes) =
+  state-tinted afterimage ghosts at equal ARC-LENGTH intervals along the recent path
+  (continuous streak at any speed), opacity on an EXPONENTIAL screen-speed ease-in
+  with the floor ABOVE normal run/jump speeds (2026-07-27: nothing at ordinary
+  movement, a hint on dashes, the full streak only at knockback/KO speeds — the
+  trail exists to track extreme speed), min ghost spacing 22 px; a KO/teleport
+  DETACHES the trail to fade in place (~0.5 s) rather than vanish with the body;
+  teleport test is velocity-aware. Projectile trail (2026-07-23) = slight 3-ghost
+  gold comet tail, fainter than players. Key-layout hint (2026-07-23) = outlined
+  ALL-CAPS panel beside each human player, fades ~9 s.
 - ALL-CAPS for menu/UI labels. 1280×720 design viewport, `canvas_items` stretch,
   fixed 16:9 world view (players die off-screen at the blast zone — that hidden-death
   design is intentional; do not reveal the blast zone to players).
@@ -181,3 +199,91 @@ dash-contacted PROJECTILES are re-fired at their shooter (ownership transfers,
 path restarts mirrored, TTL/decay clocks continuous); reflected bolts strobe
 white, dash i-frames strobe body alpha; agents prefer reflect options ×1.5 vs
 ranged threats; stat ProjectilesReflected, fitness blind.
+Feature 9 (2026-07-21): MAP SIZE — the stage grew an 11-gene ParamSet (visible
+half extents 0.5×–5×, KO margin, platform count/size budgets, mirrored/mirrorSide,
+spawn genes; game.json v7, DEVIATIONS #27, docs/features/map-size.md). Blast zone
+is genome-driven (legacy bit-exact); generator grows all four directions with
+stack re-seeding, asymmetry, and BODY-SAFE spawn columns (degenerate layouts
+regrow); stage mutation transforms asymmetric→mirrored per mirrorSide instead of
+always regenerating; agent sense box scales up with map size; MaxMatchSeconds
+default 60→300. View: framing camera (zoom clamped legacy-floor↔KO box), minimap
+overlay + first SETTINGS menu (user://settings.cfg: corner/size/opacity), HUD
+panels moved to the bottom edge with outlined text, StageView's blast rect
+removed (hidden-death rule). Stage schema joined the evolve-menu ranges.
+Showcase games + evolved champions in archive/runs-2026-07-23/showcase-mapsize/
+(best picks promoted to runs/demo/), mp4s in
+runs/media/mapsize-*.mp4, charts in docs/reports/img/. Awaiting the designer
+play-test gate.
+Feature 10 (2026-07-22): agent air-jump conservation (DEVIATIONS #28) — fixes the
+large-map oscillation (ThreatDodge no longer spends the air jump to flinch; traversal
+walks between adjacent same-height platforms). Utility golden re-pinned; DT + fingerprint
+untouched. Also: projectile schema joined the evolve-menu/CLI advanced ranges.
+Feature 11 (2026-07-22): GAMEPLAY POLISH — (a) SPAWNING BEHAVIORS (DEVIATIONS #29,
+game.json v8): spawn on a temporary intangible platform, invulnerable on a separate
+timer; two evolvable stage genes (platformSpawnDuration 1–5 s, spawnInvulnDuration
+1–3 s, both default 0 = feature-off/legacy-parity); 3 s respawn blackout; agent skips
+damage-immune targets; fitness-blind. (b) DEATH ANIMATIONS + (c) MOVEMENT BLUR — pure
+view-layer (edge-anchored KO flash; screen-space directional motion smear).
+docs/features/spawn-and-polish.md; demo runs/media/spawn-polish-demo.mp4. Match goldens
+unmoved (legacy feature-off); fingerprint re-pinned. Awaiting the designer play-test
+gate. Trial evolution measured spawn-camping negligible (0.4%).
+Feature 11 follow-ups (2026-07-23, designer bug reports): (a) death animation
+RE-RENDERED as a tall narrow inward-perpendicular streak from the death point (no
+border, Smash-KO juice); (b) HUD now lists INVULNERABLE/INTANGIBLE/RESPAWNING with a
+countdown (spawn conditions are flags, not FSM states, so they were previously
+invisible); (c) per-character PLATFORM FIT (DEVIATIONS #30) — Generate/Crossover/Mutate
+move platforms (RNG-free) so both characters can traverse and no gap is asymmetrically
+passable (asymmetric stages 11%→5%, zero overlaps). Fingerprint re-pinned twice;
+match goldens unmoved.
+Second round (2026-07-23, designer bug reports): (1) motion trail RE-RENDERED as
+afterimage ghosts (the in-quad UV smear could not draw outside the sprite — unnoticeable
+by construction); (2) KEY-LAYOUT HINT beside each human player for the first ~9 s
+(superseded next day by the HUD debug strip — see feature 12); (3) death flash is
+CAMERA-relative and always on screen — perpendicular from the crossed screen edge,
+DIAGONAL toward camera center from a screen corner, from the actual death point when
+visible; (4) EXHAUSTION RULE (DEVIATIONS #31, sim change): AirJumpsExhausted now
+requires jump, jump, AND dash — a dash in hand keeps the character in Air with full
+abilities (supersedes the 2026-07-13 no-chase-with-dash rule, whose premise fell).
+Dash-less genomes bit-identical: ALL goldens + fingerprint unmoved, no re-pins.
+Trial evolutions healthy (runs/exh-310*, charts/exhaustion-rule-trajectories.png).
+Third round (2026-07-23): trail SECOND PASS (arc-length ghost placement — continuous
+streak at any speed; velocity-aware teleport test — the old fixed 200 px clear erased
+the trail at KO speeds; detached trails linger ~0.5 s after a KO/teleport) and
+PROJECTILE comet tails (3 faint gold ghosts, view-only).
+Fourth round (2026-07-23): trail opacity EXPONENTIAL in screen speed + 22 px min
+ghost spacing (readable at low speed, frenzy at high); spawn pad re-rendered as a
+SOLID PILL platform; death flash gained an expanding flame CONE + 0.65 s life.
+(Also fixed: godot-layer builds had been failing silently on a MathF/Mathf typo —
+quiet-build tails hid the error; several intermediate view captures were stale.)
+RUNS CURATION (designer): `runs/` now holds only `demo/` (curated interesting
+games — cannonball-arena, zoner-crossfire, spawn-sanctuary, skyscraper-duel,
+corridor-hopper; see runs/demo/README.md, mean pairwise genome distance 5.9) and
+`media/`; all 19 run dirs archived to archive/runs-2026-07-23/ (README updated).
+Maintain runs/demo/ as new champions demonstrate new things.
+Demos: runs/media/polish-fixes-demo.mp4 (trails/flash/pill pads),
+bigmap-koflash-demo.mp4, projectile-trails-demo.mp4 (all re-recorded with the HUD).
+Feature 12 (2026-07-24): HUD POLISH (FEATURES.md §HUD + design/BrawlerAGDHUD.jpg;
+docs/features/hud-polish.md; view-only, no goldens). Four static quarter-width
+bottom slots, LEFT-PACKED (P1/P2 in quarters 1–2); identity colors = the
+state-tint-avoiding set rose/sky/gold/teal (PlayerPalette; in-world name tags got
+matching pill backgrounds); solid outlined panels with name pill, stock dots (→
+"N STOCKS" past 8), character sprite, and a damage % that ROLLS through interim
+numbers growing with hit magnitude; hit shake scaled by damage (hit player only),
+death = major shake + white panel flash. DEBUG STRIP above each panel (default ON,
+persisted toggle): human-readable states tinted like the body (READY/AIRBORNE/
+EXHAUSTED/WINDING UP/...), INTG/INVL spawn-timer bars, the DI arrow, and the full
+control layout with per-genome move names, keycaps lighting on press (AI presses
+included — an instrument view). PAUSE MENU is now a real navigable menu
+(RESUME / DEBUG PANEL / SETTINGS / QUIT; PauseMenuView; ESC/Q shortcuts kept;
+AppSettings gained hud.debugPanel). ControlsHintView deleted (superseded);
+BRAWLER_PAUSE_AT=<tick> automation env added.
+2026-07-27 follow-ups (designer bug reports): (1) motion trail retuned to EXTREME
+speeds only (floor 850 screen-px/s — above normal run/jump; nothing at ordinary
+movement, full streak only at knockback/KO; slow blast-drifts no longer linger);
+(2) the platform fit's body-gap pass became an ITERATIVE five-strategy solver with
+structural termination (DEVIATIONS #30 amendment) — asymmetric corridors over 800
+generation seeds: 248 stages → ZERO, connectivity unchanged, zero overlaps;
+fingerprint re-pinned (match goldens unmoved); property test
+GeneratedStagesNeverHaveAsymmetricBodyGaps + corridor-chain termination fixture;
+trial evolutions healthy (charts/gap-solver-trajectories.png; runs archived).
+Awaiting the designer play-test gate.

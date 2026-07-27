@@ -474,6 +474,12 @@ public sealed class UtilityAgent : IInputSource
         int facingToOpponent = opponent.Position.X >= self.Position.X ? 1 : -1;
         var canHit = new bool[self.Moves.Count];
         bool anyCanHit = false;
+        // Spawn immunity (2026-07-22, DEVIATIONS #29): an intangible/invulnerable
+        // opponent takes no damage — "agents shouldn't attempt to attack an invulnerable
+        // enemy." Force every hit-check false so attack/projectile/doomed don't swing at
+        // a ghost. Gated on the SPAWN immunity only (not the 0.1 s post-hit
+        // invincibility), so legacy matches leave the instrument untouched.
+        bool opponentImmune = opponent.SpawnDamageImmune;
         Vec2 attackTarget = opponent.Position;
         float bestTravel = float.PositiveInfinity;
         for (int m = 0; m < self.Moves.Count; m++)
@@ -487,7 +493,7 @@ public sealed class UtilityAgent : IInputSource
             var hitbox = new Aabb(
                 self.Position + offset,
                 new Vec2(move.BaseHalf.X * self.WidthScalar, move.BaseHalf.Y * self.HeightScalar));
-            canHit[m] = hitbox.Overlaps(opponent.Body);
+            canHit[m] = !opponentImmune && hitbox.Overlaps(opponent.Body);
             anyCanHit |= canHit[m];
 
             // The position to fight FROM: stand where this move's hitbox lands on the
@@ -513,7 +519,7 @@ public sealed class UtilityAgent : IInputSource
             {
                 continue;
             }
-            canHit[m] = ProjectileCorridorHit(ranged, self, opponent, world.Config);
+            canHit[m] = !opponentImmune && ProjectileCorridorHit(ranged, self, opponent, world.Config);
             anyCanHit |= canHit[m];
         }
 
@@ -622,9 +628,10 @@ public sealed class UtilityAgent : IInputSource
             underThreat = theirHitbox.Overlaps(self.Body);
         }
 
-        // Vulnerable = cannot attack (CoolDown / AirJumpsExhausted) — a dash in hand
-        // does NOT re-enable chasing (2026-07-13 playtest fix); it stays available
-        // for recovery and the defense channel.
+        // Vulnerable = cannot attack (CoolDown / AirJumpsExhausted). Since the
+        // 2026-07-23 exhaustion rule (DEVIATIONS #31) a dash in hand keeps the
+        // character in Air — able to attack, so chasing is legitimate there; the
+        // exhausted state now always means the WHOLE air budget is gone.
         bool vulnerable = self.State is PlayerState.CoolDown or PlayerState.AirJumpsExhausted;
         // The recovery LANDING AIM: above the platform top, x clamped to its span —
         // "get above the platform before floating/jumping onto it" (designer).
@@ -652,7 +659,14 @@ public sealed class UtilityAgent : IInputSource
             hasTraversal = true;
             traversalLaunch = new Vec2(launchX, mine.Top);
             traversalDirection = next.Center.X >= mine.Center.X ? 1 : -1;
-            traversalNeedsJump = next.Top >= mine.Top - 0.5f;
+            // Hop only for a real height gain or a real horizontal gap (2026-07-22,
+            // DEVIATIONS #28). The old test (next.Top >= mine.Top − 0.5) jumped between
+            // platforms at the SAME height that were horizontally ADJACENT — common on
+            // large mirrored maps, where the two center halves touch — burning the air
+            // jump to "hop" across ground the agent could simply walk onto. A gap of 0
+            // and no rise means walk; the horizontal move alone carries it across.
+            float gap = MathF.Max(0f, MathF.Max(next.Left - mine.Right, mine.Left - next.Right));
+            traversalNeedsJump = next.Top > mine.Top + 0.5f || gap > 0.5f;
         }
 
         return new UtilityContext(
@@ -795,9 +809,9 @@ public sealed class UtilityAgent : IInputSource
         SimWorld world, SimPlayer self, SimPlayer opponent, float dashRange,
         out Vec2 target, out Aabb chosenPlatform, out bool reachable)
     {
-        var sense = new Aabb(
-            self.Position,
-            new Vec2(world.Config.PlatformSenseHalfWidth, world.Config.PlatformSenseHalfHeight));
+        // 2026-07-21 (Map Size, DEVIATIONS #27): half extents scale with map size —
+        // exactly the Unity 20×15 box on legacy-size maps.
+        var sense = new Aabb(self.Position, world.PlatformSenseHalf);
         target = Vec2.Zero;
         chosenPlatform = default;
         reachable = false;
@@ -1233,7 +1247,14 @@ public sealed class UtilityAgent : IInputSource
                 away = ctx.Self.Position.X >= 0f ? -1 : 1;
             }
             scores.Horizontal[away > 0 ? 2 : 0] += ThreatDodgeMove;
-            if (ctx.Self.IsGrounded || !ctx.Self.JumpsExhausted)
+            // Hop away only when GROUNDED (2026-07-22, DEVIATIONS #28): a flinch-dodge
+            // is a cheap ground hop. Spending the AIR jump to flinch mid-air was the
+            // large-map oscillation bug — the agent burned its second jump dodging
+            // while airborne (which happens constantly on wide/tall maps), stranding
+            // itself in AirJumpsExhausted where it can neither attack nor jump, so it
+            // drifted, landed, re-approached, and dodged again forever. The air jump is
+            // reserved for recovery and traversal; airborne dodges use lateral drift.
+            if (ctx.Self.IsGrounded)
             {
                 scores.Jump[1] += ThreatDodgeJump;
             }

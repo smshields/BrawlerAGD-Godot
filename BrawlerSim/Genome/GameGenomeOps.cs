@@ -29,7 +29,9 @@ public static class GameGenomeOps
             children.Add(CrossoverCharacter(a.Characters[c], b.Characters[c], rng, config));
         }
         StageGenome stage = StageGenome.SinglePointCrossover(a.Stage, b.Stage, rng);
-        return new GameGenome(children, stage);
+        // Crossover can merge platform lists into a layout one character can't traverse —
+        // fit it to both children (2026-07-22, RNG-free; docs/features/spawn-and-polish.md).
+        return new GameGenome(children, GameGenome.FitStage(stage, children));
     }
 
     public static GameGenome Mutate(GameGenome genome, Pcg32 rng, GenerationConfig? config = null)
@@ -54,8 +56,45 @@ public static class GameGenomeOps
                     ? Enumerable.Range(0, character.ButtonMoves.Count).ToArray() // identity invariant
                     : MutateButtonMoves(character, rng)));
         }
-        StageGenome stage = config.CreateStageGenerator().Generate(rng);
-        return new GameGenome(mutated, stage);
+        return new GameGenome(mutated, GameGenome.FitStage(MutateStage(genome.Stage, config, rng), mutated));
+    }
+
+    /// <summary>
+    /// Stage mutation (2026-07-21, Map Size — docs/features/map-size.md). Previously
+    /// an unconditional full regeneration; now:
+    /// 1. the stage ParamSet mutates via the standard 5-reroll op;
+    /// 2. if the mutated `mirrored` gene is ON but the current layout is asymmetric,
+    ///    the layout is TRANSFORMED per `mirrorSide` (designer: "mirror left"/"mirror
+    ///    right" decides how the transform happens), spawn 2 becoming spawn 1's
+    ///    mirror — preserving the layout's character instead of discarding it;
+    /// 3. otherwise the layout regenerates from the mutated params (the Unity-parity
+    ///    exploration path). A degenerate transform (no platform mass on the chosen
+    ///    side) falls back to regeneration.
+    /// </summary>
+    private static StageGenome MutateStage(StageGenome stage, GenerationConfig config, Pcg32 rng)
+    {
+        ParamSet mutated = GenomeOps.Mutate(stage.Params, rng);
+        if (StageRules.IsMirrored(mutated) && !StageRules.IsSymmetric(stage.Platforms))
+        {
+            List<PlatformGene>? transformed = StageRules.MirrorTransform(
+                stage.Platforms, StageRules.MirrorSideRight(mutated));
+            if (transformed is not null)
+            {
+                // Repair spawn 1 against the transformed layout, then mirror it for
+                // spawn 2 — fairness by symmetry, like the generator's mirrored path.
+                Determinism.Vec2 s1 = StageRules.RepairSpawn(
+                    new Determinism.Vec2(
+                        mutated.Get(StageParams.Spawn1X), mutated.Get(StageParams.Spawn1Y)),
+                    transformed,
+                    mutated.Get(StageParams.VisibleHalfWidth),
+                    mutated.Get(StageParams.VisibleHalfHeight));
+                ParamSet symmetricSpawns = mutated.With(
+                    (StageParams.Spawn1X, s1.X), (StageParams.Spawn1Y, s1.Y),
+                    (StageParams.Spawn2X, -s1.X), (StageParams.Spawn2Y, s1.Y));
+                return new StageGenome(transformed, symmetricSpawns);
+            }
+        }
+        return config.CreateStageGenerator().Regenerate(mutated, rng);
     }
 
     /// <summary>

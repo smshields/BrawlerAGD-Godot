@@ -252,13 +252,26 @@ public sealed class GameGenome
         {
             characters.Add(CharacterGenome.Generate($"Player {i + 1}", config, rng));
         }
-        return new GameGenome(characters, stage);
+        // Per-character platform fit (2026-07-22): move platforms so BOTH characters can
+        // traverse and no gap is asymmetrically passable. Deterministic, RNG-free — the
+        // stream stays aligned (docs/features/spawn-and-polish.md §Platform fit).
+        return new GameGenome(characters, FitStage(stage, characters));
     }
+
+    /// <summary>Applies the per-character platform fit using the match constants the
+    /// evaluator grades under (MatchConfig.Default). RNG-free, so it never desyncs the
+    /// generation stream — it only edits platform coordinates in place.</summary>
+    internal static StageGenome FitStage(StageGenome stage, IReadOnlyList<CharacterGenome> characters) =>
+        characters.Count >= 2
+            ? StageRules.FitToCharacters(stage, characters[0], characters[1],
+                Sim.MatchConfig.Default.Gravity, Sim.MatchConfig.Default.PlayerBaseWidth)
+            : stage;
 
     /// <summary>All range violations across every segment; empty when valid.</summary>
     public List<string> Validate()
     {
         var violations = new List<string>();
+        violations.AddRange(Stage.Params.Validate());
         foreach (CharacterGenome character in Characters)
         {
             violations.AddRange(character.Params.Validate());

@@ -122,3 +122,18 @@ post-change builds):
   explicit error (archived; their artifacts stay loadable/replayable).
 - Population fingerprint re-pinned (the pinned mapping gene now draws over four
   mappable buttons); the DT and utility match goldens did not move.
+
+## Amendment 2026-07-23: in-match key-layout hint (designer)
+
+"We need a key layout display on screen near a player so that controls are visible
+on first load." `ControlsHintView` floats each HUMAN player's full layout beside
+their character for the first ~9 s of a match, then fades: P1 keyboard
+(A/D MOVE · SPACE JUMP, then I/J/K/U/L per button), P2 pad (STICK MOVE · B JUMP,
+then L1/X/A/Y/R1), with the move name for each button read from the genome's
+buttonMoves gene (slot number appended when a type repeats). AI-driven and replay
+players show nothing; `BRAWLER_FORCE_HINTS=1` shows both panels for automation.
+Details in docs/features/spawn-and-polish.md §Key-layout hint.
+
+(2026-07-24: the hint panels above were SUPERSEDED by the HUD debug strip —
+docs/features/hud-polish.md — which shows the same per-button move names
+permanently, with live press highlighting; ControlsHintView was removed.)

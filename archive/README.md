@@ -25,3 +25,28 @@ Reports in `docs/reports/` reference these by their old `runs/<name>` paths.
 | `proj-1101/1102`, `projrand-1103` | v5, the projectile-feature smokes from the FOUR-BUTTON era (moved 2026-07-20 when the fifth assignable button landed: composed checkpoints with 4-slot compositions cannot resume under the 5-button scheme — RunStore refuses them explicitly; their game.json + traces still load and replay bit-identically via the button/trace migration) |
 | `gamea–f.json` | v1 — Unity-imported reference games |
 | `shield-demo.json`, `shield-scripted.json` (+trace), `twomove-demo.json` | v2–v3 hand-built feature demo games |
+
+# Archived runs (moved 2026-07-23) — `runs-2026-07-23/`
+
+The second archive sweep: everything that had accumulated in `runs/` since the
+2026-07-14 sweep, moved wholesale to keep `runs/` down to `demo/` (curated
+interesting games — see runs/demo/README.md) and `media/` (recordings, charts).
+All files load with current code; formatVersions v4–v8.
+
+| Entry | Era / purpose |
+|---|---|
+| `dash-801/802`, `dashfix-801/802` | v4 — dash-feature smoke runs + landing-aim recovery fix re-runs |
+| `vuln-801/802` | v4 — dash i-frame gene adoption study |
+| `ffcdi-901/902`, `ffcdi901/902` | v4 — fast-fall/crouch/DI feature smokes |
+| `projshot` | v5 — projectile feature demo scratch |
+| `tele5-1201/1202` | v6 — projectile wind-up telegraph + five-button smokes |
+| `reflect-1301/1302` | v6 — reflect-gene smokes (champion promoted to runs/demo/zoner-crossfire) |
+| `run-1` | scratch |
+| `showcase-mapsize` | v7/v8 — map-size showcase set + spawn-demo (three promoted to runs/demo) |
+| `exh-3101/3102` | v8 — jump-jump-dash exhaustion-rule smokes, 2026-07-23 (champion promoted to runs/demo/corridor-hopper) |
+
+# Archived runs (moved 2026-07-27) — `runs-2026-07-27/`
+
+| Entry | Era / purpose |
+|---|---|
+| `gapfix-3201/3202` | v8 — iterative asymmetric-gap solver smokes (DEVIATIONS #30 amendment); chart in runs/media/charts/gap-solver-trajectories.png |
