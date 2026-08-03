@@ -65,7 +65,15 @@ public partial class MainMenu : Control
         // 2-player needs a controller (the keyboard is entirely P1's now).
         Input.Singleton.JoyConnectionChanged += OnJoyConnectionChanged;
         UpdateTwoPlayerAvailability();
+
+        // Automation: BRAWLER_PICKER=1 opens the game picker on load (screenshots).
+        if (OS.GetEnvironment("BRAWLER_PICKER") == "1")
+        {
+            CallDeferred(nameof(OpenPickerForAutomation));
+        }
     }
+
+    private void OpenPickerForAutomation() => PickGame(MatchMode.AiVsAi);
 
     public override void _ExitTree()
     {
@@ -83,10 +91,120 @@ public partial class MainMenu : Control
             : "PLAY — 2 PLAYERS · CONNECT A CONTROLLER";
     }
 
+    private Control? _picker;
+
+    /// <summary>The game picker (Evolution Explorer, 2026-07-27, designer): a simple
+    /// list — FAVORITES (the ADD TO GAMES basket) first, then the curated DEMO games —
+    /// instead of dumping users into a file explorer. The explorer survives as the
+    /// hidden-by-default ADVANCED option. An in-scene overlay (like the pause menu),
+    /// not a native popup window.</summary>
     private void PickGame(MatchMode mode)
     {
         _pendingMode = mode;
-        _gameDialog.PopupCentered(new Vector2I(900, 600));
+        _picker?.QueueFree();
+
+        var overlay = new Control { AnchorRight = 1f, AnchorBottom = 1f };
+        _picker = overlay;
+        AddChild(overlay);
+        var dim = new ColorRect
+        {
+            Color = new Color(0.02f, 0.02f, 0.04f, 0.6f),
+            AnchorRight = 1f,
+            AnchorBottom = 1f,
+        };
+        overlay.AddChild(dim);
+
+        var panel = new PanelContainer
+        {
+            AnchorLeft = 0.5f, AnchorRight = 0.5f, AnchorTop = 0.5f, AnchorBottom = 0.5f,
+            GrowHorizontal = GrowDirection.Both,
+            GrowVertical = GrowDirection.Both,
+        };
+        overlay.AddChild(panel);
+
+        var box = new VBoxContainer { CustomMinimumSize = new Vector2(480f, 0f) };
+        box.AddThemeConstantOverride("separation", 8);
+        panel.AddChild(box);
+
+        var title = new Label { Text = "CHOOSE A GAME", HorizontalAlignment = HorizontalAlignment.Center };
+        title.AddThemeFontSizeOverride("font_size", 24);
+        box.AddChild(title);
+
+        var scroll = new ScrollContainer
+        {
+            CustomMinimumSize = new Vector2(480f, 380f),
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
+        };
+        var list = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        list.AddThemeConstantOverride("separation", 4);
+        scroll.AddChild(list);
+        box.AddChild(scroll);
+
+        int favorites = AddGameSection(list, "FAVORITES", AppPaths.FavoritesRoot());
+        if (favorites == 0)
+        {
+            var empty = new Label
+            {
+                Text = "no favorites yet — ADD TO GAMES from the EVOLVE screen",
+                Modulate = new Color(0.55f, 0.6f, 0.68f),
+            };
+            empty.AddThemeFontSizeOverride("font_size", 13);
+            list.AddChild(empty);
+        }
+        AddGameSection(list, "DEMO GAMES", AppPaths.DemoRoot());
+
+        var advanced = new Button { Text = "ADVANCED: BROWSE FILES…" };
+        advanced.Pressed += () =>
+        {
+            ClosePicker();
+            _gameDialog.PopupCentered(new Vector2I(900, 600));
+        };
+        box.AddChild(advanced);
+
+        var cancel = new Button { Text = "CANCEL" };
+        cancel.Pressed += ClosePicker;
+        box.AddChild(cancel);
+    }
+
+    private void ClosePicker()
+    {
+        _picker?.QueueFree();
+        _picker = null;
+    }
+
+    /// <summary>One picker section: a button per game.json in the directory (name from
+    /// the filename — records are only parsed on selection). Returns the entry count.</summary>
+    private int AddGameSection(VBoxContainer list, string heading, string dir)
+    {
+        if (!System.IO.Directory.Exists(dir))
+        {
+            return 0;
+        }
+        string[] files = System.IO.Directory.GetFiles(dir, "*.json");
+        System.Array.Sort(files);
+        if (files.Length == 0)
+        {
+            return 0;
+        }
+        var section = new Label { Text = heading, Modulate = new Color(0.65f, 0.7f, 0.78f) };
+        section.AddThemeFontSizeOverride("font_size", 14);
+        list.AddChild(section);
+        foreach (string file in files)
+        {
+            string path = file;
+            var button = new Button
+            {
+                Text = System.IO.Path.GetFileNameWithoutExtension(file).ToUpperInvariant(),
+                Alignment = HorizontalAlignment.Left,
+            };
+            button.Pressed += () =>
+            {
+                ClosePicker();
+                OnGamePicked(path);
+            };
+            list.AddChild(button);
+        }
+        return files.Length;
     }
 
     private void OnGamePicked(string path)

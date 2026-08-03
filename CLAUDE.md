@@ -72,8 +72,10 @@ recordings), then wait for their confirmation.
 - Headless visual verification (window flashes on screen; needed after any view change):
   env vars `BRAWLER_AUTOPLAY=ai:<seed>`, `BRAWLER_GAME=<abs path>`, `BRAWLER_TRACE`,
   `BRAWLER_SHOT[_DIR]`, `BRAWLER_SHOT_TICKS=60,300`, `BRAWLER_TICKS_PER_FRAME=10`,
-  `BRAWLER_QUIT_AFTER=<s>`, `BRAWLER_SCENE=evolve|manage`, `BRAWLER_AUTOEVOLVE=...`,
-  `BRAWLER_PAUSE_AT=<tick>` (open the pause menu at a sim tick + shoot "paused").
+  `BRAWLER_QUIT_AFTER=<s>`, `BRAWLER_SCENE=evolve|manage`, `BRAWLER_AUTOEVOLVE=...`
+  (tokens incl. `favorite=1` = ADD TO GAMES on the auto-selected best),
+  `BRAWLER_PAUSE_AT=<tick>` (open the pause menu at a sim tick + shoot "paused"),
+  `BRAWLER_PICKER=1` (open the game picker on menu load).
   After adding assets: `Godot --path godot --headless --import` once.
 - Git: commit locally with clear messages; **do NOT push** — remote
   `smshields/BrawlerAGD-Godot` isn't created yet and pushing awaits designer go-ahead
@@ -277,6 +279,18 @@ included — an instrument view). PAUSE MENU is now a real navigable menu
 (RESUME / DEBUG PANEL / SETTINGS / QUIT; PauseMenuView; ESC/Q shortcuts kept;
 AppSettings gained hud.debugPanel). ControlsHintView deleted (superseded);
 BRAWLER_PAUSE_AT=<tick> automation env added.
+Feature 13 (2026-07-27): EVOLUTION EXPLORER (FEATURES.md §Evolution Tools;
+docs/features/evolve-explorer.md; view-only, zero BrawlerSim changes). The evolve
+chart plots a POINT per game per generation (engine Population/LastFitness
+snapshots crossed via queue; clamped stragglers faint; drawn dots subsampled,
+hit-tests exact); clicking a point selects that genome — gold ring, GEN/GAME/
+FITNESS readout — and LIVE-PREVIEWS it in a right-hand SubViewport mini-arena
+(real view stack over a private SimWorld, AI vs AI, matches loop seeds
+continuously; run end auto-selects the final best). ADD TO GAMES saves the
+selection to runs/favorites/ (collision-suffixed, provenance in origin). The
+PLAY/WATCH pickers are now a simple overlay list — FAVORITES then DEMO GAMES —
+with the file explorer demoted to a hidden ADVANCED button. Automation:
+BRAWLER_PICKER=1, autoevolve token favorite=1.
 2026-07-27 follow-ups (designer bug reports): (1) motion trail retuned to EXTREME
 speeds only (floor 850 screen-px/s — above normal run/jump; nothing at ordinary
 movement, full streak only at knockback/KO; slow blast-drifts no longer linger);

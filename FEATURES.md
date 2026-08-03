@@ -295,3 +295,15 @@ Agent:
 10. Player labels now have a slight transparent pill-shaped background, and have an assigned color that matches the HUD element.
 11. Debug panel is default on for now, but is configurable in the pause menu.
 (See BrawlerAGDHUD.jpg in design folder for layout and additional notes on implementation.)
+
+# Evolution Tools
+
+## Evolution Explorer (Selection, Preview, and Basket)
+
+1. The fitness graph plots a point for every game's score at every generation, alongside the existing top/average fitness lines.
+2. Clicking a point on the graph selects that exact game (the genome behind the score). The selected point is highlighted.
+3. Selecting a point shows a live preview on the right-hand side: the AIs play NEW matches on that game, looping continuously (a finished match lingers briefly, then the next match starts on the next seed).
+4. The preview labels which generation/game/score is selected and which match seed is currently playing.
+5. An "ADD TO GAMES" option saves the selected game into a favorites library for future play.
+6. When loading games (PLAY / WATCH), favorited games are shown as a simple list UI — favorites first, then the curated demo games — instead of dumping users into a file explorer.
+7. The file explorer is provided only as an "ADVANCED" option that is hidden by default.

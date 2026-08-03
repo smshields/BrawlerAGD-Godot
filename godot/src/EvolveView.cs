@@ -52,6 +52,23 @@ public partial class EvolveView : Control
     private string _runDir = "";
     private ulong _startTimeMs;
 
+    // Evolution Explorer (2026-07-27, designer): per-game chart points feed a live
+    // match preview + the ADD TO GAMES favorites basket. Generations cross from the
+    // engine thread through a queue (GameGenome is not a Variant, so no CallDeferred
+    // args); genomes are immutable and survivors are shared refs across generations,
+    // so retaining them is cheap.
+    private readonly System.Collections.Concurrent.ConcurrentQueue<
+        (GenerationStats Stats, float[] Scores, GameGenome[] Genomes)> _pendingGenerations = new();
+    private int _lastBestIndex;
+    private bool _autoFavorite;
+    private VBoxContainer _previewPanel = null!;
+    private Label _previewInfo = null!;
+    private Label _previewSeed = null!;
+    private Button _addToGames = null!;
+    private Label _savedNote = null!;
+    private MatchPreview _preview = null!;
+    private (int Gen, int Index, float Score, GameGenome Genome)? _selection;
+
     public override void _Ready()
     {
         BuildUi();
@@ -83,6 +100,7 @@ public partial class EvolveView : Control
         _runDir = System.IO.Path.Combine(AppPaths.RunsRoot(), _runName.Text.Trim().Length > 0 ? _runName.Text.Trim() : "unnamed");
 
         _chart.Clear();
+        ClearSelection();
         _start.Disabled = true;
         _watchBest.Disabled = true;
         _status.Text = $"running → {_runDir}";
@@ -106,32 +124,111 @@ public partial class EvolveView : Control
                     RunStore.SaveBest(_runDir, engine.Population[stats.BestIndex], stats, trace);
                 }
                 RunStore.SaveCheckpoint(_runDir, engine, config, history);
-                CallDeferred(nameof(OnGeneration), stats.Generation, stats.TopFitness, stats.AverageFitness);
+                // Snapshot between Steps (the engine is idle): scores are copied
+                // (the engine reuses its buffer), genome refs are immutable.
+                _pendingGenerations.Enqueue((stats, engine.LastFitness.ToArray(), engine.Population.ToArray()));
+                CallDeferred(nameof(DrainGenerations));
             }
             CallDeferred(nameof(OnRunFinished), engine.GenerationsCompleted, token.IsCancellationRequested);
         }, token);
     }
 
-    private void OnGeneration(int generation, float top, float average)
+    private void DrainGenerations()
     {
-        _chart.AddPoint(top, average);
-        float elapsed = (Time.GetTicksMsec() - _startTimeMs) / 1000f;
-        _status.Text = $"gen {generation}   top {top:F1}   avg {average:F1}   {elapsed:F1}s   → {_runDir}";
+        while (_pendingGenerations.TryDequeue(out var gen))
+        {
+            _chart.AddGeneration(gen.Stats.TopFitness, gen.Stats.AverageFitness, gen.Scores, gen.Genomes);
+            _lastBestIndex = gen.Stats.BestIndex;
+            float elapsed = (Time.GetTicksMsec() - _startTimeMs) / 1000f;
+            _status.Text = $"gen {gen.Stats.Generation}   top {gen.Stats.TopFitness:F1}   " +
+                $"avg {gen.Stats.AverageFitness:F1}   {elapsed:F1}s   → {_runDir}";
+        }
     }
 
     private void OnRunFinished(int generations, bool cancelled)
     {
+        DrainGenerations(); // anything still queued when the loop ended
         float elapsed = (Time.GetTicksMsec() - _startTimeMs) / 1000f;
         _status.Text = (cancelled ? "stopped" : "done") +
             $" — {generations} generations in {elapsed:F1}s — saved to {_runDir}";
         _start.Disabled = false;
         _watchBest.Disabled = !System.IO.File.Exists(System.IO.Path.Combine(_runDir, "best.json"));
 
+        // Convenience: focus the final generation's best game so the preview is live
+        // the moment a run ends (also what automation screenshots capture).
+        if (!cancelled && generations > 0)
+        {
+            _chart.Select(generations - 1, _lastBestIndex);
+            if (_autoFavorite)
+            {
+                AddSelectionToGames();
+            }
+        }
+
         string shot = OS.GetEnvironment("BRAWLER_SHOT");
         if (shot.Length > 0 && OS.GetEnvironment("BRAWLER_AUTOEVOLVE").Length > 0)
         {
             _ = CaptureAndQuit(shot);
         }
+    }
+
+    // ── Evolution Explorer: selection → preview → basket ──────────────────────────
+
+    private void OnPointSelected(int gen, int index, float score, GameGenome genome)
+    {
+        string runName = _runName.Text.Trim().Length > 0 ? _runName.Text.Trim() : "unnamed";
+        var record = new GameRecord(
+            $"{runName}-g{gen}-game{index}",
+            $"evolve-explorer:{runName} gen {gen} game {index} fitness {score:F1}",
+            genome);
+        _selection = (gen, index, score, genome);
+        _previewInfo.Text = $"GEN {gen} · GAME {index} · FITNESS {score:F1}";
+        _addToGames.Disabled = false;
+        _savedNote.Text = "";
+        _preview.ShowGame(record, firstSeed: (ulong)(gen * 1000 + index + 1));
+    }
+
+    private void ClearSelection()
+    {
+        _selection = null;
+        _preview.Stop();
+        _previewInfo.Text = "click a chart point to preview that game";
+        _previewSeed.Text = "";
+        _addToGames.Disabled = true;
+        _savedNote.Text = "";
+    }
+
+    /// <summary>ADD TO GAMES (the basket): saves the selected genome as a game.json
+    /// in the favorites library, which the game picker lists first.</summary>
+    private void AddSelectionToGames()
+    {
+        if (_selection is not { } sel)
+        {
+            return;
+        }
+        string runName = _runName.Text.Trim().Length > 0 ? _runName.Text.Trim() : "unnamed";
+        string baseName = Sanitize($"{runName}-g{sel.Gen}-game{sel.Index}");
+        var record = new GameRecord(
+            baseName,
+            $"evolve-explorer:{runName} gen {sel.Gen} game {sel.Index} fitness {sel.Score:F1}",
+            sel.Genome);
+        string dir = AppPaths.FavoritesRoot();
+        string path = System.IO.Path.Combine(dir, baseName + ".json");
+        for (int n = 2; System.IO.File.Exists(path); n++)
+        {
+            path = System.IO.Path.Combine(dir, $"{baseName}-{n}.json");
+        }
+        GameGenomeJson.Save(record, path);
+        _savedNote.Text = $"ADDED ✓  {System.IO.Path.GetFileName(path)}";
+    }
+
+    private static string Sanitize(string name)
+    {
+        foreach (char c in System.IO.Path.GetInvalidFileNameChars())
+        {
+            name = name.Replace(c, '-');
+        }
+        return name;
     }
 
     private async Task CaptureAndQuit(string path)
@@ -199,6 +296,9 @@ public partial class EvolveView : Control
                     break;
                 case "advanced": // any value: open the advanced panel for screenshots
                     ToggleAdvanced();
+                    break;
+                case "favorite": // =1: ADD TO GAMES on the auto-selected best (automation)
+                    _autoFavorite = kv[1] == "1";
                     break;
             }
         }
@@ -287,12 +387,79 @@ public partial class EvolveView : Control
         right.AddThemeConstantOverride("separation", 8);
         root.AddChild(right);
         _chart = new FitnessChart { SizeFlagsVertical = SizeFlags.ExpandFill };
+        _chart.PointSelected += OnPointSelected;
         right.AddChild(_chart);
         _advancedPanel = BuildAdvancedPanel();
         right.AddChild(_advancedPanel);
-        _status = new Label { Text = "configure a run and press START" };
+        // ClipText: the run-dir path is long — without clipping its min width pushes
+        // the preview column off screen.
+        _status = new Label
+        {
+            Text = "configure a run and press START",
+            ClipText = true,
+            TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
+        };
         _status.AddThemeFontSizeOverride("font_size", 14);
         right.AddChild(_status);
+
+        _previewPanel = BuildPreviewPanel();
+        root.AddChild(_previewPanel);
+    }
+
+    /// <summary>The Evolution Explorer column (2026-07-27): live match preview of the
+    /// clicked chart point + the ADD TO GAMES basket.</summary>
+    private VBoxContainer BuildPreviewPanel()
+    {
+        var panel = new VBoxContainer { CustomMinimumSize = new Vector2(392f, 0f) };
+        panel.AddThemeConstantOverride("separation", 8);
+
+        var title = new Label { Text = "PREVIEW" };
+        title.AddThemeFontSizeOverride("font_size", 22);
+        panel.AddChild(title);
+
+        _previewInfo = new Label
+        {
+            Text = "click a chart point to preview that game",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        _previewInfo.AddThemeFontSizeOverride("font_size", 14);
+        panel.AddChild(_previewInfo);
+
+        var container = new SubViewportContainer
+        {
+            Stretch = true,
+            CustomMinimumSize = new Vector2(392f, 220f), // 16:9 mini arena
+        };
+        var viewport = new SubViewport { RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        container.AddChild(viewport);
+        _preview = new MatchPreview();
+        _preview.MatchChanged += () =>
+            _previewSeed.Text = $"AI vs AI · match seed {_preview.CurrentSeed} · new matches loop live";
+        viewport.AddChild(_preview);
+        panel.AddChild(container);
+
+        _previewSeed = new Label { Text = "", Modulate = new Color(0.6f, 0.65f, 0.72f) };
+        _previewSeed.AddThemeFontSizeOverride("font_size", 12);
+        panel.AddChild(_previewSeed);
+
+        _addToGames = new Button { Text = "ADD TO GAMES", Disabled = true };
+        _addToGames.Pressed += AddSelectionToGames;
+        panel.AddChild(_addToGames);
+
+        _savedNote = new Label { Text = "", Modulate = new Color(0.5f, 0.9f, 0.6f) };
+        _savedNote.AddThemeFontSizeOverride("font_size", 13);
+        panel.AddChild(_savedNote);
+
+        var hint = new Label
+        {
+            Text = "favorited games appear first in the PLAY/WATCH game picker",
+            Modulate = new Color(0.5f, 0.55f, 0.65f),
+            AutowrapMode = TextServer.AutowrapMode.WordSmart,
+        };
+        hint.AddThemeFontSizeOverride("font_size", 12);
+        panel.AddChild(hint);
+
+        return panel;
     }
 
     private void OnCompositionModeChanged(int mode)

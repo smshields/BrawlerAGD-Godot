@@ -25,4 +25,18 @@ public static class AppPaths
     }
 
     public static string ReplaysRoot() => ProjectSettings.GlobalizePath("user://replays");
+
+    /// <summary>The favorites basket (Evolution Explorer, 2026-07-27): games saved
+    /// via ADD TO GAMES, listed first by the game picker. Lives under the runs root
+    /// so the CLI and exported builds see the same library.</summary>
+    public static string FavoritesRoot()
+    {
+        string dir = System.IO.Path.Combine(RunsRoot(), "favorites");
+        System.IO.Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    /// <summary>The curated demo games (runs/demo, maintained per designer): listed
+    /// by the game picker when present.</summary>
+    public static string DemoRoot() => System.IO.Path.Combine(RunsRoot(), "demo");
 }
