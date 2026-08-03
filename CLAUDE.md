@@ -77,9 +77,11 @@ recordings), then wait for their confirmation.
   `BRAWLER_PAUSE_AT=<tick>` (open the pause menu at a sim tick + shoot "paused"),
   `BRAWLER_PICKER=1` (open the game picker on menu load).
   After adding assets: `Godot --path godot --headless --import` once.
-- Git: commit locally with clear messages; **do NOT push** — remote
-  `smshields/BrawlerAGD-Godot` isn't created yet and pushing awaits designer go-ahead
-  (first push also fires the cross-platform CI canaries — review them when it happens).
+- Git: commit with clear messages and push to `smshields/BrawlerAGD-Godot` (private;
+  first pushed 2026-08-03, CI canaries green on Linux). Every push to main fires CI
+  (engine-free grep gate + full test suite) — check the run after pushing. History
+  must stay binary-free: `dist/` and `runs/` are ignored; never commit exported apps
+  (a 162 MB .app once had to be filter-repo'd out of history to make GitHub's limit).
 
 ## AESTHETICS
 
@@ -171,8 +173,9 @@ instrument**, replacing the decision tree as default everywhere; DEVIATIONS.md #
 docs/features/utility-agent.md, comparison report in docs/reports/) are implemented
 and awaiting the designer play-test gate. Trace format is 7 values/player (legacy
 readable); game.json is formatVersion 2 (v1 readable); run.json records the agent
-config (old checkpoints resume as DT). Outstanding: first push + CI canary review
-(needs designer's GitHub auth); DT archival after designer confirms the utility pivot.
+config (old checkpoints resume as DT). First push + CI canary review done 2026-08-03
+(private repo, dist/ stripped from history). Outstanding: DT archival after designer
+confirms the utility pivot.
 Feature 3 (second move, button coverage, damage-ranked selection, moveMix nudge,
 0.25 s stun cap + stunLock/jumps fitness terms) feature 4 (SHIELD move type, game.json v3, block-reward fitness term —
 docs/features/shield.md), and feature 5 (DASH move type: gravity-suspended travel,
