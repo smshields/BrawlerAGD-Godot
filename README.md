@@ -6,8 +6,11 @@ the Godot 4 / C# successor to the Unity project behind *"Searching for Balanced 
 Games: Successes and Failures of Automated Evaluation"* (Shields, Mawhorter, Melcer, Mateas —
 AIIDE 2022). Original Unity implementation: [smshields/BrawlerAGD](https://github.com/smshields/BrawlerAGD).
 
-**Status: Phase 0 (scaffold).** The full conversion plan, architecture, and phase gates live
-in [docs/CONVERSION_PLAN.md](docs/CONVERSION_PLAN.md).
+**Status:** the Unity→Godot conversion is complete — schema/genome layer, deterministic sim
+core, evolution engine + CLI, full Godot app (Play / Watch / Evolve / Manage), export
+pipeline, and a replication study validating evolution dynamics against the paper. Current
+work adds new evolvable mechanics (multi-move controls, shields, dashes, projectiles,
+evolvable stages) on top; [FEATURES.md](FEATURES.md) is the design spec.
 
 ## Architecture in one paragraph
 
@@ -29,7 +32,7 @@ sim core.
 | `BrawlerSim.Tests/` | xUnit suite — determinism golden values, genome ops, fitness regression |
 | `BrawlerRunner/` | Headless CLI for evolution runs, replays, re-evaluation |
 | `godot/` | Godot 4.7 (.NET) project — arena view, app shell (Evolve / Play / Manage) |
-| `docs/` | Conversion plan and design docs |
+| `FEATURES.md` | Design spec for the game's mechanics and evolvable feature set |
 | `runs/` | (gitignored) evolution run output |
 
 ## Prerequisites
@@ -40,8 +43,10 @@ sim core.
 ## Commands
 
 ```sh
-dotnet test                       # build + run the full test suite
-dotnet run --project BrawlerRunner  # headless CLI (stub until Phase 3)
+dotnet test    # build + run the full test suite
+
+# headless evolution run (checkpoints + results under runs/<name>/)
+dotnet run --project BrawlerRunner -c Release -- evolve --out runs/x --seed 1 --pop 100 --generations 300 --rounds 5
 ```
 
 Open `godot/project.godot` in the Godot editor for the game/view layer.

@@ -6,22 +6,29 @@ obj/
 
 # Godot
 godot/.godot/
+# Godot regenerates these on project open (scenes here reference scripts by
+# res:// path, not uid://, so the regenerated IDs are never load-bearing)
+*.uid
+*.import
 
 # Export/build artifacts (regenerate with tools/export-macos.sh)
 dist/
 
-# Evolution run output (checkpoints, results, replays)
+# Evolution run output (checkpoints, results, replays) + archived runs
 runs/
-# Archived pre-v4 run output (archive/README.md is the catalog and IS tracked)
-archive/*
-!archive/README.md
+archive/
+
+# Development-process docs and agent instructions (local-only, not part of the game)
+CLAUDE.md
+docs/
+.claude/
+
+# Paper drafts and other local documents
+*.pdf
 
 # IDE
 .idea/
 .vscode/
-
-# Claude Code local session settings (machine-specific permission allowlists)
-.claude/
 
 # macOS
 .DS_Store
