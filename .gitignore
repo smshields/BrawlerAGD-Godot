@@ -7,6 +7,9 @@ obj/
 # Godot
 godot/.godot/
 
+# Export/build artifacts (regenerate with tools/export-macos.sh)
+dist/
+
 # Evolution run output (checkpoints, results, replays)
 runs/
 # Archived pre-v4 run output (archive/README.md is the catalog and IS tracked)
