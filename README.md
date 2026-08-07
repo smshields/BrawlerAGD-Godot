@@ -51,7 +51,3 @@ dotnet run --project BrawlerRunner -c Release -- evolve --out runs/x --seed 1 --
 
 Open `godot/project.godot` in the Godot editor for the game/view layer.
 
-## License
-
-TBD — the Unity predecessor is licensed for research use; pick and add a license before
-publishing this repository.
