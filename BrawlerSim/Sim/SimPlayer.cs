@@ -213,6 +213,41 @@ public sealed class SimPlayer
     /// SimWorld's projectile phase the SAME tick (never persists — not hashed).</summary>
     public bool ProjectileSpawnPending;
 
+    // ---- Four Player Support (2026-08-12, docs/features/four-player.md) ------------
+
+    /// <summary>Out of the match for good (STOCK rule: died at 0 stocks while others
+    /// fight on) — absent from input, physics, hits, and targeting. At N=2 the match
+    /// ends the same tick this is set, so legacy behavior is unchanged. Hashed in the
+    /// gated N-player/timed suffix.</summary>
+    public bool Eliminated;
+
+    /// <summary>Absent from the stage: respawn blackout or eliminated.</summary>
+    public bool IsAbsent => IsRespawning || Eliminated;
+
+    /// <summary>KO attribution (designer): the last enemy whose hit or real push
+    /// influenced this player, or -1. Stats-class state — deterministic but never
+    /// read by gameplay (like the stat counters, unhashed in legacy 2P matches).</summary>
+    public int LastInfluencer = -1;
+
+    /// <summary>Consecutive fully-grounded ticks; reaching
+    /// MatchConfig.InfluenceGroundClearTicks clears LastInfluencer ("until next
+    /// landing"). Reset by every new influence and on death.</summary>
+    public int GroundedInfluenceTicks;
+
+    /// <summary>Record an enemy's hit/push and restart the landing clock.</summary>
+    public void MarkInfluence(int enemyIndex)
+    {
+        LastInfluencer = enemyIndex;
+        GroundedInfluenceTicks = 0;
+    }
+
+    // Four-player / timed-mode stats (2026-08-12). KOs/DamageDealt are fitness-blind
+    // research data (and the TIMED ranking keys); SelfDestructs feeds the standard-v4
+    // and ffa-v1 punishment terms.
+    public int KOs;
+    public float DamageDealt;
+    public int SelfDestructs;
+
     public SimPlayer(int index, CharacterGenome genome, Vec2 spawn, MatchConfig config)
     {
         Index = index;
@@ -558,6 +593,8 @@ public sealed class SimPlayer
         State = PlayerState.Idle;
         PhaseTicksLeft = 0;
         JumpsExhausted = false;
+        LastInfluencer = -1; // a new life owes nobody a KO (2026-08-12)
+        GroundedInfluenceTicks = 0;
     }
 
     /// <summary>Death with the spawning feature ON (2026-07-22): close out the stock,
@@ -578,6 +615,8 @@ public sealed class SimPlayer
         SpawnPadActive = false;
         SpawnIntangible = false;
         SpawnInvulnTicksLeft = 0;
+        LastInfluencer = -1; // a new life owes nobody a KO (2026-08-12)
+        GroundedInfluenceTicks = 0;
     }
 
     /// <summary>Appear on the spawn pad, intangible + invulnerable (2026-07-22). Used

@@ -1,5 +1,17 @@
 namespace BrawlerSim.Sim;
 
+/// <summary>How a match ends (2026-08-12, docs/features/four-player.md — designer).
+/// STOCK is the legacy rule generalized: a player dying at 0 stocks is ELIMINATED and
+/// the match runs until one player remains (at N=2 that is exactly the old
+/// first-death-ends-it rule, bit-identical). TIMED never eliminates: stocks are
+/// infinite, the clock alone ends the match, and players rank by KOs, tie-broken by
+/// damage dealt, then player index. Play-only for now — evolution defaults to STOCK.</summary>
+public enum MatchEndRule
+{
+    Stock,
+    Timed,
+}
+
 /// <summary>
 /// Fixed physical and rules constants for a match. Values are ported from the Unity
 /// project (Physics2DSettings, prefab colliders, Arena.cs) and documented per field.
@@ -8,6 +20,18 @@ public sealed record MatchConfig
 {
     public int TicksPerSecond { get; init; } = SimInfo.TicksPerSecond;
     public float Dt => 1f / TicksPerSecond;
+
+    /// <summary>See MatchEndRule (2026-08-12). STOCK reproduces legacy behavior for
+    /// every existing artifact; run.json records the per-run value.</summary>
+    public MatchEndRule EndRule { get; init; } = MatchEndRule.Stock;
+
+    /// <summary>KO attribution window (2026-08-12, four-player.md — designer):
+    /// enemy INFLUENCE (a hit, or a real push — velocity-transferring body contact or
+    /// a shield expel) persists until the victim has been continuously grounded this
+    /// many ticks. 0.25 s: long enough that an edge-shove against a standing victim
+    /// still credits the pusher, short enough that "recovered, landed, then walked
+    /// off" counts as a self-destruct. Stats-class only — gameplay never reads it.</summary>
+    public int InfluenceGroundClearTicks { get; init; } = 15;
 
     /// <summary>Downward gravity magnitude (Unity Physics2D gravity was (0, -9.81)).</summary>
     public float Gravity { get; init; } = 9.81f;

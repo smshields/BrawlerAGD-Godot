@@ -109,6 +109,15 @@ public static class TestGames
     /// </summary>
     public static GameGenome FlatArena(
         (string Key, float Value)[]? characterOverrides = null,
+        (string Key, float Value)[]? moveOverrides = null) =>
+        FlatArenaN(2, characterOverrides, moveOverrides);
+
+    /// <summary>FlatArena with 2-4 identical characters (2026-08-12, four-player.md).
+    /// Same single floor platform; spawns come from the legacy-derived stage genes,
+    /// so tests generally reposition players.</summary>
+    public static GameGenome FlatArenaN(
+        int playerCount,
+        (string Key, float Value)[]? characterOverrides = null,
         (string Key, float Value)[]? moveOverrides = null)
     {
         ParamSet character = Character(characterOverrides ?? Array.Empty<(string, float)>());
@@ -116,7 +125,8 @@ public static class TestGames
         CharacterGenome Make(string name) =>
             new(name, 3, 0, character, new[] { new MoveGenome(move, 0) });
         var stage = new StageGenome(new[] { new PlatformGene(-8, -3, 16, 1) });
-        return new GameGenome(new[] { Make("Player 1"), Make("Player 2") }, stage);
+        return new GameGenome(
+            Enumerable.Range(1, playerCount).Select(i => Make($"Player {i}")), stage);
     }
 }
 

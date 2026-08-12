@@ -17,8 +17,15 @@ public sealed class SimWorld
     public int TickCount { get; private set; }
     public bool IsOver { get; private set; }
 
-    /// <summary>Index of the losing player once IsOver; -1 while running or on a draw.</summary>
+    /// <summary>Index of the losing player once IsOver; -1 while running or on a
+    /// 2P timeout draw. Under STOCK with 3-4 players this is the FIRST eliminated
+    /// player (last place); under TIMED, the last-ranked player.</summary>
     public int LoserIndex { get; private set; } = -1;
+
+    /// <summary>Player indices in elimination order, earliest first (2026-08-12,
+    /// STOCK rule with 3-4 players). Empty in TIMED matches and 2P timeouts.</summary>
+    public IReadOnlyList<int> EliminationOrder => _eliminationOrder;
+    private readonly List<int> _eliminationOrder = new();
 
     private readonly SimPlayer[] _players;
     private readonly Aabb _blastZone;
@@ -29,8 +36,8 @@ public sealed class SimWorld
     private readonly bool _spawnFeatureActive;
     private readonly int _platformSpawnTicks;
     private readonly int _spawnInvulnTicks;
-    private readonly Aabb[] _spawnPads = new Aabb[2];          // per-player pad geometry (static)
-    private readonly Aabb[][] _platformsWithPad = new Aabb[2][]; // static platforms + that player's pad
+    private readonly Aabb[] _spawnPads;          // per-player pad geometry (static)
+    private readonly Aabb[][] _platformsWithPad; // static platforms + that player's pad
 
     /// <summary>The spawn pad for player i (2026-07-22) — a thin platform under the
     /// spawn point, solid to its owner only. Active state lives on the player
@@ -77,25 +84,28 @@ public sealed class SimWorld
 
         // Spawn genes are consumed as stored (repair lives in the genetic ops, see
         // StageRules.RepairSpawns) — only the legacy inside-a-platform nudge applies,
-        // exactly as the pre-feature sim did.
-        Vec2 spawn1 = StageRules.LegacySafeSpawn(
-            new Vec2(stage.Get(StageParams.Spawn1X), stage.Get(StageParams.Spawn1Y)),
-            genome.Stage.Platforms);
-        Vec2 spawn2 = StageRules.LegacySafeSpawn(
-            new Vec2(stage.Get(StageParams.Spawn2X), stage.Get(StageParams.Spawn2Y)),
-            genome.Stage.Platforms);
-        _players = new SimPlayer[2];
-        _players[0] = new SimPlayer(0, genome.Characters[0], spawn1, Config);
-        _players[1] = new SimPlayer(1, genome.Characters[1], spawn2, Config);
+        // exactly as the pre-feature sim did. 2-4 players since 2026-08-12
+        // (four-player.md): player i takes spawn gene i (all stages carry four).
+        int count = genome.Characters.Count;
+        _players = new SimPlayer[count];
+        for (int i = 0; i < count; i++)
+        {
+            Vec2 spawn = StageRules.LegacySafeSpawn(
+                StageRules.SpawnOf(stage, i), genome.Stage.Platforms);
+            _players[i] = new SimPlayer(i, genome.Characters[i], spawn, Config);
+        }
 
         // Spawning Behaviors (2026-07-22): per-level durations → tick counts + feature
         // gate. The pad sits just under each spawn body's feet (SpawnPosition is the
         // body center at the +2 hover point). _platformsWithPad[i] is the owner's
-        // collision set; the opponent's physics never receives it, so it phases through.
+        // collision set; the other players' physics never receives it, so they phase
+        // through.
         _platformSpawnTicks = Config.ToTicks(StageRules.PlatformSpawnSeconds(stage));
         _spawnInvulnTicks = Config.ToTicks(StageRules.SpawnInvulnSeconds(stage));
         _spawnFeatureActive = StageRules.SpawnFeatureActive(stage);
-        for (int i = 0; i < 2; i++)
+        _spawnPads = new Aabb[count];
+        _platformsWithPad = new Aabb[count][];
+        for (int i = 0; i < count; i++)
         {
             SimPlayer p = _players[i];
             var padCenter = new Vec2(
@@ -113,8 +123,10 @@ public sealed class SimWorld
         {
             // Match start (2026-07-22 designer): appear on the pad immediately — the 3 s
             // blackout is respawns only.
-            _players[0].Materialize(_platformSpawnTicks, _spawnInvulnTicks);
-            _players[1].Materialize(_platformSpawnTicks, _spawnInvulnTicks);
+            foreach (SimPlayer p in _players)
+            {
+                p.Materialize(_platformSpawnTicks, _spawnInvulnTicks);
+            }
         }
     }
 
@@ -132,6 +144,10 @@ public sealed class SimWorld
         for (int i = 0; i < _players.Length; i++)
         {
             SimPlayer player = _players[i];
+            if (player.Eliminated)
+            {
+                continue; // out of the match for good (2026-08-12)
+            }
             if (player.RespawnBlackoutLeft > 0)
             {
                 if (--player.RespawnBlackoutLeft == 0)
@@ -158,15 +174,16 @@ public sealed class SimWorld
         }
 
         // 2. Kinematics + collision. The spawn pad is solid to its OWNER only (the
-        //    opponent's step never receives it → phases through). Absent players skip.
+        //    other players' steps never receive it → they phase through). Absent
+        //    (blacked-out or eliminated) players skip.
         for (int i = 0; i < _players.Length; i++)
         {
-            if (_players[i].IsRespawning)
+            if (_players[i].IsAbsent)
             {
                 continue;
             }
             IReadOnlyList<Aabb> plats = _players[i].SpawnPadActive ? _platformsWithPad[i] : Platforms;
-            SimPhysics.Step(_players[i], _players[1 - i], plats, Config);
+            SimPhysics.Step(_players[i], _players, plats, Config);
         }
 
         // 2.5. Spawn-pad leave detection (2026-07-22): once the owner is no longer
@@ -184,13 +201,34 @@ public sealed class SimWorld
         // 3. Body-vs-body contact, then shield spacing (2026-07-12: a raised shield
         //    expels the opponent — fixed player order, positional push capped per tick
         //    plus a low outward velocity floor; FEATURES.md "never enough to kill").
-        //    Skipped entirely when either player is absent.
-        if (!_players[0].IsRespawning && !_players[1].IsRespawning)
+        //    All pairs in fixed index order since 2026-08-12 (identical to the old
+        //    two-player block at N=2); pairs with an absent player skip.
+        for (int i = 0; i < _players.Length; i++)
         {
-            SimPhysics.ResolvePlayerContact(_players[0], _players[1], Config);
-            for (int i = 0; i < _players.Length; i++)
+            if (_players[i].IsAbsent)
             {
-                PushWithShield(shielder: _players[i], opponent: _players[1 - i]);
+                continue;
+            }
+            for (int j = i + 1; j < _players.Length; j++)
+            {
+                if (!_players[j].IsAbsent)
+                {
+                    SimPhysics.ResolvePlayerContact(_players[i], _players[j], Config);
+                }
+            }
+        }
+        for (int i = 0; i < _players.Length; i++)
+        {
+            if (_players[i].IsAbsent)
+            {
+                continue;
+            }
+            for (int j = 0; j < _players.Length; j++)
+            {
+                if (j != i && !_players[j].IsAbsent)
+                {
+                    PushWithShield(shielder: _players[i], opponent: _players[j]);
+                }
             }
         }
 
@@ -201,33 +239,104 @@ public sealed class SimWorld
         //      victims in player order — all part of the tick-order contract.
         StepProjectiles();
 
-        // 4. Hit detection, fixed attacker order.
-        for (int i = 0; i < _players.Length; i++)
+        // 3.9. KO attribution clock (2026-08-12, four-player.md): continuous grounding
+        //      clears enemy influence — "until next landing". Runs BEFORE this tick's
+        //      hits so a fresh hit restarts the clock. Stats-class state only;
+        //      gameplay never reads it.
+        foreach (SimPlayer player in _players)
         {
-            TryHit(attacker: _players[i], victim: _players[1 - i]);
+            if (player.IsAbsent)
+            {
+                continue;
+            }
+            if (player.IsGrounded)
+            {
+                if (++player.GroundedInfluenceTicks >= Config.InfluenceGroundClearTicks)
+                {
+                    player.LastInfluencer = -1;
+                }
+            }
+            else
+            {
+                player.GroundedInfluenceTicks = 0;
+            }
         }
 
-        // 5. Blast zone → stock loss / match end. Fixed player order; the first fatal
-        //    exit ends the match (simultaneous KOs resolve to the lower player index).
+        // 4. Hit detection, fixed attacker order (all ordered pairs since 2026-08-12 —
+        //    (0,1),(1,0) at N=2, exactly the old sweep).
+        for (int i = 0; i < _players.Length; i++)
+        {
+            for (int j = 0; j < _players.Length; j++)
+            {
+                if (j != i)
+                {
+                    TryHit(attacker: _players[i], victim: _players[j]);
+                }
+            }
+        }
+
+        // 5. Blast zone → stock loss / match end. Fixed player order; the first
+        //    match-ending exit stops the sweep (simultaneous KOs resolve to the lower
+        //    player index). Each death first resolves KO attribution (2026-08-12):
+        //    live influence credits the influencer, otherwise it is a self-destruct.
         foreach (SimPlayer player in _players)
         {
             if (IsOver)
             {
                 break;
             }
-            if (player.IsRespawning)
+            if (player.IsAbsent)
             {
-                continue; // absent during the blackout — cannot be KO'd
+                continue; // blacked-out or eliminated — cannot be KO'd
             }
             if (!player.Body.Overlaps(_blastZone))
             {
-                // Unity parity: dying with 0 stocks ends the match; otherwise decrement
-                // and respawn (i.e. "3 stocks" = 4 lives, matching the shipped game and
-                // the study's description of four-stock survival matches).
-                if (player.Stocks == 0)
+                if (player.LastInfluencer >= 0)
                 {
-                    IsOver = true;
-                    LoserIndex = player.Index;
+                    _players[player.LastInfluencer].KOs++;
+                }
+                else
+                {
+                    player.SelfDestructs++;
+                }
+                if (Config.EndRule == MatchEndRule.Timed)
+                {
+                    // TIMED (2026-08-12): infinite stocks — respawn always, restoring
+                    // the decrement the shared respawn path applies. The clock alone
+                    // ends the match.
+                    if (_spawnFeatureActive)
+                    {
+                        player.BeginRespawn(Config.RespawnBlackoutTicks);
+                    }
+                    else
+                    {
+                        player.Respawn();
+                    }
+                    player.Stocks++;
+                }
+                // Unity parity: dying with 0 stocks is fatal; otherwise decrement and
+                // respawn (i.e. "3 stocks" = 4 lives, matching the shipped game and
+                // the study's description of four-stock survival matches).
+                else if (player.Stocks == 0)
+                {
+                    // Elimination (2026-08-12): out for good; the match continues
+                    // until one player remains. At N=2 the first elimination leaves
+                    // one — the match ends this same tick, exactly the legacy rule.
+                    player.Eliminated = true;
+                    _eliminationOrder.Add(player.Index);
+                    int live = 0;
+                    foreach (SimPlayer p in _players)
+                    {
+                        if (!p.Eliminated)
+                        {
+                            live++;
+                        }
+                    }
+                    if (live <= 1)
+                    {
+                        IsOver = true;
+                        LoserIndex = _eliminationOrder[0];
+                    }
                 }
                 else if (_spawnFeatureActive)
                 {
@@ -244,7 +353,25 @@ public sealed class SimWorld
         TickCount++;
         if (!IsOver && TickCount >= Config.MaxTicks)
         {
-            IsOver = true; // timeout draw, LoserIndex stays -1
+            IsOver = true;
+            // TIMED: rank by KOs / damage dealt / index — the loser is last place.
+            // STOCK with eliminations (3-4 players): the first eliminated player is
+            // the loser; a no-elimination timeout stays a draw (legacy 2P semantics).
+            if (Config.EndRule == MatchEndRule.Timed)
+            {
+                int[] placements = ComputePlacements();
+                for (int i = 0; i < placements.Length; i++)
+                {
+                    if (placements[i] == _players.Length)
+                    {
+                        LoserIndex = i;
+                    }
+                }
+            }
+            else if (_eliminationOrder.Count > 0)
+            {
+                LoserIndex = _eliminationOrder[0];
+            }
         }
     }
 
@@ -324,10 +451,11 @@ public sealed class SimWorld
                 }
             }
             // Spawn immunity (2026-07-22): an intangible or invulnerable victim takes no
-            // damage/knockback; an absent (blacked-out) one isn't on stage. The bolt
-            // passes THROUGH rather than being consumed (nothing was blocked).
+            // damage/knockback; an absent (blacked-out or eliminated) one isn't on
+            // stage. The bolt passes THROUGH rather than being consumed (nothing was
+            // blocked).
             if (!overlaps || victim.InvincibleTicksLeft > 0
-                || victim.SpawnDamageImmune || victim.IsRespawning)
+                || victim.SpawnDamageImmune || victim.IsAbsent)
             {
                 continue;
             }
@@ -373,6 +501,10 @@ public sealed class SimWorld
                     proj.Facing, proj.Move.KnockbackScalar * proj.DamageScale, blockedDamageAfter);
                 victim.Velocity += blockedKnockback * (1f - shield.KnockbackReduction);
                 victim.BlockedHits++;
+                if (proj.Owner != victim.Index)
+                {
+                    victim.MarkInfluence(proj.Owner); // blocked knockback still shoves
+                }
                 victim.InvincibleTicksLeft = Config.InvincibilityTicks;
                 victim.ShieldHealths[victim.CurrentMoveIndex] -= scaledDamage * shield.HitDegradationScalar;
                 if (victim.ShieldHealths[victim.CurrentMoveIndex] <= victim.ShieldBreakRadius)
@@ -395,6 +527,13 @@ public sealed class SimWorld
                 stunTicks = Math.Min(stunTicks, Config.ToTicks(Config.MaxStunSeconds));
             }
             victim.ApplyHit(scaledDamage, knockback, stunTicks);
+            // KO attribution (2026-08-12): a self-hit (hitsSelf gene) influences and
+            // credits nobody — dying to your own bolt is a self-destruct.
+            if (proj.Owner != victim.Index)
+            {
+                victim.MarkInfluence(proj.Owner);
+                _players[proj.Owner].DamageDealt += scaledDamage;
+            }
             victim.InvincibleTicksLeft = Config.InvincibilityTicks;
             _players[proj.Owner].ProjectileHits++;
             proj.Alive = false;
@@ -461,6 +600,7 @@ public sealed class SimWorld
         {
             opponent.Velocity += direction * (shield.SpacingPush - radial);
         }
+        opponent.MarkInfluence(shielder.Index); // a shield expel is a real push (2026-08-12)
     }
 
     /// <summary>
@@ -475,10 +615,11 @@ public sealed class SimWorld
     /// </summary>
     private void TryHit(SimPlayer attacker, SimPlayer victim)
     {
-        // Spawn immunity / blackout (2026-07-22): no damage to an intangible/invulnerable
-        // or absent victim; an absent attacker has no live hitbox.
+        // Spawn immunity / blackout / elimination (2026-07-22, 2026-08-12): no damage
+        // to an intangible/invulnerable or absent victim; an absent attacker has no
+        // live hitbox.
         if (!attacker.HitboxActive || victim.InvincibleTicksLeft > 0
-            || victim.SpawnDamageImmune || victim.IsRespawning || attacker.IsRespawning)
+            || victim.SpawnDamageImmune || victim.IsAbsent || attacker.IsAbsent)
         {
             return;
         }
@@ -507,6 +648,7 @@ public sealed class SimWorld
                 attacker.Facing, attacker.Move.KnockbackScalar, blockedDamageAfter);
             victim.Velocity += blockedKnockback * (1f - shield.KnockbackReduction);
             victim.BlockedHits++;
+            victim.MarkInfluence(attacker.Index); // blocked knockback still shoves (2026-08-12)
             victim.InvincibleTicksLeft = Config.InvincibilityTicks;
             victim.ShieldHealths[victim.CurrentMoveIndex] -=
                 attacker.Move.DamageGiven * shield.HitDegradationScalar;
@@ -537,6 +679,8 @@ public sealed class SimWorld
         }
 
         victim.ApplyHit(attacker.Move.DamageGiven, knockback, stunTicks);
+        victim.MarkInfluence(attacker.Index); // KO attribution (2026-08-12)
+        attacker.DamageDealt += attacker.Move.DamageGiven;
         victim.InvincibleTicksLeft = Config.InvincibilityTicks;
     }
 
@@ -686,7 +830,87 @@ public sealed class SimWorld
                 hash = Fnv1a.Add(hash, p.SpawnInvulnTicksLeft);
             }
         }
+        // 2026-08-12 four player / timed mode: gated suffix, active only for 3-4
+        // player or TIMED matches — every legacy 2P STOCK golden hashes exactly as
+        // before. Eliminated is gameplay state; KOs/SelfDestructs and the attribution
+        // fields are outcome/stats-class (2P leaves them unhashed like the other stat
+        // counters — deterministic, never read by gameplay).
+        if (_players.Length > 2 || Config.EndRule == MatchEndRule.Timed)
+        {
+            foreach (SimPlayer p in _players)
+            {
+                hash = Fnv1a.Add(hash, p.Eliminated ? 1 : 0);
+                hash = Fnv1a.Add(hash, p.KOs);
+                hash = Fnv1a.Add(hash, p.SelfDestructs);
+                hash = Fnv1a.Add(hash, p.LastInfluencer);
+                hash = Fnv1a.Add(hash, p.GroundedInfluenceTicks);
+            }
+            foreach (int index in _eliminationOrder)
+            {
+                hash = Fnv1a.Add(hash, index);
+            }
+        }
         return hash;
+    }
+
+    /// <summary>
+    /// 1-based placements per player (2026-08-12, four-player.md). TIMED: KOs desc,
+    /// damage dealt desc, index asc. STOCK: eliminated players rank below survivors
+    /// in reverse elimination order; survivors rank by stocks desc, then damage taken
+    /// asc, then index asc. Always a total order — a 2P timeout still reports
+    /// LoserIndex -1 (the legacy draw), but placements break the tie for research use.
+    /// </summary>
+    public int[] ComputePlacements()
+    {
+        int n = _players.Length;
+        var order = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            order[i] = i;
+        }
+        if (Config.EndRule == MatchEndRule.Timed)
+        {
+            Array.Sort(order, (x, y) =>
+            {
+                int c = _players[y].KOs.CompareTo(_players[x].KOs);
+                if (c != 0)
+                {
+                    return c;
+                }
+                c = _players[y].DamageDealt.CompareTo(_players[x].DamageDealt);
+                return c != 0 ? c : x.CompareTo(y);
+            });
+        }
+        else
+        {
+            var elimRank = new int[n];
+            Array.Fill(elimRank, int.MaxValue); // survivors outrank every elimination
+            for (int k = 0; k < _eliminationOrder.Count; k++)
+            {
+                elimRank[_eliminationOrder[k]] = k;
+            }
+            Array.Sort(order, (x, y) =>
+            {
+                int c = elimRank[y].CompareTo(elimRank[x]); // later elimination = better
+                if (c != 0)
+                {
+                    return c;
+                }
+                c = _players[y].Stocks.CompareTo(_players[x].Stocks);
+                if (c != 0)
+                {
+                    return c;
+                }
+                c = _players[x].TotalDamageTaken.CompareTo(_players[y].TotalDamageTaken);
+                return c != 0 ? c : x.CompareTo(y);
+            });
+        }
+        var placements = new int[n];
+        for (int rank = 0; rank < n; rank++)
+        {
+            placements[order[rank]] = rank + 1;
+        }
+        return placements;
     }
 
     public MatchResult BuildResult(Replay.InputTrace? trace = null) =>
@@ -698,11 +922,13 @@ public sealed class SimWorld
                 p.ShieldActivations, p.BlockedHits, p.ShieldBreaks, p.ShieldTicks,
                 p.DashCount, p.DashInvulnDodges,
                 p.FastFallTicks, p.CrouchTicks, p.DIInfluencedHits,
-                p.ProjectilesFired, p.ProjectileHits, p.ProjectilesReflected)).ToArray(),
+                p.ProjectilesFired, p.ProjectileHits, p.ProjectilesReflected,
+                p.KOs, p.DamageDealt, p.SelfDestructs)).ToArray(),
             LoserIndex,
             TickCount,
             TickCount / (float)Config.TicksPerSecond,
             StateHash(),
-            trace);
+            trace,
+            ComputePlacements());
 
 }

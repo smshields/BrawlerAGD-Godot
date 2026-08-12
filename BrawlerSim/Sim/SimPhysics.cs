@@ -18,7 +18,14 @@ public static class SimPhysics
 {
     private const float Skin = 0.001f; // resolution slack to keep resting contacts stable
 
+    /// <summary>Two-player convenience overload (tests and pre-2026-08-12 callers).</summary>
     public static void Step(SimPlayer player, SimPlayer opponent, IReadOnlyList<Aabb> platforms, MatchConfig config)
+        => Step(player, new[] { player, opponent }, platforms, config);
+
+    /// <summary>N-player step (2026-08-12, four-player.md): every OTHER present player
+    /// is a solid collider, checked in array order. For two players this is
+    /// bit-identical to the pairwise step (the self entry is skipped).</summary>
+    public static void Step(SimPlayer player, SimPlayer[] all, IReadOnlyList<Aabb> platforms, MatchConfig config)
     {
         float dt = config.Dt;
 
@@ -45,8 +52,8 @@ public static class SimPhysics
 
         for (int i = 0; i < substeps; i++)
         {
-            MoveAxis(player, opponent, platforms, config, step.X, horizontal: true);
-            MoveAxis(player, opponent, platforms, config, step.Y, horizontal: false);
+            MoveAxis(player, all, platforms, config, step.X, horizontal: true);
+            MoveAxis(player, all, platforms, config, step.Y, horizontal: false);
         }
 
         player.OnGroundedChanged(IsGrounded(player, platforms));
@@ -54,49 +61,63 @@ public static class SimPhysics
 
     /// <summary>
     /// Move along one axis, clamping against platforms and — when the move would CREATE
-    /// a crossing — against the opponent's body. Pre-existing overlap is left for the
-    /// capped resolver, so residual contact never snaps positions.
+    /// a crossing — against any other present player's body (array order, 2026-08-12).
+    /// Pre-existing overlap is left for the capped resolver, so residual contact never
+    /// snaps positions.
     /// </summary>
-    private static void MoveAxis(SimPlayer player, SimPlayer opponent, IReadOnlyList<Aabb> platforms, MatchConfig config, float delta, bool horizontal)
+    private static void MoveAxis(SimPlayer player, SimPlayer[] all, IReadOnlyList<Aabb> platforms, MatchConfig config, float delta, bool horizontal)
     {
         if (delta == 0f)
         {
             return;
         }
-        // A spawn-intangible player (2026-07-22) phases through the opponent entirely —
-        // no body-vs-body clamp either way; an ABSENT (blacked-out) opponent isn't there
-        // to collide with at all.
-        bool phaseThrough = player.SpawnIntangible || opponent.SpawnIntangible || opponent.IsRespawning;
-        bool overlappedBefore = player.Body.Overlaps(opponent.Body);
+        // Pre-move overlap per other body — recorded BEFORE the position update.
+        Span<bool> overlappedBefore = stackalloc bool[all.Length];
+        for (int o = 0; o < all.Length; o++)
+        {
+            overlappedBefore[o] = all[o] != player && player.Body.Overlaps(all[o].Body);
+        }
         player.Position += horizontal ? new Vec2(delta, 0f) : new Vec2(0f, delta);
 
-        // Opponent contact FIRST, and only when this motion created the overlap —
+        // Player contact FIRST, and only when this motion created the overlap —
         // platform clamps below may squeeze players together, and that residual case
         // belongs to the capped resolver, never to a face snap. The contact face comes
         // from relative position (nearest side), not motion direction: a squeezed
         // player moving "down" is not necessarily above the opponent.
-        if (!phaseThrough && !overlappedBefore && player.Body.Overlaps(opponent.Body))
+        // A spawn-intangible player (2026-07-22) phases through others entirely —
+        // no body-vs-body clamp either way; an ABSENT (blacked-out or eliminated)
+        // player isn't there to collide with at all.
+        if (!player.SpawnIntangible)
         {
-            Aabb other = opponent.Body;
-            if (horizontal)
+            for (int o = 0; o < all.Length; o++)
             {
-                bool playerOnLeft = player.Position.X <= opponent.Position.X;
-                float resolvedX = playerOnLeft
-                    ? other.Left - player.BodyHalf.X - Skin
-                    : other.Right + player.BodyHalf.X + Skin;
-                player.Position = player.Position with { X = resolvedX };
-                ResolveAxisVelocity(player, opponent, config, horizontal: true,
-                    directionOfA: playerOnLeft ? -1f : 1f);
-            }
-            else
-            {
-                bool playerBelow = player.Position.Y <= opponent.Position.Y;
-                float resolvedY = playerBelow
-                    ? other.Bottom - player.BodyHalf.Y - Skin
-                    : other.Top + player.BodyHalf.Y + Skin;
-                player.Position = player.Position with { Y = resolvedY };
-                ResolveAxisVelocity(player, opponent, config, horizontal: false,
-                    directionOfA: playerBelow ? -1f : 1f);
+                SimPlayer opponent = all[o];
+                if (opponent == player || opponent.SpawnIntangible || opponent.IsAbsent
+                    || overlappedBefore[o] || !player.Body.Overlaps(opponent.Body))
+                {
+                    continue;
+                }
+                Aabb other = opponent.Body;
+                if (horizontal)
+                {
+                    bool playerOnLeft = player.Position.X <= opponent.Position.X;
+                    float resolvedX = playerOnLeft
+                        ? other.Left - player.BodyHalf.X - Skin
+                        : other.Right + player.BodyHalf.X + Skin;
+                    player.Position = player.Position with { X = resolvedX };
+                    ResolveAxisVelocity(player, opponent, config, horizontal: true,
+                        directionOfA: playerOnLeft ? -1f : 1f);
+                }
+                else
+                {
+                    bool playerBelow = player.Position.Y <= opponent.Position.Y;
+                    float resolvedY = playerBelow
+                        ? other.Bottom - player.BodyHalf.Y - Skin
+                        : other.Top + player.BodyHalf.Y + Skin;
+                    player.Position = player.Position with { Y = resolvedY };
+                    ResolveAxisVelocity(player, opponent, config, horizontal: false,
+                        directionOfA: playerBelow ? -1f : 1f);
+                }
             }
         }
 
@@ -203,6 +224,12 @@ public static class SimPhysics
             return;
         }
         float common = (a.Mass * va + b.Mass * vb) / (a.Mass + b.Mass);
+        // KO attribution (2026-08-12, four-player.md): momentum actually transferred —
+        // this is a REAL push, so each side marks the other as its last influencer
+        // (resting side-by-side contact never reaches here: not approaching).
+        // Stats-class bookkeeping only; the physics below is untouched.
+        a.MarkInfluence(b.Index);
+        b.MarkInfluence(a.Index);
         // Dash contact cap (2026-07-13, designer): a dashing player shoves but can
         // never KO — the velocity imparted to the NON-dashing side is clamped,
         // damage-independent. (The dasher re-asserts its own speed next tick.)
