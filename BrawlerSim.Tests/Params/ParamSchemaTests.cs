@@ -109,6 +109,12 @@ public class ParamSchemaTests
             // Spawning Behaviors (2026-07-22): platform lifetime + character invuln.
             ("platformSpawnDuration", 1f, 5f),
             ("spawnInvulnDuration", 1f, 3f),
+            // Four Player Support (2026-08-12): spawns 3/4 — every stage carries four
+            // spawn points regardless of player count (docs/features/four-player.md).
+            ("spawn3X", -49f, 49f),
+            ("spawn3Y", -25f, 26f),
+            ("spawn4X", -49f, 49f),
+            ("spawn4Y", -25f, 26f),
         };
         AssertSchema(DefaultSchemas.Stage, expected);
     }

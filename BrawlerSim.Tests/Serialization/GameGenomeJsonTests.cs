@@ -104,6 +104,53 @@ public class GameGenomeJsonTests
     }
 
     [Fact]
+    public void PreV9FilesDeriveSpawns3And4()
+    {
+        // 2026-08-12 Four Player Support: a ≤ v8 file has no spawn3/4 genes — they
+        // must derive deterministically while spawns 1/2 load exactly as stored
+        // (2P matches never read 3/4, so old replays stay bit-identical).
+        GameRecord original = NewRecord();
+        string json = GameGenomeJson.Serialize(original);
+        json = json.Replace($"\"formatVersion\": {GameGenomeJson.CurrentFormatVersion}", "\"formatVersion\": 8");
+        json = System.Text.RegularExpressions.Regex.Replace(json, ",\\s*\"spawn[34][XY]\": [^,\\n}]*", "");
+        Assert.DoesNotContain("spawn3X", json);
+
+        GameRecord loaded = GameGenomeJson.Deserialize(json);
+        var p = loaded.Genome.Stage.Params;
+        var stored = original.Genome.Stage.Params;
+        Assert.Equal(stored.Get(StageParams.Spawn1X), p.Get(StageParams.Spawn1X));
+        Assert.Equal(stored.Get(StageParams.Spawn1Y), p.Get(StageParams.Spawn1Y));
+        Assert.Equal(stored.Get(StageParams.Spawn2X), p.Get(StageParams.Spawn2X));
+        Assert.Equal(stored.Get(StageParams.Spawn2Y), p.Get(StageParams.Spawn2Y));
+
+        (Vec2 s3, Vec2 s4) = StageRules.DeriveExtraSpawns(
+            loaded.Genome.Stage.Platforms,
+            new Vec2(stored.Get(StageParams.Spawn1X), stored.Get(StageParams.Spawn1Y)),
+            new Vec2(stored.Get(StageParams.Spawn2X), stored.Get(StageParams.Spawn2Y)),
+            stored.Get(StageParams.VisibleHalfWidth), stored.Get(StageParams.VisibleHalfHeight));
+        Assert.Equal(s3.X, p.Get(StageParams.Spawn3X));
+        Assert.Equal(s3.Y, p.Get(StageParams.Spawn3Y));
+        Assert.Equal(s4.X, p.Get(StageParams.Spawn4X));
+        Assert.Equal(s4.Y, p.Get(StageParams.Spawn4Y));
+        Assert.Empty(loaded.Genome.Validate());
+    }
+
+    [Fact]
+    public void FourCharacterGamesRoundTripThroughJson()
+    {
+        // 2026-08-12: the characters list may hold 2–4 entries (game.json v9).
+        var config = GenerationConfig.Default with { CharacterCount = 4 };
+        var record = new GameRecord("FourUp", "test:4p",
+            GameGenome.Generate(config, new Pcg32(7)));
+        Assert.Equal(4, record.Genome.Characters.Count);
+        string json = GameGenomeJson.Serialize(record);
+        GameRecord loaded = GameGenomeJson.Deserialize(json);
+        Assert.Equal(4, loaded.Genome.Characters.Count);
+        Assert.Equal(json, GameGenomeJson.Serialize(loaded));
+        Assert.Empty(loaded.Genome.Validate());
+    }
+
+    [Fact]
     public void StageParamsRoundTripThroughJson()
     {
         GameRecord original = NewRecord();

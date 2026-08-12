@@ -56,13 +56,16 @@ public static class StageRules
 
     /// <summary>The legacy stage ParamSet for a platform list: pre-v7 dimensions and
     /// the pre-feature derived spawns. Loading any pre-v7 game.json through this makes
-    /// it play bit-identically to the pre-feature sim. The schema parameter exists for
+    /// it play bit-identically to the pre-feature sim (spawns 3/4 are new genes the
+    /// 2P sim never reads — see DeriveExtraSpawns). The schema parameter exists for
     /// range-override runs, whose genomes must all bind the run's rebuilt schema
     /// instance (GenomeOps.RequireSameSchema).</summary>
     public static ParamSet LegacyParams(IReadOnlyList<PlatformGene> platforms, ParamSchema? schema = null)
     {
         Vec2 spawn1 = DeriveLegacySpawn(platforms);
         Vec2 spawn2 = LegacySafeSpawn(new Vec2(-spawn1.X, spawn1.Y), platforms);
+        (Vec2 spawn3, Vec2 spawn4) = DeriveExtraSpawns(
+            platforms, spawn1, spawn2, LegacyVisibleHalfWidth, LegacyVisibleHalfHeight);
         return new ParamSet(schema ?? DefaultSchemas.Stage, new[]
         {
             LegacyVisibleHalfWidth,
@@ -76,7 +79,26 @@ public static class StageRules
             spawn2.X, spawn2.Y,
             0f, // platformSpawnDuration — spawning feature OFF (2026-07-22, pre-v8 parity)
             0f, // spawnInvulnDuration — off
+            spawn3.X, spawn3.Y,
+            spawn4.X, spawn4.Y,
         });
+    }
+
+    /// <summary>
+    /// Deterministic spawns 3/4 for stages that predate the four-spawn rule
+    /// (2026-08-12, docs/features/four-player.md): both prefer the stage center at
+    /// spawn 1's height, and the repair's occupied blocking pushes each to the free
+    /// column nearest that preference — spawn 3 clear of spawns 1/2, spawn 4 clear of
+    /// all three. Only ever read by 3/4-player matches, so pre-v9 2P artifacts replay
+    /// bit-identically regardless of what this derives.
+    /// </summary>
+    public static (Vec2 Spawn3, Vec2 Spawn4) DeriveExtraSpawns(
+        IReadOnlyList<PlatformGene> platforms, Vec2 spawn1, Vec2 spawn2, float visW, float visH)
+    {
+        Vec2 preferred = new(0f, spawn1.Y);
+        Vec2 spawn3 = RepairSpawn(preferred, platforms, visW, visH, new[] { spawn1, spawn2 });
+        Vec2 spawn4 = RepairSpawn(preferred, platforms, visW, visH, new[] { spawn1, spawn2, spawn3 });
+        return (spawn3, spawn4);
     }
 
     public static float PlatformSpawnSeconds(ParamSet stageParams) =>
@@ -126,12 +148,15 @@ public static class StageRules
     }
 
     /// <summary>
-    /// Repairs both spawn genes of a stage ParamSet against a platform layout. Runs at
-    /// the GENETIC-OPS layer (generation, crossover, the mutation transform) — NEVER at
-    /// SimWorld construction: pre-v7 artifacts store spawns exactly as the old sim
-    /// derived them (including ones the old sim let fall to their death on
-    /// crossover-broken asymmetric layouts), and replaying those bit-identically means
-    /// the sim must consume genes untouched save for the legacy upward nudge.
+    /// Repairs all FOUR spawn genes of a stage ParamSet against a platform layout
+    /// (four since 2026-08-12, docs/features/four-player.md). Runs at the GENETIC-OPS
+    /// layer (generation, crossover, the mutation transform) — NEVER at SimWorld
+    /// construction: pre-v7 artifacts store spawns exactly as the old sim derived them
+    /// (including ones the old sim let fall to their death on crossover-broken
+    /// asymmetric layouts), and replaying those bit-identically means the sim must
+    /// consume genes untouched save for the legacy upward nudge. Spawns repair in
+    /// index order, each treating the earlier ones as occupied (designer rule:
+    /// spawn points must not overlap each other).
     /// </summary>
     public static ParamSet RepairSpawns(IReadOnlyList<PlatformGene> platforms, ParamSet stageParams)
     {
@@ -142,16 +167,58 @@ public static class StageRules
             platforms, visW, visH);
         Vec2 s2 = RepairSpawn(
             new Vec2(stageParams.Get(StageParams.Spawn2X), stageParams.Get(StageParams.Spawn2Y)),
-            platforms, visW, visH);
+            platforms, visW, visH, new[] { s1 });
+        Vec2 s3 = RepairSpawn(
+            new Vec2(stageParams.Get(StageParams.Spawn3X), stageParams.Get(StageParams.Spawn3Y)),
+            platforms, visW, visH, new[] { s1, s2 });
+        Vec2 s4 = RepairSpawn(
+            new Vec2(stageParams.Get(StageParams.Spawn4X), stageParams.Get(StageParams.Spawn4Y)),
+            platforms, visW, visH, new[] { s1, s2, s3 });
         return stageParams.With(
             (StageParams.Spawn1X, s1.X), (StageParams.Spawn1Y, s1.Y),
-            (StageParams.Spawn2X, s2.X), (StageParams.Spawn2Y, s2.Y));
+            (StageParams.Spawn2X, s2.X), (StageParams.Spawn2Y, s2.Y),
+            (StageParams.Spawn3X, s3.X), (StageParams.Spawn3Y, s3.Y),
+            (StageParams.Spawn4X, s4.X), (StageParams.Spawn4Y, s4.Y));
+    }
+
+    /// <summary>The stored spawn point for player <paramref name="index"/> (0-based).
+    /// Spawns 1/2 predate Map Size; 3/4 exist on every stage since 2026-08-12.</summary>
+    public static Vec2 SpawnOf(ParamSet stageParams, int index) => index switch
+    {
+        0 => new Vec2(stageParams.Get(StageParams.Spawn1X), stageParams.Get(StageParams.Spawn1Y)),
+        1 => new Vec2(stageParams.Get(StageParams.Spawn2X), stageParams.Get(StageParams.Spawn2Y)),
+        2 => new Vec2(stageParams.Get(StageParams.Spawn3X), stageParams.Get(StageParams.Spawn3Y)),
+        3 => new Vec2(stageParams.Get(StageParams.Spawn4X), stageParams.Get(StageParams.Spawn4Y)),
+        _ => throw new ArgumentOutOfRangeException(nameof(index), "Stages carry four spawn points."),
+    };
+
+    /// <summary>Two spawn points "overlap" when the conservative spawn BODIES would
+    /// intersect — the designer's non-overlap rule (2026-08-12) in body terms.</summary>
+    public static bool SpawnsOverlap(Vec2 a, Vec2 b) =>
+        MathF.Abs(a.X - b.X) < 2f * SpawnBodyHalfWidth
+        && MathF.Abs(a.Y - b.Y) < 2f * SpawnBodyHalfHeight;
+
+    private static bool OverlapsAnySpawn(Vec2 point, IReadOnlyList<Vec2>? occupied)
+    {
+        if (occupied is null)
+        {
+            return false;
+        }
+        foreach (Vec2 s in occupied)
+        {
+            if (SpawnsOverlap(point, s))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>
     /// Makes a raw spawn gene legal for a layout (designer rules 2026-07-21: never in
-    /// immediate KO bounds, always over a platform). Deterministic, and the IDENTITY
-    /// for already-legal spawns:
+    /// immediate KO bounds, always over a platform; 2026-08-12: clear of every
+    /// already-placed spawn in <paramref name="occupied"/>). Deterministic, and the
+    /// IDENTITY for already-legal spawns:
     /// 1. clamp inside the visible box (KO sits outside it) with edge clearance;
     /// 2. already over a platform, and the legacy inside-a-platform nudge stays inside
     ///    the box → keep the (nudged) position;
@@ -160,10 +227,12 @@ public static class StageRules
     ///    the gene, ties to the earliest platform in list order;
     /// 4. degenerate layouts with no free column anywhere (a fully roofed wall)
     ///    embed the spawn just above the lowest platform top, capped at the box edge —
-    ///    physics depenetration resolves it; never a KO-zone spawn.
+    ///    physics depenetration resolves it; never a KO-zone spawn. (This last resort
+    ///    ignores occupied spawns — an embedded stack is survivable, a KO spawn is not.)
     /// </summary>
     public static Vec2 RepairSpawn(
-        Vec2 gene, IReadOnlyList<PlatformGene> platforms, float visW, float visH)
+        Vec2 gene, IReadOnlyList<PlatformGene> platforms, float visW, float visH,
+        IReadOnlyList<Vec2>? occupied = null)
     {
         float edgeY = visH - SpawnEdgeClearance;
         float x = Math.Clamp(gene.X, -visW + SpawnEdgeClearance, visW - SpawnEdgeClearance);
@@ -172,27 +241,17 @@ public static class StageRules
         if (OverAnyPlatform(x, y, platforms))
         {
             Vec2 nudged = LegacySafeSpawn(new Vec2(x, y), platforms);
-            if (nudged.Y <= edgeY && !BodyEmbedded(nudged, platforms))
+            if (nudged.Y <= edgeY && !BodyEmbedded(nudged, platforms)
+                && !OverlapsAnySpawn(nudged, occupied))
             {
                 return nudged;
             }
         }
 
-        Vec2? best = null;
-        float bestDist = float.MaxValue;
-        foreach (PlatformGene p in platforms)
-        {
-            Vec2? spot = TrySpawnOver(p, platforms, visW, visH, x);
-            if (spot is { } s)
-            {
-                float dist = MathF.Abs(s.X - x);
-                if (dist < bestDist)
-                {
-                    best = s;
-                    bestDist = dist;
-                }
-            }
-        }
+        Vec2? best = ScanColumns(platforms, visW, visH, x, occupied);
+        // Spawn separation is BEST-EFFORT (2026-08-12): when no column clears the
+        // occupied spawns, a stacked spawn beats an embedded one — rescan bare.
+        best ??= occupied is { Count: > 0 } ? ScanColumns(platforms, visW, visH, x, null) : null;
         if (best is { } found)
         {
             return found;
@@ -210,6 +269,30 @@ public static class StageRules
             lowest.X + lowest.XSize * 0.5f,
             -visW + SpawnEdgeClearance, visW - SpawnEdgeClearance);
         return new Vec2(cx, MathF.Min(lowest.Y + lowest.YSize + SpawnEdgeClearance, edgeY));
+    }
+
+    /// <summary>Best free spawn column across every platform, nearest to preferredX;
+    /// null when the layout offers none under the given occupied constraints.</summary>
+    private static Vec2? ScanColumns(
+        IReadOnlyList<PlatformGene> platforms, float visW, float visH, float preferredX,
+        IReadOnlyList<Vec2>? occupied)
+    {
+        Vec2? best = null;
+        float bestDist = float.MaxValue;
+        foreach (PlatformGene p in platforms)
+        {
+            Vec2? spot = TrySpawnOver(p, platforms, visW, visH, preferredX, occupied);
+            if (spot is { } s)
+            {
+                float dist = MathF.Abs(s.X - preferredX);
+                if (dist < bestDist)
+                {
+                    best = s;
+                    bestDist = dist;
+                }
+            }
+        }
+        return best;
     }
 
     /// <summary>
@@ -230,11 +313,16 @@ public static class StageRules
     /// the top than a body half height), in a column of the platform's span where no
     /// other platform intersects the BODY's box — so the safe-spawn nudge never fires,
     /// the body embeds in nothing, and the spot is exactly where the player appears.
-    /// x lands as close to preferredX as the free intervals allow. Deterministic.
+    /// Since 2026-08-12 already-placed spawns block columns the same way (the
+    /// non-overlap rule), and <paramref name="axisClearHalfWidth"/> &gt; 0 blocks a
+    /// band around x = 0 (mirrored generation: a spawn too close to the axis would
+    /// overlap its own mirror). x lands as close to preferredX as the free intervals
+    /// allow. Deterministic.
     /// </summary>
     public static Vec2? TrySpawnOver(
         PlatformGene platform, IReadOnlyList<PlatformGene> platforms,
-        float visW, float visH, float preferredX)
+        float visW, float visH, float preferredX,
+        IReadOnlyList<Vec2>? occupied = null, float axisClearHalfWidth = 0f)
     {
         float edgeY = visH - SpawnEdgeClearance;
         float top = platform.Y + platform.YSize;
@@ -257,7 +345,8 @@ public static class StageRules
         Span<float> hovers = stackalloc[] { preferred, (preferred + minimal) * 0.5f, minimal };
         foreach (float y in hovers)
         {
-            if (FindFreeColumn(platform, platforms, xLo, xHi, y, preferredX) is { } spot)
+            if (FindFreeColumn(platform, platforms, xLo, xHi, y, preferredX,
+                    occupied, axisClearHalfWidth) is { } spot)
             {
                 return spot;
             }
@@ -266,12 +355,14 @@ public static class StageRules
     }
 
     /// <summary>Free intervals of [xLo, xHi] after subtracting body-padded spans of
-    /// platforms intersecting the body's vertical band at hover height y; returns the
+    /// platforms intersecting the body's vertical band at hover height y — plus
+    /// occupied-spawn bands and the mirror-axis band (2026-08-12); returns the
     /// point nearest preferredX, or null. List order is fixed; the interval walk is
     /// deterministic.</summary>
     private static Vec2? FindFreeColumn(
         PlatformGene platform, IReadOnlyList<PlatformGene> platforms,
-        float xLo, float xHi, float y, float preferredX)
+        float xLo, float xHi, float y, float preferredX,
+        IReadOnlyList<Vec2>? occupied = null, float axisClearHalfWidth = 0f)
     {
         var free = new List<(float Lo, float Hi)> { (xLo, xHi) };
         foreach (PlatformGene q in platforms)
@@ -283,25 +374,24 @@ public static class StageRules
             }
             // The extra 0.03 keeps a column clamped exactly to an interval edge from
             // grazing the block boundary after float rounding.
-            float blockLo = q.X - SpawnBodyHalfWidth - 0.03f;
-            float blockHi = q.X + q.XSize + SpawnBodyHalfWidth + 0.03f;
-            for (int i = free.Count - 1; i >= 0; i--)
+            SubtractInterval(free, q.X - SpawnBodyHalfWidth - 0.03f,
+                q.X + q.XSize + SpawnBodyHalfWidth + 0.03f);
+        }
+        if (occupied is not null)
+        {
+            foreach (Vec2 s in occupied)
             {
-                (float lo, float hi) = free[i];
-                if (blockHi <= lo || blockLo >= hi)
+                if (MathF.Abs(s.Y - y) >= 2f * SpawnBodyHalfHeight)
                 {
-                    continue;
+                    continue; // different band — bodies cannot intersect
                 }
-                free.RemoveAt(i);
-                if (lo < blockLo)
-                {
-                    free.Insert(i, (lo, blockLo));
-                }
-                if (blockHi < hi)
-                {
-                    free.Insert(i, (blockHi, hi));
-                }
+                SubtractInterval(free, s.X - 2f * SpawnBodyHalfWidth - 0.03f,
+                    s.X + 2f * SpawnBodyHalfWidth + 0.03f);
             }
+        }
+        if (axisClearHalfWidth > 0f)
+        {
+            SubtractInterval(free, -axisClearHalfWidth - 0.03f, axisClearHalfWidth + 0.03f);
         }
 
         Vec2? best = null;
@@ -321,6 +411,28 @@ public static class StageRules
             }
         }
         return best;
+    }
+
+    /// <summary>Removes [blockLo, blockHi] from a free-interval list in place.</summary>
+    private static void SubtractInterval(List<(float Lo, float Hi)> free, float blockLo, float blockHi)
+    {
+        for (int i = free.Count - 1; i >= 0; i--)
+        {
+            (float lo, float hi) = free[i];
+            if (blockHi <= lo || blockLo >= hi)
+            {
+                continue;
+            }
+            free.RemoveAt(i);
+            if (lo < blockLo)
+            {
+                free.Insert(i, (lo, blockLo));
+            }
+            if (blockHi < hi)
+            {
+                free.Insert(i, (blockHi, hi));
+            }
+        }
     }
 
     /// <summary>The conservative body box at this point intersects some platform —
@@ -546,14 +658,27 @@ public static class StageRules
     /// satisfies both characters — the common case.
     /// </summary>
     public static StageGenome FitToCharacters(
-        StageGenome stage, CharacterGenome a, CharacterGenome b, float gravity, float playerBaseWidth)
+        StageGenome stage, CharacterGenome a, CharacterGenome b, float gravity, float playerBaseWidth) =>
+        FitToCharacters(stage, new[] { a, b }, gravity, playerBaseWidth);
+
+    /// <summary>N-character fit (2026-08-12, docs/features/four-player.md): identical
+    /// semantics, quantified over ALL of a game's characters — every platform reachable
+    /// by everyone, and no corridor passable for the smallest body but not the largest
+    /// (if the largest passes, everyone does). For two characters this is bit-identical
+    /// to the pairwise fit (pure predicates over the same set).</summary>
+    public static StageGenome FitToCharacters(
+        StageGenome stage, IReadOnlyList<CharacterGenome> characters, float gravity, float playerBaseWidth)
     {
-        var ha = new CharHop(a, gravity);
-        var hb = new CharHop(b, gravity);
-        float wa = BodyWidth(a, playerBaseWidth);
-        float wb = BodyWidth(b, playerBaseWidth);
-        float smallW = MathF.Min(wa, wb);
-        float largeW = MathF.Max(wa, wb);
+        var hops = new CharHop[characters.Count];
+        float smallW = float.MaxValue;
+        float largeW = float.MinValue;
+        for (int i = 0; i < characters.Count; i++)
+        {
+            hops[i] = new CharHop(characters[i], gravity);
+            float w = BodyWidth(characters[i], playerBaseWidth);
+            smallW = MathF.Min(smallW, w);
+            largeW = MathF.Max(largeW, w);
+        }
 
         var plats = stage.Platforms.ToArray();
         bool changed = false;
@@ -566,8 +691,8 @@ public static class StageRules
         // the body-fit's open work strictly shrink, so rounds go quiet on their own.
         for (int round = 0; round < 8; round++)
         {
-            bool moved = ConnectPhase(plats, ha, hb);
-            moved |= BodyFitPhase(plats, ha, hb, smallW, largeW, attempts, unresolvable);
+            bool moved = ConnectPhase(plats, hops);
+            moved |= BodyFitPhase(plats, hops, smallW, largeW, attempts, unresolvable);
             changed |= moved;
             if (!moved)
             {
@@ -583,11 +708,11 @@ public static class StageRules
         return new StageGenome(list, RepairSpawns(list, stage.Params));
     }
 
-    /// <summary>Phase 1 — connectivity for BOTH characters: grow a connected set from
-    /// platform 0 over edges BOTH can hop (PlatformGraph's model). Each stalled round,
-    /// pull the nearest still-unreachable platform toward its best connector until both
-    /// can hop it — integer moves, overlap-guarded.</summary>
-    private static bool ConnectPhase(PlatformGene[] plats, in CharHop ha, in CharHop hb)
+    /// <summary>Phase 1 — connectivity for ALL characters: grow a connected set from
+    /// platform 0 over edges everyone can hop (PlatformGraph's model). Each stalled
+    /// round, pull the nearest still-unreachable platform toward its best connector
+    /// until all can hop it — integer moves, overlap-guarded.</summary>
+    private static bool ConnectPhase(PlatformGene[] plats, CharHop[] hops)
     {
         bool changed = false;
         var connected = new bool[plats.Length];
@@ -596,7 +721,7 @@ public static class StageRules
         int guard = plats.Length * plats.Length + 8;
         while (connectedCount < plats.Length && guard-- > 0)
         {
-            // Any platform already both-hop-reachable from the connected set joins free.
+            // Any platform already all-hop-reachable from the connected set joins free.
             bool grew = false;
             for (int u = 0; u < plats.Length; u++)
             {
@@ -606,7 +731,7 @@ public static class StageRules
                 }
                 for (int c = 0; c < plats.Length && !connected[u]; c++)
                 {
-                    if (connected[c] && BothCanHop(plats[c], plats[u], ha, hb))
+                    if (connected[c] && AllCanHop(plats[c], plats[u], hops))
                     {
                         connected[u] = true;
                         connectedCount++;
@@ -647,8 +772,8 @@ public static class StageRules
             }
             foreach (int c in ConnectorsByDistance(plats, connected, bestU))
             {
-                if (TryPullWithinHop(ref plats[bestU], plats[c], plats, bestU, ha, hb)
-                    && BothCanHop(plats[c], plats[bestU], ha, hb))
+                if (TryPullWithinHop(ref plats[bestU], plats[c], plats, bestU, hops)
+                    && AllCanHop(plats[c], plats[bestU], hops))
                 {
                     changed = true;
                     break;
@@ -662,7 +787,7 @@ public static class StageRules
 
     /// <summary>Phase 2 — the iterative asymmetric-gap solver (see FitToCharacters).</summary>
     private static bool BodyFitPhase(
-        PlatformGene[] plats, in CharHop ha, in CharHop hb, float smallW, float largeW,
+        PlatformGene[] plats, CharHop[] hops, float smallW, float largeW,
         Dictionary<(int, int), int> attempts, HashSet<(int, int)> unresolvable)
     {
         const int MaxPasses = 12;
@@ -698,7 +823,7 @@ public static class StageRules
                 // reappears is attacked DIFFERENTLY each time (the loop-prevention).
                 for (int s = 0; s < StrategyCount; s++)
                 {
-                    if (TryGapStrategy((tried + s) % StrategyCount, plats, i, j, ha, hb, largeW))
+                    if (TryGapStrategy((tried + s) % StrategyCount, plats, i, j, hops, largeW))
                     {
                         progress = true;
                         movedAny = true;
@@ -760,7 +885,7 @@ public static class StageRules
     /// (no corridor at all). A strategy is accepted only when it introduces no overlap
     /// and does not shrink both-character connectivity.</summary>
     private static bool TryGapStrategy(
-        int strategy, PlatformGene[] plats, int i, int j, in CharHop ha, in CharHop hb, float largeW)
+        int strategy, PlatformGene[] plats, int i, int j, CharHop[] hops, float largeW)
     {
         float gap = plats[j].X - (plats[i].X + plats[i].XSize);
         int widen = (int)MathF.Ceiling(largeW + GapPassSlack + 0.4f - gap);
@@ -780,9 +905,9 @@ public static class StageRules
             return false;
         }
         PlatformGene saved = plats[idx];
-        int before = BothConnectedCount(plats, ha, hb);
+        int before = AllConnectedCount(plats, hops);
         plats[idx] = cand;
-        if (BothConnectedCount(plats, ha, hb) < before)
+        if (AllConnectedCount(plats, hops) < before)
         {
             plats[idx] = saved; // never trade a gap fix for lost traversability
             return false;
@@ -822,8 +947,8 @@ public static class StageRules
             : j with { Y = j.Y - downShift };
     }
 
-    /// <summary>Platforms reachable from platform 0 over BOTH-hop edges.</summary>
-    private static int BothConnectedCount(PlatformGene[] plats, in CharHop ha, in CharHop hb)
+    /// <summary>Platforms reachable from platform 0 over ALL-hop edges.</summary>
+    private static int AllConnectedCount(PlatformGene[] plats, CharHop[] hops)
     {
         var visited = new bool[plats.Length];
         visited[0] = true;
@@ -835,7 +960,7 @@ public static class StageRules
             int c = queue.Dequeue();
             for (int u = 0; u < plats.Length; u++)
             {
-                if (!visited[u] && BothCanHop(plats[c], plats[u], ha, hb))
+                if (!visited[u] && AllCanHop(plats[c], plats[u], hops))
                 {
                     visited[u] = true;
                     seen++;
@@ -861,8 +986,17 @@ public static class StageRules
         return list;
     }
 
-    private static bool BothCanHop(in PlatformGene from, in PlatformGene to, in CharHop a, in CharHop b) =>
-        a.CanHop(from, to) && b.CanHop(from, to) && a.CanHop(to, from) && b.CanHop(to, from);
+    private static bool AllCanHop(in PlatformGene from, in PlatformGene to, CharHop[] hops)
+    {
+        foreach (CharHop h in hops)
+        {
+            if (!h.CanHop(from, to) || !h.CanHop(to, from))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
 
     private static float CenterDistanceSq(in PlatformGene a, in PlatformGene b)
     {
@@ -871,15 +1005,19 @@ public static class StageRules
         return dx * dx + dy * dy;
     }
 
-    /// <summary>Move u toward connector c — lower it until the rise is within BOTH
-    /// characters' max, then shrink the horizontal gap until both can hop — in integer
+    /// <summary>Move u toward connector c — lower it until the rise is within EVERY
+    /// character's max, then shrink the horizontal gap until all can hop — in integer
     /// steps, leaving ≥ 1 unit and never overlapping (reverts on overlap).</summary>
     private static bool TryPullWithinHop(
-        ref PlatformGene u, in PlatformGene c, PlatformGene[] all, int uIndex, in CharHop a, in CharHop b)
+        ref PlatformGene u, in PlatformGene c, PlatformGene[] all, int uIndex, CharHop[] hops)
     {
         PlatformGene start = u;
-        float minMaxRise = MathF.Min(a.MaxRise, b.MaxRise);
-        for (int step = 0; step < 40 && !BothCanHop(c, u, a, b); step++)
+        float minMaxRise = float.MaxValue;
+        foreach (CharHop h in hops)
+        {
+            minMaxRise = MathF.Min(minMaxRise, h.MaxRise);
+        }
+        for (int step = 0; step < 40 && !AllCanHop(c, u, hops); step++)
         {
             float dyUp = (u.Y + u.YSize) - (c.Y + c.YSize);   // u above c
             float dyDown = (c.Y + c.YSize) - (u.Y + u.YSize); // c above u
@@ -908,9 +1046,9 @@ public static class StageRules
             }
         }
         // Last resort for a very weak character (reach < 1 unit): dock u CONTIGUOUS to c
-        // at the same top — a continuous surface both can simply WALK across, feasible
+        // at the same top — a continuous surface anyone can simply WALK across, feasible
         // for any reach. Only if it introduces no overlap.
-        if (!BothCanHop(c, u, a, b))
+        if (!AllCanHop(c, u, hops))
         {
             int top = c.Y + c.YSize;
             var docked = u with

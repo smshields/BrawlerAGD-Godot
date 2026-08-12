@@ -77,6 +77,15 @@ public class Phase1PipelineTests
         // seeds 1-800: asymmetric corridors 248 stages → ZERO, connectivity unchanged,
         // zero overlaps. Match goldens unmoved. Prior pin 10847440123006787147.
         // Re-pinned 2026-07-22 (2nd): per-character platform fit — Generate/Crossover/
+        // Re-pinned 2026-08-12: Four Player Support (docs/features/four-player.md) —
+        // the stage schema appended spawn3X/Y + spawn4X/Y (every stage carries FOUR
+        // spawn points), the generator draws two extra spawns (2 draws each: platform
+        // index + fraction; mirrored stages mirror spawn 3 for spawn 4), spawns now
+        // avoid overlapping each other (best-effort: 4 strict separation regrows in
+        // front of the original 4 bare-tolerant attempts, occupied/axis-clearance
+        // column blocking), and game.json is v9 (four spawn genes in the serialized
+        // bytes). Match goldens + utility golden unmoved (fixture genomes, 2P never
+        // reads spawns 3/4). Prior pin: 9743610122867389384.
         // Mutate now MOVE platforms so both characters can traverse (RNG-free, so draw
         // order is unchanged; only platform coordinates differ). Match goldens unmoved.
         // Re-pinned 2026-07-22: Spawning Behaviors appended two stage genes
@@ -96,6 +105,6 @@ public class Phase1PipelineTests
         // (fast fall/crouch/DI), 16079587979934170348 (dash slot),
         // 10607725140721060960 (shield), 5432710911100783110 (two moves),
         // 13551893661434631362, 9300943650238635838.
-        Assert.Equal(9743610122867389384UL, RunPipeline(20260707));
+        Assert.Equal(2963760689975173760UL, RunPipeline(20260707));
     }
 }

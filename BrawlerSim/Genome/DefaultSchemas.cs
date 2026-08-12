@@ -108,6 +108,15 @@ public static class StageParams
     // validate down to 0 = mechanic off (the loader default for pre-v8 files).
     public const string PlatformSpawnDuration = "platformSpawnDuration";
     public const string SpawnInvulnDuration = "spawnInvulnDuration";
+
+    // Four Player Support (2026-08-12, FEATURES.md §Game Menu;
+    // docs/features/four-player.md): every stage carries FOUR spawn points from now
+    // on, regardless of the game's player count. Appended (order is crossover
+    // semantics); pre-v9 files derive them via StageRules.DeriveExtraSpawns.
+    public const string Spawn3X = "spawn3X";
+    public const string Spawn3Y = "spawn3Y";
+    public const string Spawn4X = "spawn4X";
+    public const string Spawn4Y = "spawn4Y";
 }
 
 /// <summary>Stable param keys for the move schema.</summary>
@@ -269,6 +278,12 @@ public static class DefaultSchemas
         // invulnerability 1–3 s. ValidMin 0 = mechanic off; pre-v8 files default there.
         new ParamSpec(StageParams.PlatformSpawnDuration, 1f, 5f) { ValidMin = 0f },
         new ParamSpec(StageParams.SpawnInvulnDuration, 1f, 3f) { ValidMin = 0f },
+        // Four Player Support (2026-08-12): spawns 3/4, same raw-world-coordinate
+        // ranges as spawns 1/2 (repair makes them legal per layout).
+        new ParamSpec(StageParams.Spawn3X, -49f, 49f),
+        new ParamSpec(StageParams.Spawn3Y, -25f, 26f),
+        new ParamSpec(StageParams.Spawn4X, -49f, 49f),
+        new ParamSpec(StageParams.Spawn4Y, -25f, 26f),
     });
 
     public static readonly ParamSchema Projectile = new("projectile", new[]

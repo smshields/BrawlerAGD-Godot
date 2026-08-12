@@ -241,6 +241,11 @@ public sealed class GameGenome
         {
             throw new ArgumentException("A game needs at least two characters.");
         }
+        if (Characters.Count > 4)
+        {
+            // Stages carry exactly four spawn points (2026-08-12, four-player.md).
+            throw new ArgumentException("A game supports at most four characters.");
+        }
         Stage = stage;
     }
 
@@ -260,10 +265,12 @@ public sealed class GameGenome
 
     /// <summary>Applies the per-character platform fit using the match constants the
     /// evaluator grades under (MatchConfig.Default). RNG-free, so it never desyncs the
-    /// generation stream — it only edits platform coordinates in place.</summary>
+    /// generation stream — it only edits platform coordinates in place. Fits ALL of
+    /// the game's characters (2026-08-12, four-player.md) — bit-identical to the old
+    /// pairwise fit for two-character games.</summary>
     internal static StageGenome FitStage(StageGenome stage, IReadOnlyList<CharacterGenome> characters) =>
         characters.Count >= 2
-            ? StageRules.FitToCharacters(stage, characters[0], characters[1],
+            ? StageRules.FitToCharacters(stage, characters,
                 Sim.MatchConfig.Default.Gravity, Sim.MatchConfig.Default.PlayerBaseWidth)
             : stage;
 

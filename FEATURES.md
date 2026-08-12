@@ -307,3 +307,17 @@ Agent:
 5. An "ADD TO GAMES" option saves the selected game into a favorites library for future play.
 6. When loading games (PLAY / WATCH), favorited games are shown as a simple list UI — favorites first, then the curated demo games — instead of dumping users into a file explorer.
 7. The file explorer is provided only as an "ADVANCED" option that is hidden by default.
+
+# Game Menu
+We currently only build individual games that are limited to two characters and a single stage. That being said, an ultimate goal of this game is to build a fully playable game with selectable characters. 
+
+To do this, we are going to add Build Game and Play Game menu options. The play game is simple - you can open evolved jsons, pick characters or stages, and import them to a game document. That game document will inform how a multiplayer game is compiled and deployed as an isolated experience (no evolution/nitty-gritty game design stuff). This will allow us to generate full games quickly based on outcomes of evolution. 
+
+Below are a set of features that we need to accomplish this:
+
+## Four Player Support
+We currently have room for four player GUIs at the bottom of the screen. We need to support the spawning of four characters within a single game. This is straight forward - we have four characters, four guis, and four spawn points. Stocks/etc. function as normal. Let's implement this now, make it an option in the evolution (num players to evolve), and make it a playable option. 
+
+All stages need to have spawn points, regardless of number of players from now on. Spawn points should follow existing rules, not overlapping with other spawns, always over a platform, etc.
+
+##

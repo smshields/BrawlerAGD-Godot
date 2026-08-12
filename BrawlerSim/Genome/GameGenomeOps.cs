@@ -80,17 +80,25 @@ public static class GameGenomeOps
                 stage.Platforms, StageRules.MirrorSideRight(mutated));
             if (transformed is not null)
             {
-                // Repair spawn 1 against the transformed layout, then mirror it for
-                // spawn 2 — fairness by symmetry, like the generator's mirrored path.
+                // Repair spawns 1/3 against the transformed layout, then mirror them
+                // for spawns 2/4 — fairness by symmetry, like the generator's mirrored
+                // path (spawn 3 treats the 1/2 pair as occupied; 2026-08-12).
+                float visW = mutated.Get(StageParams.VisibleHalfWidth);
+                float visH = mutated.Get(StageParams.VisibleHalfHeight);
                 Determinism.Vec2 s1 = StageRules.RepairSpawn(
                     new Determinism.Vec2(
                         mutated.Get(StageParams.Spawn1X), mutated.Get(StageParams.Spawn1Y)),
-                    transformed,
-                    mutated.Get(StageParams.VisibleHalfWidth),
-                    mutated.Get(StageParams.VisibleHalfHeight));
+                    transformed, visW, visH);
+                var s2 = new Determinism.Vec2(-s1.X, s1.Y);
+                Determinism.Vec2 s3 = StageRules.RepairSpawn(
+                    new Determinism.Vec2(
+                        mutated.Get(StageParams.Spawn3X), mutated.Get(StageParams.Spawn3Y)),
+                    transformed, visW, visH, new[] { s1, s2 });
                 ParamSet symmetricSpawns = mutated.With(
                     (StageParams.Spawn1X, s1.X), (StageParams.Spawn1Y, s1.Y),
-                    (StageParams.Spawn2X, -s1.X), (StageParams.Spawn2Y, s1.Y));
+                    (StageParams.Spawn2X, s2.X), (StageParams.Spawn2Y, s2.Y),
+                    (StageParams.Spawn3X, s3.X), (StageParams.Spawn3Y, s3.Y),
+                    (StageParams.Spawn4X, -s3.X), (StageParams.Spawn4Y, s3.Y));
                 return new StageGenome(transformed, symmetricSpawns);
             }
         }

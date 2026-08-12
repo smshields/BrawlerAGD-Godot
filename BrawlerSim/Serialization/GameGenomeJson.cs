@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using BrawlerSim.Determinism;
 using BrawlerSim.Genome;
 using BrawlerSim.Params;
 
@@ -31,10 +32,15 @@ namespace BrawlerSim.Serialization;
 ///       spawnInvulnDuration (docs/features/spawn-and-polish.md). ≤7 files default both
 ///       to 0 (spawning feature OFF = instant vulnerable spawn), so they replay
 ///       bit-identically.
+///   9 — 2026-08-12 four-player support: stage gained spawn3X/Y + spawn4X/Y (every
+///       stage carries four spawn points; docs/features/four-player.md), and the
+///       characters list may hold 2–4 entries. ≤8 files derive spawns 3/4
+///       deterministically (StageRules.DeriveExtraSpawns); 2P matches never read
+///       them, so old games and traces replay bit-identically.
 /// </summary>
 public static class GameGenomeJson
 {
-    public const int CurrentFormatVersion = 8; // 2026-07-22 spawning behaviors (see header)
+    public const int CurrentFormatVersion = 9; // 2026-08-12 four-player support (see header)
     private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = new()
@@ -142,7 +148,7 @@ public static class GameGenomeJson
         // (bit-identical playback). v7+: read them (missing keys throw, as everywhere).
         var stage = new StageGenome(platforms, doc.Stage.Params is null
             ? StageRules.LegacyParams(platforms, config.StageSchema)
-            : ParamSet.FromDictionary(config.StageSchema, WithStageDefaults(doc.Stage.Params)));
+            : ParamSet.FromDictionary(config.StageSchema, WithStageDefaults(doc.Stage.Params, platforms)));
         return new GameRecord(doc.Name ?? "Unnamed", doc.Origin, new GameGenome(characters, stage));
     }
 
@@ -192,11 +198,26 @@ public static class GameGenomeJson
 
     /// <summary>2026-07-22 spawning-behaviors stage append: ≤ v7 files (stage params
     /// present but predating the spawn genes) read both durations as 0 = feature OFF,
-    /// so they replay as the instant vulnerable spawn they were recorded under.</summary>
-    private static Dictionary<string, float> WithStageDefaults(Dictionary<string, float> dict)
+    /// so they replay as the instant vulnerable spawn they were recorded under.
+    /// 2026-08-12 four-player append: ≤ v8 files derive spawns 3/4 deterministically
+    /// from the layout + stored spawns 1/2 (never read by 2P matches — bit-exact).</summary>
+    private static Dictionary<string, float> WithStageDefaults(
+        Dictionary<string, float> dict, IReadOnlyList<PlatformGene> platforms)
     {
         dict.TryAdd(StageParams.PlatformSpawnDuration, 0f);
         dict.TryAdd(StageParams.SpawnInvulnDuration, 0f);
+        if (!dict.ContainsKey(StageParams.Spawn3X))
+        {
+            (Vec2 s3, Vec2 s4) = StageRules.DeriveExtraSpawns(
+                platforms,
+                new Vec2(dict[StageParams.Spawn1X], dict[StageParams.Spawn1Y]),
+                new Vec2(dict[StageParams.Spawn2X], dict[StageParams.Spawn2Y]),
+                dict[StageParams.VisibleHalfWidth], dict[StageParams.VisibleHalfHeight]);
+            dict[StageParams.Spawn3X] = s3.X;
+            dict[StageParams.Spawn3Y] = s3.Y;
+            dict[StageParams.Spawn4X] = s4.X;
+            dict[StageParams.Spawn4Y] = s4.Y;
+        }
         return dict;
     }
 

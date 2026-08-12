@@ -112,6 +112,47 @@ public class StageRulesTests
     }
 
     [Fact]
+    public void RepairSpawnsSeparatesAllFourStackedSpawns()
+    {
+        // Four Player Support (2026-08-12): all four spawn genes stacked on one point
+        // must repair to pairwise NON-overlapping legal spawns (designer rule) on a
+        // layout with room to separate.
+        ParamSet stacked = StageRules.LegacyParams(FlatPair).With(
+            (StageParams.Spawn1X, -5f), (StageParams.Spawn1Y, 0f),
+            (StageParams.Spawn2X, -5f), (StageParams.Spawn2Y, 0f),
+            (StageParams.Spawn3X, -5f), (StageParams.Spawn3Y, 0f),
+            (StageParams.Spawn4X, -5f), (StageParams.Spawn4Y, 0f));
+        ParamSet repaired = StageRules.RepairSpawns(FlatPair, stacked);
+        for (int i = 0; i < 4; i++)
+        {
+            Vec2 s = StageRules.SpawnOf(repaired, i);
+            Assert.True(FlatPair.Any(p => s.X >= p.X && s.X <= p.X + p.XSize && s.Y >= p.Y + p.YSize),
+                $"spawn {i + 1} ({s.X}, {s.Y}) is not over any platform");
+            for (int j = i + 1; j < 4; j++)
+            {
+                Assert.False(StageRules.SpawnsOverlap(s, StageRules.SpawnOf(repaired, j)),
+                    $"spawns {i + 1} and {j + 1} still overlap after repair");
+            }
+        }
+        // Spawn 1 repairs first with no occupied constraint — identity for a legal gene.
+        Assert.Equal(-5f, repaired.Get(StageParams.Spawn1X));
+        Assert.Equal(0f, repaired.Get(StageParams.Spawn1Y));
+    }
+
+    [Fact]
+    public void RepairSpawnPrefersOverlapOverEmbeddingWhenColumnsRunOut()
+    {
+        // Best-effort separation (2026-08-12): a single narrow platform cannot seat
+        // two separated spawns — the second must land on a legal column anyway
+        // (stacked beats embedded/KO-zone).
+        var lone = new[] { new PlatformGene(-1, -1, 2, 1) };
+        Vec2 s1 = StageRules.RepairSpawn(new Vec2(0f, 0.5f), lone, 5f, 5f);
+        Vec2 s2 = StageRules.RepairSpawn(new Vec2(0f, 0.5f), lone, 5f, 5f, new[] { s1 });
+        Assert.True(StageRules.SpawnsOverlap(s1, s2)); // no separated column exists
+        Assert.Equal(s1.Y, s2.Y);                      // same legal hover, not an embed
+    }
+
+    [Fact]
     public void RepairSpawnClampsKoZoneGenesIntoTheBox()
     {
         ParamSet legacy = StageRules.LegacyParams(FlatPair);
@@ -367,6 +408,59 @@ public class StageRulesTests
                     Assert.False(StageRules.Overlaps(g.Stage.Platforms[i], g.Stage.Platforms[j]));
                 }
             }
+        }
+    }
+
+    [Fact]
+    public void FourCharacterGamesNeverHaveAsymmetricBodyGapsEither()
+    {
+        // Four Player Support (2026-08-12): the platform fit quantifies over ALL of a
+        // game's characters — the smallest/largest bodies among four must never see an
+        // asymmetric corridor, and layouts stay overlap-free. 100 seeds (the 2P audit
+        // covers the pairwise path at 200).
+        const float baseW = 0.74289274f;
+        var config = GenerationConfig.Default with { CharacterCount = 4 };
+        for (ulong seed = 1; seed <= 100; seed++)
+        {
+            GameGenome g = GameGenome.Generate(config, new Pcg32(seed));
+            Assert.Equal(4, g.Characters.Count);
+            float smallW = float.MaxValue;
+            float largeW = float.MinValue;
+            foreach (CharacterGenome c in g.Characters)
+            {
+                float w = baseW * c.Params.Get(CharacterParams.WidthScalar);
+                smallW = MathF.Min(smallW, w);
+                largeW = MathF.Max(largeW, w);
+            }
+            Assert.Equal(0, CountAsymmetricGaps(g.Stage.Platforms, smallW, largeW));
+            for (int i = 0; i < g.Stage.Platforms.Count; i++)
+            {
+                for (int j = i + 1; j < g.Stage.Platforms.Count; j++)
+                {
+                    Assert.False(StageRules.Overlaps(g.Stage.Platforms[i], g.Stage.Platforms[j]));
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void TwoCharacterListFitMatchesThePairwiseFit()
+    {
+        // The N-character overload must be bit-identical to the pairwise fit for two
+        // characters (pure predicates over the same set) — the 2P generation stream
+        // depends on it.
+        for (ulong seed = 1; seed <= 50; seed++)
+        {
+            var rng = new Pcg32(seed);
+            GameGenome g = GameGenome.Generate(GenerationConfig.Default, rng);
+            StageGenome pair = StageRules.FitToCharacters(
+                g.Stage, g.Characters[0], g.Characters[1],
+                MatchConfig.Default.Gravity, MatchConfig.Default.PlayerBaseWidth);
+            StageGenome list = StageRules.FitToCharacters(
+                g.Stage, g.Characters,
+                MatchConfig.Default.Gravity, MatchConfig.Default.PlayerBaseWidth);
+            Assert.Equal(pair.Platforms, list.Platforms);
+            Assert.Equal(pair.Params.ToArray(), list.Params.ToArray());
         }
     }
 
