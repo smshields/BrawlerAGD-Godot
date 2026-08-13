@@ -27,6 +27,12 @@ public partial class HudView : CanvasLayer
     private const int MaxStockDots = 8;
     private const float RollSeconds = 0.35f;
 
+    /// <summary>Design-pixel height of the bottom band the HUD occupies right now —
+    /// the camera frames the world ABOVE this (2026-08-13, designer: platforms must
+    /// never hide behind the panels). Tracks the debug-strip toggle live.</summary>
+    public static float ReservedBottomPixels() =>
+        BottomMargin + PanelHeight + (AppSettings.DebugPanelEnabled ? 4f + DebugHeight : 0f);
+
     private static readonly string[] KeyNamesKeyboard = { "I", "J", "K", "U", "L" };
     private static readonly string[] KeyNamesPad = { "L1", "X", "A", "Y", "R1" };
 
@@ -470,13 +476,16 @@ public partial class HudView : CanvasLayer
         private float _rollTarget;
     }
 
-    /// <summary>A labelled timing bar (intangible/invulnerable) — hidden at zero.</summary>
+    /// <summary>A labelled timing bar (intangible/invulnerable) — hidden at zero.
+    /// Narrowed 2026-08-13 (designer: the 96 px track ran under the DI arrow at the
+    /// strip's right edge): caption + track now end well clear of it, and the two
+    /// bars share the same compact block.</summary>
     private sealed class Bar
     {
         private readonly Label _caption = new();
         private readonly ColorRect _track = new();
         private readonly ColorRect _fill = new();
-        private const float Width = 96f;
+        private const float Width = 54f;
 
         public Bar(Control parent, string caption, Color color, Vector2 position)
         {
@@ -487,7 +496,7 @@ public partial class HudView : CanvasLayer
             parent.AddChild(_caption);
 
             _track.Color = new Color(1f, 1f, 1f, 0.12f);
-            _track.Position = position + new Vector2(34f, 0f);
+            _track.Position = position + new Vector2(30f, 0f);
             _track.Size = new Vector2(Width, 6f);
             parent.AddChild(_track);
 

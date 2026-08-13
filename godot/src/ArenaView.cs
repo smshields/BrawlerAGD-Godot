@@ -85,6 +85,7 @@ public partial class ArenaView : Node2D
         // Map Size (2026-07-21): the framing camera and the minimap overlay.
         _camera = new ArenaCamera();
         AddChild(_camera);
+        _camera.BottomUiPixels = HudView.ReservedBottomPixels(); // frame above the HUD
         _camera.Setup(_world, Ppu);
 
         _minimap = new MinimapView();
@@ -195,6 +196,9 @@ public partial class ArenaView : Node2D
         }
         _projectiles.Sync();
         _spawnPads.Sync();
+        // The camera frames the world above the HUD band (2026-08-13); read the band
+        // each frame so the pause-menu debug toggle re-frames immediately.
+        _camera.BottomUiPixels = HudView.ReservedBottomPixels();
         _camera.Sync((float)delta);
         _minimap.Sync();
         _hud.Sync(_inputs);
