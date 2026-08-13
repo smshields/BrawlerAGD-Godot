@@ -155,6 +155,19 @@ public partial class Boot : Node
             MatchSession.Mode = MatchMode.Replay;
             MatchSession.Trace = BrawlerSim.Replay.InputTraceJson.Load(OS.GetEnvironment("BRAWLER_TRACE"));
         }
+
+        // BRAWLER_RULES="timed:<seconds>" (2026-08-12): run the automated match under
+        // the TIMED rule — visual verification of the KO counter + clock.
+        string rules = OS.GetEnvironment("BRAWLER_RULES");
+        if (rules.StartsWith("timed", System.StringComparison.Ordinal))
+        {
+            MatchSession.EndRule = BrawlerSim.Sim.MatchEndRule.Timed;
+            MatchSession.TimedMatchSeconds = rules.Contains(':') ? float.Parse(rules.Split(':')[1]) : 120f;
+        }
+        else
+        {
+            MatchSession.EndRule = BrawlerSim.Sim.MatchEndRule.Stock;
+        }
         CallDeferred(nameof(GoToArena));
     }
 

@@ -21,7 +21,7 @@ public partial class ArenaView : Node2D
     private SimWorld _world = null!;
     private IInputSource[] _sources = null!;
     private InputTrace _trace = null!;
-    private readonly InputFrame[] _inputs = new InputFrame[2];
+    private InputFrame[] _inputs = null!;
     private PlayerView[] _views = null!;
     private ProjectileLayer _projectiles = null!;
     private HudView _hud = null!;
@@ -30,7 +30,10 @@ public partial class ArenaView : Node2D
     private SpawnPadView _spawnPads = null!;
     private DeathFlashView _deathFlash = null!;
     private PauseMenuView _pauseMenu = null!;
-    private readonly int[] _prevStocks = new int[2]; // KO edge detection for the flash
+    // KO edge detection for the flash (2026-08-12): the per-life ledger catches
+    // stock decrements AND timed-mode deaths; the eliminated flag is the final KO.
+    private int[] _prevDeaths = null!;
+    private bool[] _prevEliminated = null!;
     private bool _paused;
     private bool _traceSaved;
 
@@ -46,7 +49,9 @@ public partial class ArenaView : Node2D
             BrawlerSim.Genome.GameGenome.Generate(
                 BrawlerSim.Genome.GenerationConfig.Default, new Pcg32(1)));
 
-        _world = new SimWorld(MatchSession.Game.Genome);
+        _world = new SimWorld(MatchSession.Game.Genome, MatchSession.BuildMatchConfig());
+        int players = _world.Players.Count;
+        _inputs = new InputFrame[players];
         _sources = BuildSources();
         _trace = new InputTrace();
 
@@ -56,8 +61,8 @@ public partial class ArenaView : Node2D
         AddChild(stage);
         stage.Setup(_world, Ppu);
 
-        _views = new PlayerView[2];
-        for (int i = 0; i < 2; i++)
+        _views = new PlayerView[players];
+        for (int i = 0; i < players; i++)
         {
             var view = new PlayerView();
             AddChild(view);
@@ -89,9 +94,11 @@ public partial class ArenaView : Node2D
         // Death Animations (2026-07-22): edge-anchored KO flash overlay.
         _deathFlash = new DeathFlashView();
         AddChild(_deathFlash);
-        for (int i = 0; i < 2; i++)
+        _prevDeaths = new int[players];
+        _prevEliminated = new bool[players];
+        for (int i = 0; i < players; i++)
         {
-            _prevStocks[i] = _world.Players[i].Stocks;
+            _prevDeaths[i] = _world.Players[i].CompletedStockDamage.Count;
         }
 
         _hud = new HudView();
@@ -148,7 +155,7 @@ public partial class ArenaView : Node2D
         // resolved by a tick (which resets the victim off-screen) can still fire its
         // flash. Hoisted out of the fast-forward loop (CA2014).
         System.Span<(BrawlerSim.Determinism.Vec2 Pos, BrawlerSim.Determinism.Vec2 Vel, float Dmg)> pre =
-            stackalloc (BrawlerSim.Determinism.Vec2, BrawlerSim.Determinism.Vec2, float)[2];
+            stackalloc (BrawlerSim.Determinism.Vec2, BrawlerSim.Determinism.Vec2, float)[_world.Players.Count];
         for (int step = 0; step < _ticksPerFrame && !_world.IsOver; step++)
         {
             for (int i = 0; i < _sources.Length; i++)
@@ -156,7 +163,7 @@ public partial class ArenaView : Node2D
                 _inputs[i] = _sources[i].GetInput(_world, i);
             }
             _trace.Record(_inputs);
-            for (int i = 0; i < 2; i++)
+            for (int i = 0; i < pre.Length; i++)
             {
                 pre[i] = (_world.Players[i].Position, _world.Players[i].Velocity, _world.Players[i].Damage);
             }
@@ -193,22 +200,25 @@ public partial class ArenaView : Node2D
         _hud.Sync(_inputs);
     }
 
-    /// <summary>Fire the death flash when a player lost a stock or the match ended by
-    /// KO this tick, using the PRE-tick snapshot (the victim is already reset/absent by
-    /// now). Direction points from the death point toward arena center; speed/damage
-    /// normalize to the flash's scale inputs.</summary>
+    /// <summary>Fire the death flash when a player died this tick, using the PRE-tick
+    /// snapshot (the victim is already reset/absent by now). Deaths are read from the
+    /// per-life ledger + the eliminated flag (2026-08-12): stock decrements fill the
+    /// ledger exactly as before, TIMED deaths fill it with stocks untouched, and an
+    /// elimination (including the 2P final KO) flips the flag. Direction points from
+    /// the death point toward arena center; speed/damage normalize the flash scale.</summary>
     private void DetectDeaths(
         System.ReadOnlySpan<(BrawlerSim.Determinism.Vec2 Pos, BrawlerSim.Determinism.Vec2 Vel, float Dmg)> pre)
     {
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < _world.Players.Count; i++)
         {
-            bool lostStock = _world.Players[i].Stocks < _prevStocks[i];
-            bool finalKo = _world.IsOver && _world.LoserIndex == i;
-            if (lostStock || finalKo)
+            bool died = _world.Players[i].CompletedStockDamage.Count > _prevDeaths[i]
+                || (_world.Players[i].Eliminated && !_prevEliminated[i]);
+            if (died)
             {
                 TriggerDeathFlash(pre[i].Pos, pre[i].Vel, pre[i].Dmg, _world.Players[i].BodyHalf.X);
             }
-            _prevStocks[i] = _world.Players[i].Stocks;
+            _prevDeaths[i] = _world.Players[i].CompletedStockDamage.Count;
+            _prevEliminated[i] = _world.Players[i].Eliminated;
         }
     }
 
@@ -340,26 +350,34 @@ public partial class ArenaView : Node2D
         GetTree().ChangeSceneToFile("res://scenes/main_menu.tscn");
     }
 
-    private IInputSource[] BuildSources() => MatchSession.Mode switch
+    /// <summary>
+    /// Input sources per player. Two-player games keep the original modes verbatim.
+    /// 3/4-player games (2026-08-12, designer: "one human + CPUs for now") give any
+    /// human mode P1 on the keyboard with CPUs beside them; multi-human 3/4P waits
+    /// for the Build Game menu. Watch (AiVsAi) and Replay are N-wide naturally.
+    /// </summary>
+    private IInputSource[] BuildSources()
     {
-        MatchMode.HumanVsHuman => new IInputSource[]
+        int players = _world.Players.Count;
+        if (MatchSession.Mode == MatchMode.Replay)
         {
-            new HumanInputSource(1, ShieldHoldMask(0)),
-            new HumanInputSource(2, ShieldHoldMask(1)),
-        },
-        MatchMode.HumanVsCpu => new IInputSource[]
+            return ReplaySources(players);
+        }
+        var sources = new IInputSource[players];
+        for (int i = 0; i < players; i++)
         {
-            new HumanInputSource(1, ShieldHoldMask(0)),
-            AgentConfig.Default.CreateSource(new Pcg32(MatchSession.AiSeed, 1)),
-        },
-        MatchMode.AiVsAi => new IInputSource[]
-        {
-            AgentConfig.Default.CreateSource(new Pcg32(MatchSession.AiSeed, 0)),
-            AgentConfig.Default.CreateSource(new Pcg32(MatchSession.AiSeed, 1)),
-        },
-        MatchMode.Replay => ReplaySources(),
-        _ => throw new System.InvalidOperationException($"Unknown mode {MatchSession.Mode}"),
-    };
+            bool human = MatchSession.Mode switch
+            {
+                MatchMode.HumanVsHuman => players == 2 ? i <= 1 : i == 0,
+                MatchMode.HumanVsCpu => i == 0,
+                _ => false,
+            };
+            sources[i] = human
+                ? new HumanInputSource(i + 1, ShieldHoldMask(i))
+                : AgentConfig.Default.CreateSource(new Pcg32(MatchSession.AiSeed, (ulong)i));
+        }
+        return sources;
+    }
 
     /// <summary>Which of this character's buttons map to shield moves (hold semantics).</summary>
     private bool[] ShieldHoldMask(int playerIndex)
@@ -373,9 +391,14 @@ public partial class ArenaView : Node2D
         return mask;
     }
 
-    private static IInputSource[] ReplaySources()
+    private static IInputSource[] ReplaySources(int players)
     {
         var source = new TraceInputSource(MatchSession.Trace!);
-        return new IInputSource[] { source, source };
+        var sources = new IInputSource[players];
+        for (int i = 0; i < players; i++)
+        {
+            sources[i] = source;
+        }
+        return sources;
     }
 }

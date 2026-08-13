@@ -18,18 +18,19 @@ public partial class SpawnPadView : Node2D
 
     private SimWorld _world = null!;
     private float _ppu;
-    private readonly float[] _alpha = new float[2];
+    private float[] _alpha = null!;
 
     public void Setup(SimWorld world, float ppu)
     {
         _world = world;
         _ppu = ppu;
+        _alpha = new float[world.Players.Count]; // one pad per player (2026-08-12)
     }
 
     public void Sync()
     {
         bool anyVisible = false;
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < _alpha.Length; i++)
         {
             float target = _world.Players[i].SpawnPadActive ? 1f : 0f;
             float rate = target > _alpha[i] ? FadeInPerFrame : FadeOutPerFrame;
@@ -45,7 +46,7 @@ public partial class SpawnPadView : Node2D
 
     public override void _Draw()
     {
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < _alpha.Length; i++)
         {
             if (_alpha[i] <= 0.01f)
             {

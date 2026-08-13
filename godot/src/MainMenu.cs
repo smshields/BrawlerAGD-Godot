@@ -12,6 +12,7 @@ public partial class MainMenu : Control
     private FileDialog _gameDialog = null!;
     private FileDialog _traceDialog = null!;
     private MatchMode _pendingMode;
+    private OptionButton? _rulesOption; // 2026-08-12 STOCK/TIMED picker row
     private Label _hint = null!;
     private Button _twoPlayerButton = null!;
 
@@ -153,6 +154,21 @@ public partial class MainMenu : Control
         }
         AddGameSection(list, "DEMO GAMES", AppPaths.DemoRoot());
 
+        // Match rules (2026-08-12, four-player.md): STOCK (legacy last-man-standing)
+        // or TIMED (infinite stocks, ranked by KOs). Hidden for replays — a trace
+        // only replays bit-exactly under the rule it was recorded with (STOCK).
+        _rulesOption = null;
+        if (mode != MatchMode.Replay)
+        {
+            _rulesOption = new OptionButton();
+            _rulesOption.AddItem("RULES: STOCK (LAST ONE STANDING)", 0);
+            _rulesOption.AddItem("RULES: TIMED 1:00 (MOST KOs)", 1);
+            _rulesOption.AddItem("RULES: TIMED 2:00 (MOST KOs)", 2);
+            _rulesOption.AddItem("RULES: TIMED 5:00 (MOST KOs)", 3);
+            _rulesOption.Selected = 0;
+            box.AddChild(_rulesOption);
+        }
+
         var advanced = new Button { Text = "ADVANCED: BROWSE FILES…" };
         advanced.Pressed += () =>
         {
@@ -211,6 +227,15 @@ public partial class MainMenu : Control
     {
         MatchSession.Game = GameGenomeJson.Load(path);
         MatchSession.Mode = _pendingMode;
+        // Match rules (2026-08-12): apply the picker's choice; replays always run
+        // STOCK (the rule their traces were recorded under).
+        (MatchSession.EndRule, MatchSession.TimedMatchSeconds) = (_rulesOption?.Selected ?? 0) switch
+        {
+            1 => (BrawlerSim.Sim.MatchEndRule.Timed, 60f),
+            2 => (BrawlerSim.Sim.MatchEndRule.Timed, 120f),
+            3 => (BrawlerSim.Sim.MatchEndRule.Timed, 300f),
+            _ => (BrawlerSim.Sim.MatchEndRule.Stock, MatchSession.TimedMatchSeconds),
+        };
         if (_pendingMode == MatchMode.Replay)
         {
             _traceDialog.CurrentDir = _gameDialog.CurrentDir;

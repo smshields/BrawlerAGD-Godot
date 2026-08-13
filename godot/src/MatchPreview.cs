@@ -25,7 +25,7 @@ public partial class MatchPreview : Node2D
     private ulong _seed;
     private SimWorld? _world;
     private IInputSource[] _sources = System.Array.Empty<IInputSource>();
-    private readonly InputFrame[] _inputs = new InputFrame[2];
+    private InputFrame[] _inputs = new InputFrame[2]; // resized per game (2026-08-12)
     private PlayerView[] _views = System.Array.Empty<PlayerView>();
     private ProjectileLayer _projectiles = null!;
     private SpawnPadView _spawnPads = null!;
@@ -67,11 +67,13 @@ public partial class MatchPreview : Node2D
         }
 
         _world = new SimWorld(_record.Genome);
-        _sources = new[]
+        int players = _world.Players.Count; // 2-4 since 2026-08-12
+        _inputs = new InputFrame[players];
+        _sources = new IInputSource[players];
+        for (int i = 0; i < players; i++)
         {
-            AgentConfig.Default.CreateSource(new Pcg32(_seed, 0)),
-            AgentConfig.Default.CreateSource(new Pcg32(_seed, 1)),
-        };
+            _sources[i] = AgentConfig.Default.CreateSource(new Pcg32(_seed, (ulong)i));
+        }
         _restartCountdown = RestartDelayFrames;
 
         Position = GetViewportRect().Size / 2f;
@@ -80,8 +82,8 @@ public partial class MatchPreview : Node2D
         AddChild(stage);
         stage.Setup(_world, Ppu);
 
-        _views = new PlayerView[2];
-        for (int i = 0; i < 2; i++)
+        _views = new PlayerView[players];
+        for (int i = 0; i < players; i++)
         {
             var view = new PlayerView();
             AddChild(view);

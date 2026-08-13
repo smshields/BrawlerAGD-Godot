@@ -133,10 +133,11 @@ public partial class PlayerView : Node2D
     public void Sync()
     {
         _flashClock++;
-        // Respawn blackout (2026-07-22): an absent character shows nothing — except
-        // the DETACHED motion trail (2026-07-23), which lingers and fades where the
-        // KO flight ended so the fastest KOs stay trackable.
-        bool absent = _player.IsRespawning;
+        // Respawn blackout (2026-07-22) or elimination (2026-08-12): an absent
+        // character shows nothing — except the DETACHED motion trail (2026-07-23),
+        // which lingers and fades where the KO flight ended so the fastest KOs stay
+        // trackable.
+        bool absent = _player.IsAbsent;
         _body.Visible = !absent;
         _name.Visible = !absent;
         if (absent)

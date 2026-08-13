@@ -33,6 +33,7 @@ public partial class EvolveView : Control
     // Composition control + advanced ranges (2026-07-14,
     // docs/features/evolve-composition-and-ranges.md)
     private OptionButton _compositionMode = null!;
+    private OptionButton _numPlayers = null!; // 2026-08-12 four-player
     private HBoxContainer _perButtonRow = null!;
     private readonly OptionButton[] _buttonSlots = new OptionButton[BrawlerSim.Sim.InputFrame.ActionCount];
     private Button _advancedToggle = null!;
@@ -252,7 +253,10 @@ public partial class EvolveView : Control
     /// the byte-identical legacy path.</summary>
     private GenerationConfig BuildGenerationConfig()
     {
-        GenerationConfig generation = GenerationConfig.Default;
+        GenerationConfig generation = GenerationConfig.Default with
+        {
+            CharacterCount = _numPlayers.Selected + 2, // 2026-08-12 four-player
+        };
         if (_compositionMode.Selected == 1)
         {
             generation = generation with { ButtonComposition = GenerationConfig.RandomComposition };
@@ -289,6 +293,7 @@ public partial class EvolveView : Control
                 case "gens": _generations.Value = double.Parse(kv[1]); break;
                 case "seed": _seed.Value = double.Parse(kv[1]); break;
                 case "rounds": _rounds.Value = double.Parse(kv[1]); break;
+                case "players": _numPlayers.Selected = int.Parse(kv[1]) - 2; break; // 2026-08-12
                 case "composition": // pinned|random|perbutton (headless UI verification)
                     _compositionMode.Selected = kv[1] switch
                         { "random" => 1, "perbutton" => 2, _ => 0 };
@@ -330,6 +335,15 @@ public partial class EvolveView : Control
         _rounds = Spin(1, 1, 9); left.AddChild(Labeled("rounds / individual", _rounds));
         _mutation = Slider(0.4f); left.AddChild(Labeled("mutation rate", _mutation));
         _dropout = Slider(0.5f); left.AddChild(Labeled("dropout rate", _dropout));
+
+        // Four Player Support (2026-08-12): each game holds 2-4 characters; runs past
+        // two players score under ffa-v1 automatically (run.json records both).
+        _numPlayers = new OptionButton();
+        _numPlayers.AddItem("2 PLAYERS", 0);
+        _numPlayers.AddItem("3 PLAYERS", 1);
+        _numPlayers.AddItem("4 PLAYERS", 2);
+        _numPlayers.Selected = 0;
+        left.AddChild(Labeled("num players", _numPlayers));
 
         // Composition (2026-07-14): PINNED = today's fixed attack/attack/shield/dash;
         // RANDOM = every button free; PER-BUTTON = pin some, free others.

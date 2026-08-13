@@ -65,12 +65,33 @@ public partial class ArenaCamera : Camera2D
 
     private (Vector2 Center, float HalfHeight) Target()
     {
-        var p0 = _world.Players[0].Position;
-        var p1 = _world.Players[1].Position;
+        // Frame the bounding box of every player still IN the match (2026-08-12,
+        // four-player.md): eliminated players drop out of framing; blacked-out ones
+        // are parked at their spawn point, which the old camera also framed. For two
+        // players this is exactly the old midpoint + spread math.
+        float minX = float.MaxValue, maxX = float.MinValue;
+        float minY = float.MaxValue, maxY = float.MinValue;
+        int framed = 0;
+        foreach (BrawlerSim.Sim.SimPlayer player in _world.Players)
+        {
+            if (player.Eliminated)
+            {
+                continue;
+            }
+            minX = Mathf.Min(minX, player.Position.X);
+            maxX = Mathf.Max(maxX, player.Position.X);
+            minY = Mathf.Min(minY, player.Position.Y);
+            maxY = Mathf.Max(maxY, player.Position.Y);
+            framed++;
+        }
+        if (framed == 0)
+        {
+            minX = maxX = minY = maxY = 0f; // everyone gone (match over) — hold center
+        }
         float aspect = Aspect();
 
-        float needHalfW = Mathf.Abs(p0.X - p1.X) * 0.5f + FramingMargin;
-        float needHalfH = Mathf.Abs(p0.Y - p1.Y) * 0.5f + FramingMargin;
+        float needHalfW = (maxX - minX) * 0.5f + FramingMargin;
+        float needHalfH = (maxY - minY) * 0.5f + FramingMargin;
         float halfH = Mathf.Max(MinHalfHeight, Mathf.Max(needHalfH, needHalfW / aspect));
 
         // Hard ceiling: the whole view must fit inside the blast (KO) box.
@@ -79,9 +100,9 @@ public partial class ArenaCamera : Camera2D
         halfH = Mathf.Min(halfH, maxHalfH);
         float halfW = halfH * aspect;
 
-        // Center on the midpoint, clamped so the view stays inside the blast box.
-        float cx = (p0.X + p1.X) * 0.5f;
-        float cy = (p0.Y + p1.Y) * 0.5f;
+        // Center on the box midpoint, clamped so the view stays inside the blast box.
+        float cx = (minX + maxX) * 0.5f;
+        float cy = (minY + maxY) * 0.5f;
         cx = blast.X - halfW <= 0f ? 0f : Mathf.Clamp(cx, -(blast.X - halfW), blast.X - halfW);
         cy = blast.Y - halfH <= 0f ? 0f : Mathf.Clamp(cy, -(blast.Y - halfH), blast.Y - halfH);
         return (new Vector2(cx, cy), halfH);

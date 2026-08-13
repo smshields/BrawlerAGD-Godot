@@ -105,10 +105,26 @@ public partial class MinimapView : CanvasLayer
                 DrawCircle(WorldPoint(projectile.Position), 2f, new Color(1f, 0.84f, 0.25f));
             }
 
-            // P1 filled, P2 hollow — matches the HUD's left/right panel identities.
-            DrawCircle(WorldPoint(world.Players[0].Position), 3f, Colors.White);
-            Vector2 p2 = WorldPoint(world.Players[1].Position);
-            DrawArc(p2, 3f, 0f, Mathf.Tau, 16, Colors.White, 1.5f);
+            // One identity-colored dot per player still in the match (2026-08-12) —
+            // the same rose/sky/gold/teal set as the HUD panels and name pills.
+            // P1 filled / P2 hollow kept as a secondary cue for the 2P case.
+            for (int i = 0; i < world.Players.Count; i++)
+            {
+                BrawlerSim.Sim.SimPlayer player = world.Players[i];
+                if (player.Eliminated)
+                {
+                    continue;
+                }
+                Vector2 dot = WorldPoint(player.Position);
+                if (i == 1 && world.Players.Count == 2)
+                {
+                    DrawArc(dot, 3f, 0f, Mathf.Tau, 16, PlayerPalette.Of(i), 1.5f);
+                }
+                else
+                {
+                    DrawCircle(dot, 3f, PlayerPalette.Of(i));
+                }
+            }
 
             DrawRect(WorldRect(View._camera.ViewWorldRect),
                 new Color(1f, 0.9f, 0.6f, 0.9f), filled: false);

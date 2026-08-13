@@ -32,14 +32,17 @@ public partial class HudView : CanvasLayer
 
     private SimWorld _world = null!;
     private Label _banner = null!;
-    private readonly Slot[] _slots = new Slot[2];
+    private Label _timer = null!;
+    private Slot[] _slots = null!;
 
     public void Setup(SimWorld world, GameGenome genome)
     {
         _world = world;
-        for (int i = 0; i < 2; i++)
+        // Left-packed quarters (designer): one per player, P1 in quarter 1 — the four
+        // static slots finally fill at four players (2026-08-12, four-player.md).
+        _slots = new Slot[world.Players.Count];
+        for (int i = 0; i < _slots.Length; i++)
         {
-            // Left-packed quarters (designer): P1 in quarter 1, P2 in quarter 2.
             _slots[i] = new Slot(this, i, genome.Characters[i], genome.Stage.Params, world.Players[i]);
         }
 
@@ -52,29 +55,83 @@ public partial class HudView : CanvasLayer
         };
         _banner.AddThemeFontSizeOverride("font_size", 36);
         AddChild(_banner);
+
+        // TIMED mode (2026-08-12): the clock IS the match — show it top center.
+        _timer = new Label
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            AnchorLeft = 0f, AnchorRight = 1f, AnchorTop = 0.02f,
+            Visible = _world.Config.EndRule == MatchEndRule.Timed,
+        };
+        _timer.AddThemeFontSizeOverride("font_size", 30);
+        _timer.AddThemeColorOverride("font_color", Colors.White);
+        _timer.AddThemeColorOverride("font_outline_color", new Color(0f, 0f, 0f, 0.85f));
+        _timer.AddThemeConstantOverride("outline_size", 6);
+        AddChild(_timer);
     }
 
     public void Sync(InputFrame[] inputs)
     {
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < _slots.Length; i++)
         {
             _slots[i].Sync(_world.Players[i], inputs[i]);
+        }
+
+        if (_world.Config.EndRule == MatchEndRule.Timed)
+        {
+            int ticksLeft = Mathf.Max(0, _world.Config.MaxTicks - _world.TickCount);
+            int seconds = ticksLeft / BrawlerSim.SimInfo.TicksPerSecond;
+            _timer.Text = $"{seconds / 60}:{seconds % 60:D2}";
         }
 
         if (_world.IsOver)
         {
             _banner.Visible = true;
-            _banner.Text = _world.LoserIndex < 0
-                ? "TIME! IT'S A DRAW"
-                : $"{_world.Players[_world.LoserIndex].Name} HAS LOST THE GAME";
+            _banner.Text = BannerText();
             _banner.Text += "\nESC — back to menu";
         }
+    }
+
+    /// <summary>Match-over banner: the 2P STOCK lines verbatim; TIMED announces the
+    /// winner by ranking; 3/4-player STOCK announces the survivor.</summary>
+    private string BannerText()
+    {
+        if (_world.Config.EndRule == MatchEndRule.Timed)
+        {
+            int[] placements = _world.ComputePlacements();
+            for (int i = 0; i < placements.Length; i++)
+            {
+                if (placements[i] == 1)
+                {
+                    return $"TIME! {_world.Players[i].Name} WINS ({_world.Players[i].KOs} KOs)";
+                }
+            }
+        }
+        if (_world.LoserIndex < 0)
+        {
+            return "TIME! IT'S A DRAW";
+        }
+        if (_world.Players.Count > 2)
+        {
+            foreach (SimPlayer player in _world.Players)
+            {
+                if (!player.Eliminated)
+                {
+                    return $"{player.Name} WINS THE GAME";
+                }
+            }
+        }
+        return $"{_world.Players[_world.LoserIndex].Name} HAS LOST THE GAME";
     }
 
     /// <summary>Human-readable state names (FEATURES.md §HUD #3) — machine enums
     /// stay in the sim; the player reads verbs.</summary>
     private static string StateName(SimPlayer player)
     {
+        if (player.Eliminated)
+        {
+            return "ELIMINATED"; // out for good (2026-08-12, STOCK rule)
+        }
         if (player.IsRespawning)
         {
             return $"RESPAWNING {player.RespawnBlackoutLeft / BrawlerSim.SimInfo.TicksPerSecond:F1}s";
@@ -142,19 +199,22 @@ public partial class HudView : CanvasLayer
         private float _shake;
         private float _flash;
         private int _lastHits;
-        private int _lastStocks;
+        private int _lastDeaths;
+        private bool _wasEliminated;
         private int _clock;
+        private readonly bool _timed;
 
         public Slot(HudView hud, int index, CharacterGenome character,
             BrawlerSim.Params.ParamSet stageParams, SimPlayer player)
         {
             _color = PlayerPalette.Of(index);
             _lastHits = player.TotalHitsReceived;
-            _lastStocks = player.Stocks;
+            _lastDeaths = player.CompletedStockDamage.Count;
             _shownDamage = player.Damage;
             _rollTarget = player.Damage;
             _spawnPadSeconds = StageRules.PlatformSpawnSeconds(stageParams);
             _spawnInvulnSeconds = StageRules.SpawnInvulnSeconds(stageParams);
+            _timed = hud._world.Config.EndRule == MatchEndRule.Timed;
 
             // The static quarter: anchors only — each HUD is ALWAYS 1/4 of the screen.
             _root = new Control
@@ -328,14 +388,19 @@ public partial class HudView : CanvasLayer
             _damage.Text = $"{_shownDamage:F1}%";
 
             // Hit shake (subtle, damage-scaled) and death shake + flash (major).
+            // Deaths are read from the per-life ledger (2026-08-12): stock decrements
+            // fill it exactly as before, TIMED-mode deaths fill it with stocks
+            // untouched, and an elimination is the final death.
             if (player.TotalHitsReceived != _lastHits)
             {
                 _lastHits = player.TotalHitsReceived;
                 _shake = Mathf.Max(_shake, Mathf.Clamp(1.5f + player.Damage * 0.03f, 1.5f, 6f));
             }
-            if (player.Stocks != _lastStocks)
+            if (player.CompletedStockDamage.Count != _lastDeaths
+                || (player.Eliminated && !_wasEliminated))
             {
-                _lastStocks = player.Stocks;
+                _lastDeaths = player.CompletedStockDamage.Count;
+                _wasEliminated = player.Eliminated;
                 _shake = 14f;
                 _flash = 0.85f;
             }
@@ -354,10 +419,18 @@ public partial class HudView : CanvasLayer
             _root.OffsetBottom = jolt.Y;
             _deathFlash.Color = new Color(1f, 1f, 1f, _flash > 0.03f ? _flash : 0f);
 
-            // Stocks: dots until they no longer fit, then a count.
-            _stocks.Text = player.Stocks <= MaxStockDots
-                ? string.Join(" ", System.Linq.Enumerable.Repeat("●", System.Math.Max(0, player.Stocks)))
-                : $"{player.Stocks} STOCKS";
+            // Stocks: dots until they no longer fit, then a count. TIMED mode
+            // (2026-08-12) has infinite stocks — the score is the KO count.
+            _stocks.Text = _timed
+                ? $"{player.KOs} KOs"
+                : player.Eliminated
+                    ? "OUT"
+                    : player.Stocks <= MaxStockDots
+                        ? string.Join(" ", System.Linq.Enumerable.Repeat("●", System.Math.Max(0, player.Stocks)))
+                        : $"{player.Stocks} STOCKS";
+            // An eliminated player's quarter dims — still readable, clearly done.
+            _panel.Modulate = player.Eliminated
+                ? new Color(0.55f, 0.55f, 0.6f) : Colors.White;
 
             // Debug strip.
             _debug.Visible = AppSettings.DebugPanelEnabled;
@@ -366,7 +439,7 @@ public partial class HudView : CanvasLayer
                 return;
             }
             _state.Text = StateName(player);
-            _state.Modulate = player.IsRespawning
+            _state.Modulate = player.Eliminated || player.IsRespawning
                 ? new Color(0.8f, 0.8f, 0.85f)
                 : PlayerView.StateColor(player.State);
 
