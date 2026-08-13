@@ -39,6 +39,14 @@ public sealed class DecisionTreeAgent : IInputSource
 
     public InputFrame GetInput(SimWorld world, int playerIndex)
     {
+        if (world.Players.Count != 2)
+        {
+            // The AIIDE '22 instrument is two-player only and pending archival
+            // (2026-08-12, four-player.md): its ported tree reads "the opponent" —
+            // extending it would change what the historical comparisons measure.
+            throw new InvalidOperationException(
+                "DecisionTreeAgent supports exactly two players; use the UtilityAgent for 3-4.");
+        }
         SimPlayer self = world.Players[playerIndex];
         SimPlayer opponent = world.Players[1 - playerIndex];
 

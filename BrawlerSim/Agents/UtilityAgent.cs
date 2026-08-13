@@ -153,12 +153,16 @@ public sealed class UtilityAgent : IInputSource
     public InputFrame GetInput(SimWorld world, int playerIndex)
     {
         SimPlayer self = world.Players[playerIndex];
-        SimPlayer opponent = world.Players[1 - playerIndex];
+        if (self.Eliminated)
+        {
+            return InputFrame.Neutral; // out of the match (2026-08-12) — no RNG spent
+        }
+        SimPlayer opponent = SelectTarget(world, playerIndex);
         _graph ??= new PlatformGraph(world.Platforms, self, world.Config.Gravity);
 
         if (self.State == PlayerState.Shield)
         {
-            return ManageRaisedShield(self, opponent);
+            return ManageRaisedShield(world, self, opponent);
         }
         _heldShieldHold = true; // a future raise starts committed to holding
 
@@ -343,7 +347,7 @@ public sealed class UtilityAgent : IInputSource
     /// health at/below the release threshold always releases (the circle is visibly
     /// red — even humans don't miss that).
     /// </summary>
-    private InputFrame ManageRaisedShield(SimPlayer self, SimPlayer opponent)
+    private InputFrame ManageRaisedShield(SimWorld world, SimPlayer self, SimPlayer opponent)
     {
         float healthFraction = ShieldHealthFractionOf(self);
         if (healthFraction <= ShieldReleaseHealthFraction)
@@ -353,8 +357,18 @@ public sealed class UtilityAgent : IInputSource
         else if (--_ticksUntilRedecide <= 0)
         {
             _ticksUntilRedecide = _config.DecisionIntervalTicks;
-            bool threatened = opponent.State is PlayerState.WarmUp or PlayerState.Attack
-                || (opponent.Position - self.Position).Length() <= ShieldHoldRange;
+            // ANY present enemy attacking or close keeps the shield up (2026-08-12 —
+            // the single-enemy test is the old one exactly); aim stays at the target.
+            bool threatened = false;
+            foreach (SimPlayer enemy in world.Players)
+            {
+                if (enemy == self || enemy.IsAbsent)
+                {
+                    continue;
+                }
+                threatened |= enemy.State is PlayerState.WarmUp or PlayerState.Attack
+                    || (enemy.Position - self.Position).Length() <= ShieldHoldRange;
+            }
             _shieldScores[0] = ShieldReleaseBaseline;
             _shieldScores[1] = threatened ? ShieldHoldUtility : ShieldUnthreatenedHold;
             _heldShieldHold = Select(_shieldScores) == 1;
@@ -435,6 +449,50 @@ public sealed class UtilityAgent : IInputSource
             }
         }
         return scores.Length - 1; // float round-off guard
+    }
+
+    // ── Target selection (2026-08-12, four-player.md; DEVIATIONS #32) ──────────
+
+    /// <summary>
+    /// The enemy this agent fights: nearest non-eliminated enemy, preferring PRESENT
+    /// over blacked-out and damage-VULNERABLE over spawn-immune (the #29 rule said
+    /// don't swing at ghosts — with a choice, don't even chase one); within a tier,
+    /// smallest squared distance, ties to the lower index. Deterministic, ZERO RNG,
+    /// re-evaluated every query. With a single enemy every tier reduces to
+    /// world.Players[1 - playerIndex] — the pre-feature opponent — so 2P behavior is
+    /// bit-identical (utility golden unmoved). Threat REACTIONS scan all enemies
+    /// regardless of target (designer: dodge whoever is winding up on you).
+    /// </summary>
+    public static SimPlayer SelectTarget(SimWorld world, int playerIndex) // public: tests pin it
+    {
+        SimPlayer self = world.Players[playerIndex];
+        SimPlayer? best = null;
+        int bestTier = int.MaxValue;
+        float bestDistSq = float.MaxValue;
+        for (int i = 0; i < world.Players.Count; i++)
+        {
+            if (i == playerIndex)
+            {
+                continue;
+            }
+            SimPlayer enemy = world.Players[i];
+            if (enemy.Eliminated)
+            {
+                continue;
+            }
+            int tier = enemy.IsRespawning ? 2 : enemy.SpawnDamageImmune ? 1 : 0;
+            Vec2 d = enemy.Position - self.Position;
+            float distSq = d.X * d.X + d.Y * d.Y;
+            if (tier < bestTier || (tier == bestTier && distSq < bestDistSq))
+            {
+                best = enemy;
+                bestTier = tier;
+                bestDistSq = distSq;
+            }
+        }
+        // Every enemy eliminated ⇒ the match is over before the next input is
+        // sampled; return an inert deterministic reference just in case.
+        return best ?? world.Players[playerIndex == 0 ? 1 : 0];
     }
 
     // ── Context ────────────────────────────────────────────────────────────────
@@ -523,53 +581,54 @@ public sealed class UtilityAgent : IInputSource
             anyCanHit |= canHit[m];
         }
 
-        // Telegraph: the opponent is WINDING UP an attack whose arc (+margin) covers
-        // us — the readable moment defensive options respond to.
+        // Telegraph: an enemy is WINDING UP an attack whose arc (+margin) covers us —
+        // the readable moment defensive options respond to. ALL present enemies are
+        // scanned in index order (2026-08-12, designer: dodge whoever is winding up on
+        // you, not just the target) — with a single enemy this is exactly the old
+        // single-opponent test. A winding-up PROJECTILE telegraphs exactly like melee
+        // (2026-07-20, designer: warm-up phases signal defensive counterplay across
+        // the board): the "arc" is the shot's predicted corridor at our column — the
+        // same loose test the shooter aimed with, seen from the receiving end. That is
+        // what makes shields viable against zoners (warm-up + flight time to react);
+        // trade-commit still applies (interrupting the shooter cancels the shot).
+        // Ducking helps only if EVERY threatening source passes above the crouched
+        // silhouette (grounded, from Idle, feet planted).
         bool telegraphThreat = false;
-        bool crouchClearsThreat = false;
-        if (opponent.State == PlayerState.WarmUp
-            && opponent.Moves[opponent.CurrentMoveIndex] is SimMove windingUp)
-        {
-            var arc = new Aabb(
-                opponent.Position + new Vec2(windingUp.Offset.X * opponent.Facing, windingUp.Offset.Y),
-                new Vec2(
-                    windingUp.BaseHalf.X * opponent.WidthScalar + TelegraphDodgeMargin,
-                    windingUp.BaseHalf.Y * opponent.HeightScalar + TelegraphDodgeMargin));
-            telegraphThreat = arc.Overlaps(self.Body);
-            // Ducking helps only if the CROUCHED hurtbox top would clear the arc's
-            // bottom edge (grounded, from Idle, feet planted).
-            if (telegraphThreat && self.IsGrounded && self.State == PlayerState.Idle)
-            {
-                float feetY = self.Position.Y - self.BodyHalf.Y;
-                float crouchedTop = feetY + 2f * self.BodyHalf.Y * self.CrouchHeightRatio;
-                crouchClearsThreat = arc.Bottom > crouchedTop + 0.05f;
-            }
-        }
-        // A winding-up PROJECTILE telegraphs exactly like melee (2026-07-20, designer:
-        // warm-up phases signal defensive counterplay across the board). The "arc" is
-        // the shot's predicted corridor at our column — the same loose test the shooter
-        // aimed with, seen from the receiving end. This is what makes shields viable
-        // against zoners: the defender now has warm-up + flight time, not just the
-        // last half-second of flight. Trade-commit still applies (interrupting the
-        // shooter during warm-up cancels the shot, exactly like a melee trade).
         bool rangedTelegraph = false;
-        if (!telegraphThreat && opponent.State == PlayerState.WarmUp
-            && opponent.ProjectileMoves[opponent.CurrentMoveIndex] is SimProjectileMove windingShot)
+        bool crouchClearsAllTelegraphs = true;
+        foreach (SimPlayer enemy in world.Players)
         {
-            telegraphThreat = ProjectileCorridorHit(windingShot, opponent, self, world.Config);
-            rangedTelegraph = telegraphThreat;
-            if (telegraphThreat && self.IsGrounded && self.State == PlayerState.Idle)
+            if (enemy == self || enemy.IsAbsent || enemy.State != PlayerState.WarmUp)
             {
-                // Duck only if the corridor's center (at our column, launch height +
-                // path drop) passes above the crouched silhouette by the bolt's half
-                // extent — same geometry rule as the melee arc bottom.
+                continue;
+            }
+            float feetY = self.Position.Y - self.BodyHalf.Y;
+            float crouchedTop = feetY + 2f * self.BodyHalf.Y * self.CrouchHeightRatio;
+            bool canDuck = self.IsGrounded && self.State == PlayerState.Idle;
+            if (enemy.Moves[enemy.CurrentMoveIndex] is SimMove windingUp)
+            {
+                var arc = new Aabb(
+                    enemy.Position + new Vec2(windingUp.Offset.X * enemy.Facing, windingUp.Offset.Y),
+                    new Vec2(
+                        windingUp.BaseHalf.X * enemy.WidthScalar + TelegraphDodgeMargin,
+                        windingUp.BaseHalf.Y * enemy.HeightScalar + TelegraphDodgeMargin));
+                if (arc.Overlaps(self.Body))
+                {
+                    telegraphThreat = true;
+                    crouchClearsAllTelegraphs &= canDuck && arc.Bottom > crouchedTop + 0.05f;
+                }
+            }
+            else if (enemy.ProjectileMoves[enemy.CurrentMoveIndex] is SimProjectileMove windingShot
+                && ProjectileCorridorHit(windingShot, enemy, self, world.Config))
+            {
+                telegraphThreat = true;
+                rangedTelegraph = true;
                 float corridorBottom = ProjectileCorridorCenterY(
-                    windingShot, opponent, self, world.Config) - windingShot.HalfExtent;
-                float feetY = self.Position.Y - self.BodyHalf.Y;
-                float crouchedTop = feetY + 2f * self.BodyHalf.Y * self.CrouchHeightRatio;
-                crouchClearsThreat = corridorBottom > crouchedTop + 0.05f;
+                    windingShot, enemy, self, world.Config) - windingShot.HalfExtent;
+                crouchClearsAllTelegraphs &= canDuck && corridorBottom > crouchedTop + 0.05f;
             }
         }
+        bool crouchClearsThreat = telegraphThreat && crouchClearsAllTelegraphs;
 
         // Incoming projectiles (2026-07-14): sample each dangerous projectile's
         // closed-form path over the lookahead; a predicted overlap with our body
@@ -612,20 +671,29 @@ public sealed class UtilityAgent : IInputSource
             }
         }
 
-        // Threat: can any of the OPPONENT's moves reach me right now (their facing
-        // toward me)? Humans see the incoming swing arc and leave it.
+        // Threat: can any ENEMY's move reach me right now (their facing toward me)?
+        // Humans see the incoming swing arc and leave it. All present enemies since
+        // 2026-08-12 — the single-enemy scan is the old one exactly.
         bool underThreat = false;
-        int opponentFacing = -facingToOpponent;
-        for (int m = 0; m < opponent.Moves.Count && !underThreat; m++)
+        foreach (SimPlayer enemy in world.Players)
         {
-            if (opponent.ButtonForMove(m) < 0 || opponent.Moves[m] is not SimMove move)
+            if (enemy == self || enemy.IsAbsent || underThreat)
             {
                 continue;
             }
-            var theirHitbox = new Aabb(
-                opponent.Position + new Vec2(move.Offset.X * opponentFacing, move.Offset.Y),
-                new Vec2(move.BaseHalf.X * opponent.WidthScalar, move.BaseHalf.Y * opponent.HeightScalar));
-            underThreat = theirHitbox.Overlaps(self.Body);
+            // Exactly the old -facingToOpponent, including the >= tie-break at equal X.
+            int enemyFacing = enemy.Position.X >= self.Position.X ? -1 : 1;
+            for (int m = 0; m < enemy.Moves.Count && !underThreat; m++)
+            {
+                if (enemy.ButtonForMove(m) < 0 || enemy.Moves[m] is not SimMove move)
+                {
+                    continue;
+                }
+                var theirHitbox = new Aabb(
+                    enemy.Position + new Vec2(move.Offset.X * enemyFacing, move.Offset.Y),
+                    new Vec2(move.BaseHalf.X * enemy.WidthScalar, move.BaseHalf.Y * enemy.HeightScalar));
+                underThreat = theirHitbox.Overlaps(self.Body);
+            }
         }
 
         // Vulnerable = cannot attack (CoolDown / AirJumpsExhausted). Since the
