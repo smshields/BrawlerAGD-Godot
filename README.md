@@ -10,7 +10,8 @@ AIIDE 2022). Original Unity implementation: [smshields/BrawlerAGD](https://githu
 core, evolution engine + CLI, full Godot app (Play / Watch / Evolve / Manage), export
 pipeline, and a replication study validating evolution dynamics against the paper. Current
 work adds new evolvable mechanics (multi-move controls, shields, dashes, projectiles,
-evolvable stages) on top; [FEATURES.md](FEATURES.md) is the design spec.
+evolvable stages, 2–4 player matches with stock/timed rules) on top;
+[FEATURES.md](FEATURES.md) is the design spec.
 
 ## Architecture in one paragraph
 
@@ -47,6 +48,9 @@ dotnet test    # build + run the full test suite
 
 # headless evolution run (checkpoints + results under runs/<name>/)
 dotnet run --project BrawlerRunner -c Release -- evolve --out runs/x --seed 1 --pop 100 --generations 300 --rounds 5
+
+# 3- or 4-player games (scored by the ffa-v1 fitness automatically)
+dotnet run --project BrawlerRunner -c Release -- evolve --out runs/x4 --seed 1 --pop 100 --generations 300 --rounds 5 --players 4
 ```
 
 Open `godot/project.godot` in the Godot editor for the game/view layer.
