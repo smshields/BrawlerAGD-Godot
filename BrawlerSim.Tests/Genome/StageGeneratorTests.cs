@@ -176,6 +176,37 @@ public class StageGeneratorTests
         }
     }
 
+    /// <summary>Designer rule (2026-08-13, Smash-style readable stages): every
+    /// generated platform sits COMPLETELY inside the kill box, and the lowest
+    /// platform clears the bottom kill line by the derived HUD-band clearance —
+    /// nothing spawns where the camera cannot readably show it.</summary>
+    [Fact]
+    public void GeneratedPlatformsStayInsideThePlayableBox()
+    {
+        for (ulong seed = 0; seed < Seeds; seed++)
+        {
+            (IReadOnlyList<PlatformGene> platforms, ParamSet stageParams) = Gen(seed);
+            (Vec2 playMin, Vec2 playMax) = StageRules.PlayableBox(stageParams);
+            foreach (PlatformGene p in platforms)
+            {
+                Assert.True(StageRules.PlatformInPlayableBox(p, playMin, playMax),
+                    $"seed {seed}: platform {p} outside playable box "
+                    + $"[{playMin.X},{playMin.Y}]..[{playMax.X},{playMax.Y}]");
+            }
+        }
+    }
+
+    /// <summary>Hand-computed clearance: HUD band 174/720 of the widest legal view.
+    /// Legacy box (blast 10.756 × 5.5, 16:9): view height caps at min(5.5, 10.756/1.7̅)
+    /// = 5.5 half → clearance = 0.241̄ × 11 = 2.658̄. Portrait box (blast 4 × 9):
+    /// width-capped at 4/(16/9) = 2.25 half → clearance = 0.241̄ × 4.5 = 1.0875.</summary>
+    [Fact]
+    public void BottomClearanceIsTheHudBandAtTheWidestZoom()
+    {
+        Assert.Equal(174f / 720f * 11f, StageRules.BottomClearance(10.756f, 5.5f), 0.0001f);
+        Assert.Equal(174f / 720f * 4.5f, StageRules.BottomClearance(4f, 9f), 0.0001f);
+    }
+
     /// <summary>Designer rule (2026-08-12, FEATURES.md §Four Player Support): spawn
     /// points must not overlap each other. Separation is BEST-EFFORT by design: the
     /// generator spends SeparationAttempts strict regrows, then accepts a bare column

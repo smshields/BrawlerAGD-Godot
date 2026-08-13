@@ -250,10 +250,12 @@ public class StageRulesTests
         // Two platforms with a horizontal gap a STRONG jumper clears but a WEAK one
         // cannot — the asymmetric-traversal bug (2026-07-22). The fit must move a
         // platform so BOTH can hop, without overlaps, and without re-rolling.
+        // y = -2 keeps the fixture above the legacy playable floor (2026-08-13
+        // containment rule: bottom ≥ -blastY + clearance ≈ -2.84 on the legacy box).
         var platforms = new[]
         {
-            new PlatformGene(-8, -3, 4, 1),  // span [-8, -4], top -2
-            new PlatformGene(2, -3, 4, 1),   // span [2, 6], top -2 — gap of 6
+            new PlatformGene(-8, -2, 4, 1),  // span [-8, -4], top -1
+            new PlatformGene(2, -2, 4, 1),   // span [2, 6], top -1 — gap of 6
         };
         var strong = new[]
         {

@@ -137,9 +137,12 @@ public class TargetSelectionTests
             sources[i] = new UtilityAgent(new Pcg32(20260812, (ulong)i));
         }
         MatchResult result = MatchRunner.Run(genome, sources);
+        // Re-pinned 2026-08-13: Smash-style stage containment (DEVIATIONS #33)
+        // changed generation, so this generated fixture genome changed. Prior pin:
+        // 8893643871391191293.
         // Pinned 2026-08-12 (first pin — the 4P mode is new with this feature):
         // covers N-player spawning, all-pairs contact/hits, elimination, the gated
         // hash suffix, and nearest-enemy targeting end to end.
-        Assert.Equal(8893643871391191293UL, result.FinalHash);
+        Assert.Equal(12249141685285748551UL, result.FinalHash);
     }
 }

@@ -28,6 +28,84 @@ public static class StageRules
     /// roughly a player half extent, keeping repaired spawns clear of immediate KO.</summary>
     public const float SpawnEdgeClearance = 0.5f;
 
+    // ── The playable box (2026-08-13, designer: Smash-style readable stages) ─────────
+    // Every platform must sit COMPLETELY inside the kill (blast) box — any part beyond
+    // a kill line is lethal, invisible ground — and the LOWEST platform must clear the
+    // bottom kill line by enough that it stays readable above the HUD band at the
+    // camera's widest zoom. The clearance is DERIVED PER MAP (designer): HUD fraction
+    // × the map's maximum camera view height (full view inside the kill box, 16:9).
+
+    /// <summary>The fixed 16:9 view aspect (AESTHETICS: 1280×720 design viewport).</summary>
+    public const float ViewAspect = 16f / 9f;
+
+    /// <summary>Fraction of the design view the bottom HUD band occupies: margin 8 +
+    /// panel 100 + gap 4 + debug strip 62 = 174 of 720 px. Mirrors
+    /// HudView.ReservedBottomPixels (godot/) — update BOTH if the HUD layout changes.</summary>
+    public const float HudBottomFraction = 174f / 720f;
+
+    /// <summary>The reserved no-platform gap above the bottom kill line for a map with
+    /// these blast half extents: the HUD band's world height when the camera is at its
+    /// widest legal zoom (view height capped by the kill box on BOTH axes at 16:9).</summary>
+    public static float BottomClearance(float blastHalfX, float blastHalfY) =>
+        HudBottomFraction * 2f * MathF.Min(blastHalfY, blastHalfX / ViewAspect);
+
+    /// <summary>The rectangle platforms must lie completely inside, for a stage
+    /// ParamSet: the blast box shrunk at the bottom by the readability clearance.</summary>
+    public static (Vec2 Min, Vec2 Max) PlayableBox(ParamSet stageParams)
+    {
+        Vec2 blast = BlastHalfExtents(stageParams);
+        return PlayableBoxFrom(blast.X, blast.Y);
+    }
+
+    /// <summary>Raw-gene variant for the generator, which draws its structure genes
+    /// before the ParamSet exists.</summary>
+    public static (Vec2 Min, Vec2 Max) PlayableBoxFrom(float blastHalfX, float blastHalfY) =>
+        (new Vec2(-blastHalfX, -blastHalfY + BottomClearance(blastHalfX, blastHalfY)),
+            new Vec2(blastHalfX, blastHalfY));
+
+    public static bool PlatformInPlayableBox(in PlatformGene p, Vec2 min, Vec2 max) =>
+        p.X >= min.X && p.X + p.XSize <= max.X && p.Y >= min.Y && p.Y + p.YSize <= max.Y;
+
+    /// <summary>
+    /// Genetic-ops repair (crossover mixes platforms across parents whose box genes
+    /// differ): size-clamp then position-clamp each platform into the CHILD's playable
+    /// box. Deterministic and the identity for already-legal platforms; stored games
+    /// are never touched at sim time (same contract as RepairSpawns). A clamp can in
+    /// rare cases introduce an overlap — the same tolerance crossover always had for
+    /// mixed platform lists.
+    /// </summary>
+    public static List<PlatformGene> RepairPlatforms(
+        IReadOnlyList<PlatformGene> platforms, ParamSet stageParams)
+    {
+        (Vec2 min, Vec2 max) = PlayableBox(stageParams);
+        var repaired = new List<PlatformGene>(platforms.Count);
+        foreach (PlatformGene p in platforms)
+        {
+            PlatformGene fixedUp = p;
+            int maxXSize = Math.Max(1, (int)MathF.Floor(max.X - min.X));
+            int maxYSize = Math.Max(1, (int)MathF.Floor(max.Y - min.Y));
+            if (fixedUp.XSize > maxXSize)
+            {
+                fixedUp = fixedUp with { XSize = maxXSize };
+            }
+            if (fixedUp.YSize > maxYSize)
+            {
+                fixedUp = fixedUp with { YSize = maxYSize };
+            }
+            int loX = (int)MathF.Ceiling(min.X);
+            int hiX = (int)MathF.Floor(max.X) - fixedUp.XSize;
+            int loY = (int)MathF.Ceiling(min.Y);
+            int hiY = (int)MathF.Floor(max.Y) - fixedUp.YSize;
+            fixedUp = fixedUp with
+            {
+                X = Math.Clamp(fixedUp.X, loX, Math.Max(loX, hiX)),
+                Y = Math.Clamp(fixedUp.Y, loY, Math.Max(loY, hiY)),
+            };
+            repaired.Add(fixedUp);
+        }
+        return repaired;
+    }
+
     public static bool IsMirrored(ParamSet stageParams) =>
         stageParams.Get(StageParams.Mirrored) >= 0.5f;
 
@@ -684,6 +762,9 @@ public static class StageRules
         bool changed = false;
         var attempts = new Dictionary<(int, int), int>();
         var unresolvable = new HashSet<(int, int)>();
+        // Containment (2026-08-13): no fit move may push a platform out of the
+        // playable box (kill-box containment + the bottom readability clearance).
+        (Vec2 playMin, Vec2 playMax) = PlayableBox(stage.Params);
 
         // Alternate the two phases until a full round is quiet: body-fit moves can
         // break connectivity and connectivity pulls can open new corridors. The round
@@ -691,8 +772,8 @@ public static class StageRules
         // the body-fit's open work strictly shrink, so rounds go quiet on their own.
         for (int round = 0; round < 8; round++)
         {
-            bool moved = ConnectPhase(plats, hops);
-            moved |= BodyFitPhase(plats, hops, smallW, largeW, attempts, unresolvable);
+            bool moved = ConnectPhase(plats, hops, playMin, playMax);
+            moved |= BodyFitPhase(plats, hops, smallW, largeW, attempts, unresolvable, playMin, playMax);
             changed |= moved;
             if (!moved)
             {
@@ -712,7 +793,7 @@ public static class StageRules
     /// platform 0 over edges everyone can hop (PlatformGraph's model). Each stalled
     /// round, pull the nearest still-unreachable platform toward its best connector
     /// until all can hop it — integer moves, overlap-guarded.</summary>
-    private static bool ConnectPhase(PlatformGene[] plats, CharHop[] hops)
+    private static bool ConnectPhase(PlatformGene[] plats, CharHop[] hops, Vec2 playMin, Vec2 playMax)
     {
         bool changed = false;
         var connected = new bool[plats.Length];
@@ -772,7 +853,7 @@ public static class StageRules
             }
             foreach (int c in ConnectorsByDistance(plats, connected, bestU))
             {
-                if (TryPullWithinHop(ref plats[bestU], plats[c], plats, bestU, hops)
+                if (TryPullWithinHop(ref plats[bestU], plats[c], plats, bestU, hops, playMin, playMax)
                     && AllCanHop(plats[c], plats[bestU], hops))
                 {
                     changed = true;
@@ -788,7 +869,8 @@ public static class StageRules
     /// <summary>Phase 2 — the iterative asymmetric-gap solver (see FitToCharacters).</summary>
     private static bool BodyFitPhase(
         PlatformGene[] plats, CharHop[] hops, float smallW, float largeW,
-        Dictionary<(int, int), int> attempts, HashSet<(int, int)> unresolvable)
+        Dictionary<(int, int), int> attempts, HashSet<(int, int)> unresolvable,
+        Vec2 playMin, Vec2 playMax)
     {
         const int MaxPasses = 12;
         const int StrategyCount = 5;
@@ -808,7 +890,7 @@ public static class StageRules
                 if (tried >= StrategyCount)
                 {
                     // This pair has cycled every strategy across passes: force it.
-                    if (ForceResolve(plats, i, j))
+                    if (ForceResolve(plats, i, j, playMin, playMax))
                     {
                         progress = true;
                         movedAny = true;
@@ -823,7 +905,7 @@ public static class StageRules
                 // reappears is attacked DIFFERENTLY each time (the loop-prevention).
                 for (int s = 0; s < StrategyCount; s++)
                 {
-                    if (TryGapStrategy((tried + s) % StrategyCount, plats, i, j, hops, largeW))
+                    if (TryGapStrategy((tried + s) % StrategyCount, plats, i, j, hops, largeW, playMin, playMax))
                     {
                         progress = true;
                         movedAny = true;
@@ -836,7 +918,7 @@ public static class StageRules
                 // Nothing moved this pass: force the first open violation so the pass
                 // loop strictly shrinks its work, else retire it as unresolvable.
                 (int i, int j) = violations[0];
-                if (ForceResolve(plats, i, j))
+                if (ForceResolve(plats, i, j, playMin, playMax))
                 {
                     movedAny = true;
                 }
@@ -885,7 +967,8 @@ public static class StageRules
     /// (no corridor at all). A strategy is accepted only when it introduces no overlap
     /// and does not shrink both-character connectivity.</summary>
     private static bool TryGapStrategy(
-        int strategy, PlatformGene[] plats, int i, int j, CharHop[] hops, float largeW)
+        int strategy, PlatformGene[] plats, int i, int j, CharHop[] hops, float largeW,
+        Vec2 playMin, Vec2 playMax)
     {
         float gap = plats[j].X - (plats[i].X + plats[i].XSize);
         int widen = (int)MathF.Ceiling(largeW + GapPassSlack + 0.4f - gap);
@@ -900,7 +983,7 @@ public static class StageRules
             // Separate vertically: no vertical overlap ⇒ no corridor. Smaller shift wins.
             _ => (j, VerticalSeparation(plats[i], plats[j])),
         };
-        if (OverlapsAnyExcept(cand, plats, idx))
+        if (OverlapsAnyExcept(cand, plats, idx) || !PlatformInPlayableBox(cand, playMin, playMax))
         {
             return false;
         }
@@ -917,7 +1000,7 @@ public static class StageRules
 
     /// <summary>Last-resort resolution, overlap-guarded only: dock contiguous (either
     /// side), then vertical separation. False only when every option overlaps.</summary>
-    private static bool ForceResolve(PlatformGene[] plats, int i, int j)
+    private static bool ForceResolve(PlatformGene[] plats, int i, int j, Vec2 playMin, Vec2 playMax)
     {
         Span<(int Idx, PlatformGene Cand)> options = stackalloc (int, PlatformGene)[]
         {
@@ -927,7 +1010,7 @@ public static class StageRules
         };
         foreach ((int idx, PlatformGene cand) in options)
         {
-            if (!OverlapsAnyExcept(cand, plats, idx))
+            if (!OverlapsAnyExcept(cand, plats, idx) && PlatformInPlayableBox(cand, playMin, playMax))
             {
                 plats[idx] = cand;
                 return true;
@@ -1009,7 +1092,8 @@ public static class StageRules
     /// character's max, then shrink the horizontal gap until all can hop — in integer
     /// steps, leaving ≥ 1 unit and never overlapping (reverts on overlap).</summary>
     private static bool TryPullWithinHop(
-        ref PlatformGene u, in PlatformGene c, PlatformGene[] all, int uIndex, CharHop[] hops)
+        ref PlatformGene u, in PlatformGene c, PlatformGene[] all, int uIndex, CharHop[] hops,
+        Vec2 playMin, Vec2 playMax)
     {
         PlatformGene start = u;
         float minMaxRise = float.MaxValue;
@@ -1039,9 +1123,9 @@ public static class StageRules
                 }
                 u = u.X > c.X ? u with { X = u.X - 1 } : u with { X = u.X + 1 };
             }
-            if (OverlapsAnyExcept(u, all, uIndex))
+            if (OverlapsAnyExcept(u, all, uIndex) || !PlatformInPlayableBox(u, playMin, playMax))
             {
-                u = start; // never introduce an overlap
+                u = start; // never introduce an overlap or leave the playable box
                 return false;
             }
         }
@@ -1056,7 +1140,7 @@ public static class StageRules
                 Y = top - u.YSize,
                 X = u.X >= c.X ? c.X + c.XSize : c.X - u.XSize,
             };
-            if (!OverlapsAnyExcept(docked, all, uIndex))
+            if (!OverlapsAnyExcept(docked, all, uIndex) && PlatformInPlayableBox(docked, playMin, playMax))
             {
                 u = docked;
             }

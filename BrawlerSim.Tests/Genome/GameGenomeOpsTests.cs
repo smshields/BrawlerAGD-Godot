@@ -57,16 +57,51 @@ public class GameGenomeOpsTests
     }
 
     [Fact]
-    public void ChildStagePlatformsComeFromParents()
+    public void ChildStagePlatformsComeFromParentsUpToContainment()
     {
+        // Unity-parity platform mixing, amended twice: the per-character platform FIT
+        // (2026-07-22) may MOVE a platform, and the playable-box repair (2026-08-13)
+        // may CLAMP one into the child's kill box. Both preserve sizes; neither
+        // invents platforms — so every child platform is a parent platform, possibly
+        // repositioned, and always inside the child's playable box.
         var a = NewGame(1);
         var b = NewGame(2);
         var child = GameGenomeOps.Crossover(a, b, new Pcg32(3));
 
         var parentPlatforms = a.Stage.Platforms.Concat(b.Stage.Platforms).ToHashSet();
+        var parentSizes = parentPlatforms.Select(p => (p.XSize, p.YSize)).ToHashSet();
+        (var playMin, var playMax) = StageRules.PlayableBox(child.Stage.Params);
         foreach (PlatformGene p in child.Stage.Platforms)
         {
-            Assert.Contains(p, parentPlatforms);
+            Assert.True(parentPlatforms.Contains(p) || parentSizes.Contains((p.XSize, p.YSize)),
+                $"child platform {p} matches no parent platform or size");
+            Assert.True(StageRules.PlatformInPlayableBox(p, playMin, playMax),
+                $"child platform {p} is outside the child's playable box");
+        }
+    }
+
+    /// <summary>Breeding sweep for the 2026-08-13 containment rule: chains of
+    /// crossover + mutation (regeneration, mirror transform, platform fit, repair)
+    /// never leave a platform outside the child's playable box.</summary>
+    [Fact]
+    public void BredStagesKeepPlatformsInsideTheirPlayableBox()
+    {
+        var rng = new Pcg32(77);
+        var pool = Enumerable.Range(0, 8)
+            .Select(i => GameGenome.Generate(GenerationConfig.Default, new Pcg32((ulong)(100 + i))))
+            .ToList();
+        for (int gen = 0; gen < 40; gen++)
+        {
+            var a = pool[rng.NextInt(pool.Count)];
+            var b = pool[rng.NextInt(pool.Count)];
+            var child = GameGenomeOps.Breed(a, b, 0.4f, rng);
+            (var playMin, var playMax) = StageRules.PlayableBox(child.Stage.Params);
+            foreach (PlatformGene p in child.Stage.Platforms)
+            {
+                Assert.True(StageRules.PlatformInPlayableBox(p, playMin, playMax),
+                    $"bred gen {gen}: platform {p} outside the child's playable box");
+            }
+            pool[rng.NextInt(pool.Count)] = child;
         }
     }
 

@@ -70,6 +70,14 @@ public class Phase1PipelineTests
     [Fact]
     public void PopulationFingerprintMatchesGoldenValue()
     {
+        // Re-pinned 2026-08-13: Smash-style stage containment (designer;
+        // docs/features/four-player.md follow-up, DEVIATIONS #33) — every platform
+        // must sit completely inside the kill box and the floor must clear the bottom
+        // kill line by the derived HUD-band clearance. Generator acceptance, crossover
+        // platform repair, mirror-transform validity, and the platform-fit bounds all
+        // changed (different rejection/redraw streams and serialized bytes). Match
+        // goldens + utility golden unmoved (fixture genomes). Prior pin:
+        // 2963760689975173760.
         // Re-pinned 2026-07-27: the platform fit's body-gap pass became an ITERATIVE
         // multi-strategy solver (designer: asymmetric gaps still appeared in play) —
         // re-scans after every move, five strategies per corridor, force-dock fallback.
@@ -105,6 +113,6 @@ public class Phase1PipelineTests
         // (fast fall/crouch/DI), 16079587979934170348 (dash slot),
         // 10607725140721060960 (shield), 5432710911100783110 (two moves),
         // 13551893661434631362, 9300943650238635838.
-        Assert.Equal(2963760689975173760UL, RunPipeline(20260707));
+        Assert.Equal(14350526745249818436UL, RunPipeline(20260707));
     }
 }

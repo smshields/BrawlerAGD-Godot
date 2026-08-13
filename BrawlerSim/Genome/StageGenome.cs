@@ -59,8 +59,11 @@ public sealed class StageGenome
         {
             child.Add(b._platforms[i]);
         }
-        // Spawn genes recombined from two different maps may be illegal for the child
-        // layout — repair here (identity for legal spawns), never at sim time.
+        // Platforms legal under a parent's box genes may violate the CHILD's playable
+        // box (2026-08-13, designer containment rule) — clamp them in, then repair the
+        // spawn genes against the repaired layout. Identity for legal stages; never
+        // runs at sim time.
+        child = StageRules.RepairPlatforms(child, childParams);
         return new StageGenome(child, StageRules.RepairSpawns(child, childParams));
     }
 }

@@ -78,6 +78,21 @@ public static class GameGenomeOps
         {
             List<PlatformGene>? transformed = StageRules.MirrorTransform(
                 stage.Platforms, StageRules.MirrorSideRight(mutated));
+            // Containment (2026-08-13): a transformed layout that violates the MUTATED
+            // params' playable box falls back to full regeneration, like the
+            // no-source-mass degenerate case.
+            if (transformed is not null)
+            {
+                (Determinism.Vec2 playMin, Determinism.Vec2 playMax) = StageRules.PlayableBox(mutated);
+                foreach (PlatformGene p in transformed)
+                {
+                    if (!StageRules.PlatformInPlayableBox(p, playMin, playMax))
+                    {
+                        transformed = null;
+                        break;
+                    }
+                }
+            }
             if (transformed is not null)
             {
                 // Repair spawns 1/3 against the transformed layout, then mirror them

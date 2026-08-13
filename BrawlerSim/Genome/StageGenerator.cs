@@ -64,11 +64,16 @@ public sealed class StageGenerator
         int maxSize = StageRules.IntGene(maxSizeGene, 3, 14);
         int gridW = Math.Max(3, (int)MathF.Floor(visWidthGene));
         int gridH = Math.Max(2, (int)MathF.Floor(visHeightGene));
+        // The playable box (2026-08-13, designer: Smash-style readable stages) —
+        // platforms fully inside the kill box, floor clear of the HUD band.
+        (Vec2 playMin, Vec2 playMax) = StageRules.PlayableBoxFrom(
+            visWidthGene * (1f + koMarginGene), visHeightGene * (1f + koMarginGene));
 
         // 2 + 3. Platform layout and spawns, with degenerate-layout retries. FOUR
         // spawns per stage since 2026-08-12 (docs/features/four-player.md).
         (List<PlatformGene> platforms, Vec2 spawn1, Vec2 spawn2, Vec2 spawn3, Vec2 spawn4) =
-            BuildLayoutAndSpawns(rng, mirrored, count, maxSize, gridW, gridH, visWidthGene, visHeightGene);
+            BuildLayoutAndSpawns(rng, mirrored, count, maxSize, gridW, gridH,
+                visWidthGene, visHeightGene, playMin, playMax);
 
         var values = new float[_schema.Count];
         values[_schema.IndexOf(StageParams.VisibleHalfWidth)] = visWidthGene;
@@ -102,9 +107,11 @@ public sealed class StageGenerator
         float visH = stageParams.Get(StageParams.VisibleHalfHeight);
         int gridW = Math.Max(3, (int)MathF.Floor(visW));
         int gridH = Math.Max(2, (int)MathF.Floor(visH));
+        (Vec2 playMin, Vec2 playMax) = StageRules.PlayableBox(stageParams);
 
         (List<PlatformGene> platforms, Vec2 spawn1, Vec2 spawn2, Vec2 spawn3, Vec2 spawn4) =
-            BuildLayoutAndSpawns(rng, mirrored, count, maxSize, gridW, gridH, visW, visH);
+            BuildLayoutAndSpawns(rng, mirrored, count, maxSize, gridW, gridH, visW, visH,
+                playMin, playMax);
         return new StageGenome(platforms, stageParams.With(
             (StageParams.Spawn1X, spawn1.X), (StageParams.Spawn1Y, spawn1.Y),
             (StageParams.Spawn2X, spawn2.X), (StageParams.Spawn2Y, spawn2.Y),
@@ -138,7 +145,8 @@ public sealed class StageGenerator
     /// </summary>
     private (List<PlatformGene> Platforms, Vec2 Spawn1, Vec2 Spawn2, Vec2 Spawn3, Vec2 Spawn4)
         BuildLayoutAndSpawns(
-            Pcg32 rng, bool mirrored, int count, int maxSize, int gridW, int gridH, float visW, float visH)
+            Pcg32 rng, bool mirrored, int count, int maxSize, int gridW, int gridH,
+            float visW, float visH, Vec2 playMin, Vec2 playMax)
     {
         float axisClear = mirrored ? StageRules.SpawnBodyHalfWidth : 0f;
         List<PlatformGene> platforms = null!;
@@ -149,7 +157,7 @@ public sealed class StageGenerator
             // (platform-blockers-only) column — overlap beats the embed fallback,
             // but a regrown layout that separates beats both.
             bool allowBare = attempt >= SeparationAttempts;
-            platforms = Grow(rng, mirrored, count, maxSize, gridW, gridH);
+            platforms = Grow(rng, mirrored, count, maxSize, gridW, gridH, playMin, playMax);
             if (mirrored)
             {
                 int unmirrored = platforms.Count;
@@ -237,7 +245,8 @@ public sealed class StageGenerator
     }
 
     private List<PlatformGene> Grow(
-        Pcg32 rng, bool mirrored, int count, int maxSize, int gridW, int gridH)
+        Pcg32 rng, bool mirrored, int count, int maxSize, int gridW, int gridH,
+        Vec2 playMin, Vec2 playMax)
     {
         // Mirrored stages spend half the budget on the source half (reflection restores
         // the total); the legacy generator's target of 3 pre-mirror ≈ budget 6.
@@ -245,7 +254,7 @@ public sealed class StageGenerator
 
         var all = new List<PlatformGene>();
         var stack = new Stack<PlatformGene>();
-        PlatformGene initial = Initial(rng, mirrored, maxSize, gridW, gridH);
+        PlatformGene initial = Initial(rng, mirrored, maxSize, gridW, gridH, playMin, playMax);
         all.Add(initial);
         stack.Push(initial);
 
@@ -277,7 +286,7 @@ public sealed class StageGenerator
                     continue;
                 }
                 if (TryPlace(rng, direction, parent, all, mirrored, maxSize, gridW, gridH,
-                        out PlatformGene child))
+                        playMin, playMax, out PlatformGene child))
                 {
                     all.Add(child);
                     stack.Push(child);
@@ -287,19 +296,24 @@ public sealed class StageGenerator
         return all;
     }
 
-    private PlatformGene Initial(Pcg32 rng, bool mirrored, int maxSize, int gridW, int gridH)
+    private PlatformGene Initial(
+        Pcg32 rng, bool mirrored, int maxSize, int gridW, int gridH, Vec2 playMin, Vec2 playMax)
     {
         int ySize = rng.NextInt(MinThickness, MaxThickness + 1);
         // Start in the lower half of the visible box (legacy y was the fixed -3), with
-        // the top capped at gridH − 1 so a spawn with headroom exists (DrawSpawn).
-        int yLo = -gridH + 1;
+        // the top capped at gridH − 1 so a spawn with headroom exists (DrawSpawn) —
+        // and never below the playable floor (2026-08-13: the readability clearance
+        // above the bottom kill line).
+        int yLo = Math.Max(-gridH + 1, (int)MathF.Ceiling(playMin.Y));
         int y = rng.NextInt(yLo, Math.Max(yLo + 1, Math.Min(1, gridH - ySize)));
         int xSize = rng.NextInt(2, maxSize + 1);
         if (mirrored)
         {
             // Right edge lands within midGap of the axis (legacy parity: the seam gap
             // after mirroring is at most 2 · jumpLength/2 = jumpLength — hop-able).
+            // The left edge must stay inside the playable box (its mirror then does).
             int rightEdge = -rng.NextInt(0, Math.Max(1, _jumpLength / 2) + 1);
+            xSize = Math.Min(xSize, Math.Max(2, rightEdge - (int)MathF.Ceiling(playMin.X)));
             return new PlatformGene(rightEdge - xSize, y, xSize, ySize);
         }
         // A narrow map can be thinner than maxSize allows — the initial platform must
@@ -319,7 +333,8 @@ public sealed class StageGenerator
 
     private bool TryPlace(
         Pcg32 rng, Direction direction, PlatformGene parent, List<PlatformGene> all,
-        bool mirrored, int maxSize, int gridW, int gridH, out PlatformGene child)
+        bool mirrored, int maxSize, int gridW, int gridH, Vec2 playMin, Vec2 playMax,
+        out PlatformGene child)
     {
         for (int attempt = 0; attempt < PlacementAttempts; attempt++)
         {
@@ -330,7 +345,10 @@ public sealed class StageGenerator
                 Direction.Above => Above(rng, parent),
                 _ => Below(rng, parent, maxSize),
             };
+            // Containment (2026-08-13, designer): completely inside the playable box —
+            // no lethal/invisible ledges past a kill line, floor clear of the HUD band.
             if (IntersectsVisible(child, gridW, gridH)
+                && StageRules.PlatformInPlayableBox(child, playMin, playMax)
                 && (!mirrored || child.X + child.XSize <= 0)
                 && !StageRules.OverlapsAny(child, all))
             {

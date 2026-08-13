@@ -226,33 +226,41 @@ public partial class ArenaView : Node2D
         }
     }
 
-    /// <summary>Build the death streak — always on screen (2026-07-23 designer fix).
-    /// The death point is mapped into CAMERA view fractions (unclamped): off one axis
-    /// → the streak sits on that screen edge pointing perpendicularly inward
-    /// (bottom→up, right→left); off BOTH axes (past a corner of the view) → the
-    /// streak sits in that corner pointing diagonally toward the camera center;
-    /// still inside the view (a visible blast edge) → it fires from the actual death
-    /// point, perpendicular to the crossed blast edge. Width is capped below the
-    /// character; intensity scales with KO speed + damage.</summary>
+    /// <summary>Build the death streak — always on the VISIBLE screen (2026-07-23
+    /// designer fix; 2026-08-13: anchored to the USABLE region, so a bottom death
+    /// fires from the HUD's top edge, never from behind the panels). The death point
+    /// is mapped into usable-region fractions (unclamped): off one axis → the streak
+    /// sits on that visible edge pointing perpendicularly inward (bottom→up,
+    /// right→left); off BOTH axes (past a corner) → the streak sits in that corner
+    /// pointing diagonally toward the visible center; still inside the region (a
+    /// visible blast edge) → it fires from the actual death point, perpendicular to
+    /// the crossed blast edge. Width is capped below the character; intensity scales
+    /// with KO speed + damage.</summary>
     private void TriggerDeathFlash(
         BrawlerSim.Determinism.Vec2 pos, BrawlerSim.Determinism.Vec2 vel, float dmg, float bodyHalfX)
     {
-        BrawlerSim.Sim.Aabb view = _camera.ViewWorldRect;
+        BrawlerSim.Sim.Aabb view = _camera.UsableWorldRect;
+        float usableFrac = _camera.UsableFraction();
         float fx = view.Right > view.Left
             ? (pos.X - view.Left) / (view.Right - view.Left) : 0.5f;
         float fy = view.Top > view.Bottom
             ? (view.Top - pos.Y) / (view.Top - view.Bottom) : 0.5f;
         bool offX = fx < 0f || fx > 1f;
         bool offY = fy < 0f || fy > 1f;
-        var anchor = new Vector2(Mathf.Clamp(fx, 0f, 1f), Mathf.Clamp(fy, 0f, 1f));
+        // Usable-region fractions → SCREEN fractions: y compresses into the top
+        // usableFrac of the viewport (the HUD band owns the rest).
+        var anchor = new Vector2(
+            Mathf.Clamp(fx, 0f, 1f), Mathf.Clamp(fy, 0f, 1f) * usableFrac);
 
         Vector2 inward;
         if (offX && offY)
         {
-            // Past a corner of the view: point diagonally at the camera center,
+            // Past a corner of the region: point diagonally at the visible center,
             // normalized in PIXELS so the angle is true on the 16:9 viewport.
             Vector2 size = GetViewportRect().Size;
-            inward = new Vector2((0.5f - anchor.X) * size.X, (0.5f - anchor.Y) * size.Y).Normalized();
+            inward = new Vector2(
+                (0.5f - anchor.X) * size.X,
+                (0.5f * usableFrac - anchor.Y) * size.Y).Normalized();
         }
         else if (offX)
         {
