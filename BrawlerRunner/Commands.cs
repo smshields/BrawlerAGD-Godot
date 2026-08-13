@@ -20,11 +20,12 @@ internal static class Commands
         Console.WriteLine();
         Console.WriteLine("Commands:");
         Console.WriteLine("  evolve   --out <dir> [--seed 1] [--pop 100] [--generations 100] [--rounds 1]");
-        Console.WriteLine("           [--dropout 0.5] [--mutation 0.4] [--resume]");
+        Console.WriteLine("           [--players 2|3|4] [--dropout 0.5] [--mutation 0.4] [--resume]");
         Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
         Console.WriteLine("           [--composition pinned|random|<attack,shield,dash,random x4>] [--type-reroll 0.2]");
         Console.WriteLine("           [--range \"schema.key=min:max;...\"]  (schemas: character|move|shield|dash|projectile|stage)");
-        Console.WriteLine("  evaluate --game <game.json> [--seed 7] [--rounds 5] [--fitness standard-v3|standard-v2]");
+        Console.WriteLine("           [--fitness standard-v4|ffa-v1|standard-v3|standard-v2]  (default: v4 at 2P, ffa-v1 at 3/4P)");
+        Console.WriteLine("  evaluate --game <game.json> [--seed 7] [--rounds 5] [--fitness standard-v4|ffa-v1|standard-v3|standard-v2]");
         Console.WriteLine("           [--breakdown] [--max-seconds 60] [--target-seconds 45]");
         Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
         Console.WriteLine("  replay   --game <game.json> --trace <trace.json>");
@@ -57,18 +58,19 @@ internal static class Commands
             MaxMatchSeconds = maxSeconds,
             MaxStunSeconds = GetFloat(opts, "max-stun", float.PositiveInfinity),
         };
-        IFitnessFunction fitness = FitnessRegistry.Create(
-            opts.GetValueOrDefault("fitness", FitnessRegistry.DefaultName), targetSeconds, maxSeconds,
-            opts.ContainsKey("collision-scalar") ? GetFloat(opts, "collision-scalar", 0f) : null);
-        string config = $"r{rounds}-{(median ? "med" : "mean")}-{maxSeconds:F0}s-t{targetSeconds:F0}-{fitness.Name}"
-            + (opts.ContainsKey("collision-scalar")
-                ? FormattableString.Invariant($"-cs{GetFloat(opts, "collision-scalar", 0f):0.##}")
-                : "");
-
         Console.WriteLine("game,config,reps,mean,std,min,max,drawRate");
         foreach (string path in games)
         {
             GameRecord record = GameGenomeJson.Load(path);
+            int players = record.Genome.Characters.Count;
+            IFitnessFunction fitness = FitnessRegistry.Create(
+                opts.GetValueOrDefault("fitness"), targetSeconds, maxSeconds,
+                opts.ContainsKey("collision-scalar") ? GetFloat(opts, "collision-scalar", 0f) : null,
+                players);
+            string config = $"r{rounds}-{(median ? "med" : "mean")}-{maxSeconds:F0}s-t{targetSeconds:F0}-{fitness.Name}"
+                + (opts.ContainsKey("collision-scalar")
+                    ? FormattableString.Invariant($"-cs{GetFloat(opts, "collision-scalar", 0f):0.##}")
+                    : "");
             var scores = new double[reps];
             int draws = 0, matches = 0;
             for (int rep = 0; rep < reps; rep++)
@@ -77,7 +79,8 @@ internal static class Commands
                 for (int round = 0; round < rounds; round++)
                 {
                     ulong matchSeed = SeedMix.MatchSeed(seed, rep, 0, round);
-                    MatchResult result = MatchRunner.Run(record.Genome, AiSources(matchSeed, agent), match);
+                    MatchResult result = MatchRunner.Run(
+                        record.Genome, AiSources(matchSeed, agent, players), match);
                     roundScores.Add(fitness.Evaluate(result));
                     matches++;
                     if (result.LoserIndex < 0)
@@ -137,7 +140,8 @@ internal static class Commands
                     MaxStunSeconds = GetFloat(opts, "max-stun", float.PositiveInfinity),
                 },
                 DiversityWeight = GetFloat(opts, "diversity-weight", 0f),
-                FitnessName = opts.GetValueOrDefault("fitness", FitnessRegistry.DefaultName),
+                // Absent --fitness = auto: standard-v4 at 2 players, ffa-v1 at 3/4.
+                FitnessName = opts.GetValueOrDefault("fitness"),
                 FitnessCollisionScalar = opts.ContainsKey("collision-scalar")
                     ? GetFloat(opts, "collision-scalar", 0f) : null,
                 Generation = ParseGeneration(opts),
@@ -184,39 +188,43 @@ internal static class Commands
             MaxMatchSeconds = maxSeconds,
             MaxStunSeconds = GetFloat(opts, "max-stun", float.PositiveInfinity),
         };
+        int players = record.Genome.Characters.Count;
         IFitnessFunction fitness = FitnessRegistry.Create(
-            opts.GetValueOrDefault("fitness", FitnessRegistry.DefaultName),
+            opts.GetValueOrDefault("fitness"),
             GetFloat(opts, "target-seconds", 45f), maxSeconds,
-            opts.ContainsKey("collision-scalar") ? GetFloat(opts, "collision-scalar", 0f) : null);
+            opts.ContainsKey("collision-scalar") ? GetFloat(opts, "collision-scalar", 0f) : null,
+            players);
         bool breakdown = opts.ContainsKey("breakdown");
 
         Console.WriteLine(
-            $"Evaluating '{record.Name}' ({record.Origin}) over {rounds} rounds, seed {seed}, " +
-            $"agent {agent.Kind}, fitness {fitness.Name}:");
+            $"Evaluating '{record.Name}' ({record.Origin}, {players} players) over {rounds} rounds, " +
+            $"seed {seed}, agent {agent.Kind}, fitness {fitness.Name}:");
         var scores = new List<float>();
         for (int round = 0; round < rounds; round++)
         {
             ulong matchSeed = SeedMix.MatchSeed(seed, 0, 0, round);
-            MatchResult result = MatchRunner.Run(record.Genome, AiSources(matchSeed, agent), matchConfig);
+            MatchResult result = MatchRunner.Run(
+                record.Genome, AiSources(matchSeed, agent, players), matchConfig);
             float score = fitness.Evaluate(result);
             scores.Add(score);
+            // Per-player columns joined with '/' — any player count (2026-08-12).
+            string Per(Func<PlayerStats, string> field) =>
+                string.Join("/", result.Players.Select(field));
             Console.WriteLine(
                 $"  round {round}: fitness {score,8:F2}  length {result.LengthSeconds,5:F1}s  " +
                 $"loser {(result.LoserIndex < 0 ? "draw" : result.LoserIndex.ToString())}  " +
-                $"dmg {result.Players[0].TotalDamageTaken:F0}/{result.Players[1].TotalDamageTaken:F0}  " +
-                $"hits {result.Players[0].TotalHitsReceived}/{result.Players[1].TotalHitsReceived}  " +
-                $"stocks {result.Players[0].RemainingStocks}/{result.Players[1].RemainingStocks}  " +
-                $"stun {100f * result.Players[0].StunTicks / result.Ticks:F0}%/{100f * result.Players[1].StunTicks / result.Ticks:F0}%  " +
-                $"uses {string.Join("+", result.Players[0].MoveUses ?? Array.Empty<int>())}/{string.Join("+", result.Players[1].MoveUses ?? Array.Empty<int>())}  " +
-                $"jumps {result.Players[0].Jumps}/{result.Players[1].Jumps}  " +
-                $"shield(act/blk/brk) {result.Players[0].ShieldActivations}-{result.Players[0].BlockedHits}-{result.Players[0].ShieldBreaks}/" +
-                $"{result.Players[1].ShieldActivations}-{result.Players[1].BlockedHits}-{result.Players[1].ShieldBreaks}  " +
-                $"dash(n/dodge) {result.Players[0].DashCount}-{result.Players[0].DashInvulnDodges}/" +
-                $"{result.Players[1].DashCount}-{result.Players[1].DashInvulnDodges}  " +
-                $"ff/crouch/di {result.Players[0].FastFallTicks}-{result.Players[0].CrouchTicks}-{result.Players[0].DIInfluencedHits}/" +
-                $"{result.Players[1].FastFallTicks}-{result.Players[1].CrouchTicks}-{result.Players[1].DIInfluencedHits}  " +
-                $"proj(fired/hit/refl) {result.Players[0].ProjectilesFired}-{result.Players[0].ProjectileHits}-{result.Players[0].ProjectilesReflected}/" +
-                $"{result.Players[1].ProjectilesFired}-{result.Players[1].ProjectileHits}-{result.Players[1].ProjectilesReflected}");
+                $"place {string.Join("/", result.Placements ?? Array.Empty<int>())}  " +
+                $"dmg {Per(p => p.TotalDamageTaken.ToString("F0"))}  " +
+                $"hits {Per(p => p.TotalHitsReceived.ToString())}  " +
+                $"stocks {Per(p => p.RemainingStocks.ToString())}  " +
+                $"ko/sd {Per(p => $"{p.KOs}-{p.SelfDestructs}")}  " +
+                $"stun {Per(p => (100f * p.StunTicks / result.Ticks).ToString("F0") + "%")}  " +
+                $"uses {Per(p => string.Join("+", p.MoveUses ?? Array.Empty<int>()))}  " +
+                $"jumps {Per(p => p.Jumps.ToString())}  " +
+                $"shield(act-blk-brk) {Per(p => $"{p.ShieldActivations}-{p.BlockedHits}-{p.ShieldBreaks}")}  " +
+                $"dash(n-dodge) {Per(p => $"{p.DashCount}-{p.DashInvulnDodges}")}  " +
+                $"ff-crouch-di {Per(p => $"{p.FastFallTicks}-{p.CrouchTicks}-{p.DIInfluencedHits}")}  " +
+                $"proj(fired-hit-refl) {Per(p => $"{p.ProjectilesFired}-{p.ProjectileHits}-{p.ProjectilesReflected}")}");
             if (breakdown && fitness is ComposedFitness composed)
             {
                 Console.WriteLine("           " + string.Join("  ",
@@ -226,6 +234,16 @@ internal static class Commands
             {
                 Console.WriteLine("           " + string.Join("  ",
                     v3.Breakdown(result).Select(t => $"{t.Name} {t.Value:F1}")));
+            }
+            else if (breakdown && fitness is StandardFitnessV4 v4)
+            {
+                Console.WriteLine("           " + string.Join("  ",
+                    v4.Breakdown(result).Select(t => $"{t.Name} {t.Value:F1}")));
+            }
+            else if (breakdown && fitness is FfaFitnessV1 ffa)
+            {
+                Console.WriteLine("           " + string.Join("  ",
+                    ffa.Breakdown(result).Select(t => $"{t.Name} {t.Value:F1}")));
             }
         }
         scores.Sort();
@@ -271,11 +289,15 @@ internal static class Commands
         return 0;
     }
 
-    private static IInputSource[] AiSources(ulong seed, AgentConfig agent) => new IInputSource[]
+    private static IInputSource[] AiSources(ulong seed, AgentConfig agent, int players = 2)
     {
-        agent.CreateSource(new Pcg32(seed, 0)),
-        agent.CreateSource(new Pcg32(seed, 1)),
-    };
+        var sources = new IInputSource[players];
+        for (int p = 0; p < players; p++)
+        {
+            sources[p] = agent.CreateSource(new Pcg32(seed, (ulong)p));
+        }
+        return sources;
+    }
 
     private static AgentConfig ParseAgent(Dictionary<string, string> opts) => new()
     {
@@ -290,10 +312,16 @@ internal static class Commands
     };
 
     /// <summary>Composition + advanced ranges (2026-07-14,
-    /// docs/features/evolve-composition-and-ranges.md).</summary>
+    /// docs/features/evolve-composition-and-ranges.md) + player count (2026-08-12,
+    /// docs/features/four-player.md).</summary>
     private static GenerationConfig ParseGeneration(Dictionary<string, string> opts)
     {
-        GenerationConfig generation = GenerationConfig.Default;
+        int players = GetInt(opts, "players", 2);
+        if (players is < 2 or > 4)
+        {
+            throw new ArgumentException($"--players must be 2, 3, or 4 (got {players}).");
+        }
+        GenerationConfig generation = GenerationConfig.Default with { CharacterCount = players };
         string composition = opts.GetValueOrDefault("composition", "pinned");
         if (!string.Equals(composition, "pinned", StringComparison.OrdinalIgnoreCase))
         {

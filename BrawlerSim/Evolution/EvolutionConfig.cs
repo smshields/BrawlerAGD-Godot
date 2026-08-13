@@ -26,8 +26,10 @@ public sealed record EvolutionConfig
     public float TargetGameLengthSeconds { get; init; } = 45f;
 
     /// <summary>Which versioned fitness scores this run (FitnessRegistry). Recorded in
-    /// run.json; resuming honors the recorded name, so old runs keep standard-v2.</summary>
-    public string FitnessName { get; init; } = Fitness.FitnessRegistry.DefaultName;
+    /// run.json; resuming honors the recorded name, so old runs keep standard-v2.
+    /// Null (default) = auto: standard-v4 for two-player runs, ffa-v1 for 3/4-player
+    /// runs (2026-08-12, four-player.md).</summary>
+    public string? FitnessName { get; init; }
 
     /// <summary>Per-hit reward weight for standard-v3 (recorded in run.json). Null =
     /// the version's default.</summary>

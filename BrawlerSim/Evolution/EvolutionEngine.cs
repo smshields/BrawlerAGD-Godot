@@ -39,7 +39,7 @@ public sealed class EvolutionEngine
         _config = config;
         _fitness = fitness ?? FitnessRegistry.Create(
             config.FitnessName, config.TargetGameLengthSeconds, config.Match.MaxMatchSeconds,
-            config.FitnessCollisionScalar);
+            config.FitnessCollisionScalar, config.Generation.CharacterCount);
         _rng = new Pcg32(config.Seed);
         _population = new GameGenome[config.PopulationSize];
         _lastFitness = new float[config.PopulationSize];
@@ -65,7 +65,7 @@ public sealed class EvolutionEngine
         _config = config;
         _fitness = fitness ?? FitnessRegistry.Create(
             config.FitnessName, config.TargetGameLengthSeconds, config.Match.MaxMatchSeconds,
-            config.FitnessCollisionScalar);
+            config.FitnessCollisionScalar, config.Generation.CharacterCount);
         _rng = Pcg32.Resume(rngState.State, rngState.Inc);
         _population = population.ToArray();
         _lastFitness = new float[config.PopulationSize];
@@ -187,11 +187,13 @@ public sealed class EvolutionEngine
     private MatchResult RunMatch(GameGenome genome, int generation, int individual, int round, bool recordTrace)
     {
         ulong seed = SeedMix.MatchSeed(_config.Seed, generation, individual, round);
-        var sources = new IInputSource[]
+        // One agent stream per player (2026-08-12, four-player.md): Pcg32(seed, i) —
+        // the natural extension of the fixed two-stream setup, identical at N = 2.
+        var sources = new IInputSource[genome.Characters.Count];
+        for (int p = 0; p < sources.Length; p++)
         {
-            _config.Agent.CreateSource(new Pcg32(seed, 0)),
-            _config.Agent.CreateSource(new Pcg32(seed, 1)),
-        };
+            sources[p] = _config.Agent.CreateSource(new Pcg32(seed, (ulong)p));
+        }
         return MatchRunner.Run(genome, sources, _config.Match, recordTrace);
     }
 

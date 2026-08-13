@@ -201,12 +201,19 @@ public class StandardFitnessV3Tests
     }
 
     [Fact]
-    public void RegistryCreatesBothVersionsAndRejectsUnknown()
+    public void RegistryCreatesEveryVersionAndRejectsUnknown()
     {
         Assert.Equal("standard-v2", FitnessRegistry.Create("standard-v2", 45f, 60f).Name);
         Assert.Equal("standard-v3", FitnessRegistry.Create("standard-v3", 45f, 60f).Name);
-        Assert.Equal("standard-v3", FitnessRegistry.Create(null, 45f, 60f).Name);
+        Assert.Equal("standard-v4", FitnessRegistry.Create("standard-v4", 45f, 60f).Name);
+        Assert.Equal("ffa-v1", FitnessRegistry.Create("ffa-v1", 45f, 60f).Name);
+        // Auto default (2026-08-12): v4 for two-player runs, ffa-v1 for 3/4.
+        Assert.Equal("standard-v4", FitnessRegistry.Create(null, 45f, 60f).Name);
+        Assert.Equal("ffa-v1", FitnessRegistry.Create(null, 45f, 60f, playerCount: 4).Name);
         Assert.Throws<ArgumentException>(() => FitnessRegistry.Create("standard-v9", 45f, 60f));
+        // 2P-only versions refuse N-player runs (their terms read exactly two players).
+        Assert.Throws<ArgumentException>(() => FitnessRegistry.Create("standard-v3", 45f, 60f, playerCount: 3));
+        Assert.Throws<ArgumentException>(() => FitnessRegistry.Create("standard-v4", 45f, 60f, playerCount: 4));
     }
 
     [Fact]

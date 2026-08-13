@@ -110,6 +110,71 @@ public class EvolutionEngineTests
         }
     }
 
+    // ── Four Player Support (2026-08-12, docs/features/four-player.md) ──────────
+
+    private static EvolutionConfig FourPlayerConfig(int parallelism = 0) => new()
+    {
+        Seed = 424,
+        PopulationSize = 6,
+        RoundsPerIndividual = 1,
+        Parallelism = parallelism,
+        Generation = GenerationConfig.Default with { CharacterCount = 4 },
+        Match = BrawlerSim.Sim.MatchConfig.Default with { MaxMatchSeconds = 30f },
+    };
+
+    [Fact]
+    public void FourPlayerRunsAreDeterministicAtAnyParallelism()
+    {
+        var serial = new EvolutionEngine(FourPlayerConfig(parallelism: 1));
+        var parallel = new EvolutionEngine(FourPlayerConfig(parallelism: 8));
+        for (int gen = 0; gen < 2; gen++)
+        {
+            Assert.Equal(serial.Step(), parallel.Step());
+        }
+        Assert.Equal(Fingerprint(serial.Population), Fingerprint(parallel.Population));
+    }
+
+    [Fact]
+    public void FourPlayerRunsDefaultToFfaV1RecordPlayersAndResumeExactly()
+    {
+        var straight = new EvolutionEngine(FourPlayerConfig());
+        Assert.Equal("ffa-v1", straight.FitnessFunction.Name);
+        var straightStats = new List<GenerationStats>();
+        for (int gen = 0; gen < 3; gen++)
+        {
+            straightStats.Add(straight.Step());
+        }
+
+        string runDir = Path.Combine(Path.GetTempPath(), $"brawler-4p-run-{Guid.NewGuid():N}");
+        try
+        {
+            var first = new EvolutionEngine(FourPlayerConfig());
+            var history = new List<GenerationStats> { first.Step(), first.Step() };
+            RunStore.SaveCheckpoint(runDir, first, FourPlayerConfig(), history);
+            Assert.Contains("\"players\": 4", File.ReadAllText(Path.Combine(runDir, "run.json")));
+
+            (EvolutionEngine resumed, EvolutionConfig loaded, List<GenerationStats> loadedHistory) =
+                RunStore.Load(runDir);
+            Assert.Equal(4, loaded.Generation.CharacterCount);
+            Assert.Equal("ffa-v1", resumed.FitnessFunction.Name);
+
+            var resumedStats = new List<GenerationStats>(loadedHistory) { resumed.Step() };
+            Assert.Equal(straightStats, resumedStats);
+            Assert.Equal(Fingerprint(straight.Population), Fingerprint(resumed.Population));
+        }
+        finally
+        {
+            Directory.Delete(runDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TwoPlayerOnlyFitnessRefusesAFourPlayerRun()
+    {
+        var config = FourPlayerConfig() with { FitnessName = "standard-v4" };
+        Assert.Throws<ArgumentException>(() => new EvolutionEngine(config));
+    }
+
     [Fact]
     public void FitnessImprovesOverGenerations()
     {

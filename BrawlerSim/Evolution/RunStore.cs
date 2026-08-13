@@ -56,6 +56,9 @@ public static class RunStore
                 ? null : config.Match.MaxStunSeconds,
             DiversityWeight = config.DiversityWeight,
             FitnessCollisionScalar = config.FitnessCollisionScalar,
+            // Player count (2026-08-12, four-player.md): absent = 2 (every pre-feature
+            // run), so old manifests stay byte-compatible and resume as they were.
+            Players = config.Generation.CharacterCount == 2 ? null : config.Generation.CharacterCount,
             // Composition + range overrides (2026-07-14): part of what a run MEANS —
             // absent fields read back as the pinned layout with stock schemas.
             Composition = config.Generation.ButtonComposition?
@@ -146,7 +149,11 @@ public static class RunStore
 
     private static GenerationConfig BuildGenerationConfig(RunManifest manifest)
     {
-        GenerationConfig generation = GenerationConfig.Default;
+        GenerationConfig generation = GenerationConfig.Default with
+        {
+            // Absent = 2: every pre-2026-08-12 checkpoint resumes as the 2P run it was.
+            CharacterCount = manifest.Players ?? 2,
+        };
         if (manifest.Composition is { } composition)
         {
             if (composition.Count != Sim.InputFrame.ActionCount)
@@ -188,6 +195,7 @@ public static class RunStore
         public float? MaxStunSeconds { get; set; }
         public float? DiversityWeight { get; set; }
         public float? FitnessCollisionScalar { get; set; }
+        public int? Players { get; set; } // 2026-08-12 four-player; absent = 2
         public List<string>? Composition { get; set; }
         public float? TypeRerollRate { get; set; }
         public List<RangeOverrideDoc>? RangeOverrides { get; set; }
