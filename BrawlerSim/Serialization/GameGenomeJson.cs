@@ -57,36 +57,43 @@ public static class GameGenomeJson
             FormatVersion = CurrentFormatVersion,
             Name = record.Name,
             Origin = record.Origin,
-            Characters = record.Genome.Characters.Select(c => new CharacterDoc
-            {
-                Name = c.Name,
-                Stocks = c.Stocks,
-                SpriteIndex = c.SpriteIndex,
-                Params = c.Params.ToDictionary(),
-                ButtonMoves = c.ButtonMoves.ToList(),
-                Moves = c.Moves.Select(m => new MoveDoc
-                {
-                    Type = m.Type switch
-                    {
-                        MoveType.Shield => "shield",
-                        MoveType.Dash => "dash",
-                        MoveType.Projectile => "projectile",
-                        _ => "attack",
-                    },
-                    SpriteIndex = m.SpriteIndex,
-                    Params = m.Params.ToDictionary(),
-                }).ToList(),
-            }).ToList(),
-            Stage = new StageDoc
-            {
-                Params = record.Genome.Stage.Params.ToDictionary(),
-                Platforms = record.Genome.Stage.Platforms
-                    .Select(p => new PlatformDoc { X = p.X, Y = p.Y, XSize = p.XSize, YSize = p.YSize })
-                    .ToList(),
-            },
+            Characters = record.Genome.Characters.Select(ToCharacterDoc).ToList(),
+            Stage = ToStageDoc(record.Genome.Stage),
         };
         return JsonSerializer.Serialize(doc, Options);
     }
+
+    /// <summary>Element-level DTO conversions, shared with BuiltGameJson (2026-08-13,
+    /// Game Builder) so a built game's characters/stages are byte-compatible with the
+    /// game.json shapes.</summary>
+    internal static CharacterDoc ToCharacterDoc(CharacterGenome c) => new()
+    {
+        Name = c.Name,
+        Stocks = c.Stocks,
+        SpriteIndex = c.SpriteIndex,
+        Params = c.Params.ToDictionary(),
+        ButtonMoves = c.ButtonMoves.ToList(),
+        Moves = c.Moves.Select(m => new MoveDoc
+        {
+            Type = m.Type switch
+            {
+                MoveType.Shield => "shield",
+                MoveType.Dash => "dash",
+                MoveType.Projectile => "projectile",
+                _ => "attack",
+            },
+            SpriteIndex = m.SpriteIndex,
+            Params = m.Params.ToDictionary(),
+        }).ToList(),
+    };
+
+    internal static StageDoc ToStageDoc(StageGenome stage) => new()
+    {
+        Params = stage.Params.ToDictionary(),
+        Platforms = stage.Platforms
+            .Select(p => new PlatformDoc { X = p.X, Y = p.Y, XSize = p.XSize, YSize = p.YSize })
+            .ToList(),
+    };
 
     /// <summary>Four-button-era (v2–v5) buttonMoves → five slots: new index 3 (pad Y,
     /// previously a jump button — no legacy trace ever presses it) duplicates button
@@ -117,7 +124,13 @@ public static class GameGenomeJson
             throw new JsonException("game.json is missing characters or stage.");
         }
 
-        var characters = doc.Characters.Select(c => new CharacterGenome(
+        var characters = doc.Characters.Select(c => CharacterFromDoc(c, config));
+        var stage = StageFromDoc(doc.Stage, config);
+        return new GameRecord(doc.Name ?? "Unnamed", doc.Origin, new GameGenome(characters, stage));
+    }
+
+    internal static CharacterGenome CharacterFromDoc(CharacterDoc c, GenerationConfig config) =>
+        new(
             c.Name ?? "Unnamed",
             c.Stocks,
             c.SpriteIndex,
@@ -140,16 +153,17 @@ public static class GameGenomeJson
                     ParamSet.FromDictionary(config.MoveSchema, Require(m.Params, "move params")),
                     m.SpriteIndex),
             }),
-            MigrateButtonMoves(c.ButtonMoves))); // null (v1 files) → all-zeros default in the ctor
+            MigrateButtonMoves(c.ButtonMoves)); // null (v1 files) → all-zeros default in the ctor
 
-        var platforms = doc.Stage.Platforms
+    internal static StageGenome StageFromDoc(StageDoc doc, GenerationConfig config)
+    {
+        var platforms = (doc.Platforms ?? throw new JsonException("stage is missing platforms."))
             .Select(p => new PlatformGene(p.X, p.Y, p.XSize, p.YSize)).ToList();
         // ≤ v6: no stage params — the legacy dimensions + old derived spawns
         // (bit-identical playback). v7+: read them (missing keys throw, as everywhere).
-        var stage = new StageGenome(platforms, doc.Stage.Params is null
+        return new StageGenome(platforms, doc.Params is null
             ? StageRules.LegacyParams(platforms, config.StageSchema)
-            : ParamSet.FromDictionary(config.StageSchema, WithStageDefaults(doc.Stage.Params, platforms)));
-        return new GameRecord(doc.Name ?? "Unnamed", doc.Origin, new GameGenome(characters, stage));
+            : ParamSet.FromDictionary(config.StageSchema, WithStageDefaults(doc.Params, platforms)));
     }
 
     public static void Save(GameRecord record, string path)
@@ -232,7 +246,7 @@ public static class GameGenomeJson
         public StageDoc? Stage { get; set; }
     }
 
-    private sealed class CharacterDoc
+    internal sealed class CharacterDoc
     {
         public string? Name { get; set; }
         public int Stocks { get; set; }
@@ -242,20 +256,20 @@ public static class GameGenomeJson
         public List<MoveDoc>? Moves { get; set; }
     }
 
-    private sealed class MoveDoc
+    internal sealed class MoveDoc
     {
         public string? Type { get; set; } // null/absent (v1/v2) → attack
         public int SpriteIndex { get; set; }
         public Dictionary<string, float>? Params { get; set; }
     }
 
-    private sealed class StageDoc
+    internal sealed class StageDoc
     {
         public Dictionary<string, float>? Params { get; set; } // absent in ≤ v6 files
         public List<PlatformDoc>? Platforms { get; set; }
     }
 
-    private sealed class PlatformDoc
+    internal sealed class PlatformDoc
     {
         public int X { get; set; }
         public int Y { get; set; }

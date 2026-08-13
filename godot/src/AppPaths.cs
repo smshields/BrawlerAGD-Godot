@@ -39,4 +39,13 @@ public static class AppPaths
     /// <summary>The curated demo games (runs/demo, maintained per designer): listed
     /// by the game picker when present.</summary>
     public static string DemoRoot() => System.IO.Path.Combine(RunsRoot(), "demo");
+
+    /// <summary>Built games (Game Builder, 2026-08-13): curated 8-character/4-stage
+    /// compilations, maintained like favorites under the runs root.</summary>
+    public static string GamesRoot()
+    {
+        string dir = System.IO.Path.Combine(RunsRoot(), "games");
+        System.IO.Directory.CreateDirectory(dir);
+        return dir;
+    }
 }

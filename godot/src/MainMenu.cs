@@ -43,6 +43,7 @@ public partial class MainMenu : Control
         AddButton(box, "PLAY — VS CPU", () => PickGame(MatchMode.HumanVsCpu));
         AddButton(box, "WATCH AI MATCH", () => PickGame(MatchMode.AiVsAi));
         AddButton(box, "WATCH REPLAY", () => PickGame(MatchMode.Replay));
+        AddButton(box, "BUILD GAME", () => GetTree().ChangeSceneToFile("res://scenes/game_builder.tscn"));
         AddButton(box, "EVOLVE", () => GetTree().ChangeSceneToFile("res://scenes/evolve.tscn"));
         AddButton(box, "MANAGE GAMES", () => GetTree().ChangeSceneToFile("res://scenes/manage.tscn"));
         AddButton(box, "SETTINGS", OpenSettings);
