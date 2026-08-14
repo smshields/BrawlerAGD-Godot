@@ -1,0 +1,109 @@
+{
+  // Generation ranges transcribed from BrawlerSim DefaultSchemas (2026-08-14).
+  // These drive feature normalization only; the game's schema remains authoritative.
+  // kind: linear | bool | int | offAtZero (offAtZero: value below min = mechanic absent).
+  "character": {
+    "maxGroundSpeed": { "min": 2, "max": 10 },
+    "maxAirSpeed": { "min": 2, "max": 10 },
+    "groundAccelerationFactor": { "min": 0, "max": 1 },
+    "airAccelerationFactor": { "min": 0, "max": 1 },
+    "groundJumpForce": { "min": 1, "max": 15 },
+    "airJumpForce": { "min": 1, "max": 15 },
+    "mass": { "min": 0.5, "max": 2.5 },
+    "drag": { "min": 1, "max": 6 },
+    "widthScalar": { "min": 0.7, "max": 1.5 },
+    "heightScalar": { "min": 0.5, "max": 1.5 },
+    "gravityScalar": { "min": 0.3, "max": 1.3 },
+    "hitstunDamageScalar": { "min": 0.1, "max": 0.3 },
+    "fastFallAcceleration": { "min": 0, "max": 15 },
+    "crouchAccelerationChange": { "min": -8, "max": 8 },
+    "crouchSpeed": { "min": 0.05, "max": 0.2 },
+    "crouchMoveSpeed": { "min": 0.3, "max": 1.5 },
+    "crouchHeightRatio": { "min": 0.4, "max": 0.9 },
+    "directionalInfluence": { "min": 0.02, "max": 0.10, "kind": "offAtZero" },
+    "diKnockbackReduction": { "min": 0.05, "max": 0.20, "kind": "offAtZero" }
+  },
+  "move": {
+    "moveDist": { "min": 0.8, "max": 1.5 },
+    "moveAngle": { "min": 0, "max": 6.283185307 },
+    "widthScalar": { "min": 0.5, "max": 1.5 },
+    "heightScalar": { "min": 0.5, "max": 1.5 },
+    "warmUpDuration": { "min": 0.1, "max": 0.6 },
+    "executionDuration": { "min": 0.1, "max": 0.4 },
+    "coolDownDuration": { "min": 0.1, "max": 0.6 },
+    "damageFactor": { "min": 0, "max": 10 },
+    "knockbackScalar": { "min": 1, "max": 16 },
+    "knockbackModX": { "min": 0, "max": 1 },
+    "knockbackModY": { "min": -1, "max": 1 },
+    "hitstunDuration": { "min": 0, "max": 1 }
+  },
+  "shield": {
+    "windUpDuration": { "min": 0.05, "max": 0.3 },
+    "coolDownDuration": { "min": 0.05, "max": 0.3 },
+    "initialSize": { "min": 0.5, "max": 2.0 },
+    "holdDegradationRate": { "min": 0.05, "max": 0.4 },
+    "hitDegradationScalar": { "min": 0.01, "max": 0.06 },
+    "knockbackReduction": { "min": 0.5, "max": 0.9 },
+    "spacingPush": { "min": 0.5, "max": 3.0 },
+    "regenRate": { "min": 0.05, "max": 0.5 },
+    "breakStunDuration": { "min": 0.5, "max": 2.5 },
+    "reflect": { "min": 0, "max": 1, "kind": "bool" }
+  },
+  "dash": {
+    "windUpDuration": { "min": 0.05, "max": 0.4 },
+    "acceleration": { "min": 6, "max": 18 },
+    "duration": { "min": 0.1, "max": 0.4 },
+    "warmUpInvulnerable": { "min": 0, "max": 1, "kind": "bool" },
+    "durationInvulnerable": { "min": 0, "max": 1, "kind": "bool" },
+    "reflect": { "min": 0, "max": 1, "kind": "bool" }
+  },
+  "projectile": {
+    "pathShape": { "min": 0, "max": 3, "kind": "int" },
+    "pathScalar": { "min": 0.5, "max": 6 },
+    "timeToDecay": { "min": 0.5, "max": 4 },
+    "velocity": { "min": 3, "max": 15 },
+    "doesAccelerate": { "min": 0, "max": 1, "kind": "bool" },
+    "acceleration": { "min": -10, "max": 10 },
+    "affectedByGravity": { "min": 0, "max": 1, "kind": "bool" },
+    "warmUpDuration": { "min": 0.1, "max": 0.6 },
+    "executionDuration": { "min": 0.1, "max": 0.4 },
+    "coolDownDuration": { "min": 0.1, "max": 0.6 },
+    "hitboxSize": { "min": 0.2, "max": 0.7 },
+    "hitboxShape": { "min": 0, "max": 3, "kind": "int" },
+    "doesRotate": { "min": 0, "max": 1, "kind": "bool" },
+    "rotationRate": { "min": 0.5, "max": 8 },
+    "knockbackScalar": { "min": 1, "max": 16 },
+    "knockbackModX": { "min": 0, "max": 1 },
+    "knockbackModY": { "min": -1, "max": 1 },
+    "damageFactor": { "min": 0, "max": 10 },
+    "damageDecay": { "min": 0, "max": 1 },
+    "decayRate": { "min": 0.1, "max": 1 },
+    "hitstunDuration": { "min": 0, "max": 1 },
+    "hitsSelf": { "min": 0, "max": 1, "kind": "bool" },
+    "launchX": { "min": -0.5, "max": 0.5 },
+    "launchY": { "min": -0.5, "max": 0.5 }
+  },
+  "stage": {
+    // legacyVisibleHalfWidth = 11*(16/9)/2 = 9.777778; legacyVisibleHalfHeight = 5
+    // (StageRules.LegacyVisibleHalfHeight — NOT the 5.5 blast half height; fixed
+    // 2026-08-14, caught by BrawlerSim.Tests NameGenIntegrationTests' schema audit).
+    // Ranges are 0.5x-5x legacy per DefaultSchemas.
+    "visibleHalfWidth": { "min": 4.888889, "max": 48.888889 },
+    "visibleHalfHeight": { "min": 2.5, "max": 25 },
+    "koMarginFraction": { "min": 0.05, "max": 0.25 },
+    "platformCount": { "min": 2, "max": 16, "kind": "int" },
+    "maxPlatformSize": { "min": 3, "max": 14 },
+    "mirrored": { "min": 0, "max": 1, "kind": "bool" },
+    "mirrorSide": { "min": 0, "max": 1, "kind": "bool" },
+    "spawn1X": { "min": -49, "max": 49 },
+    "spawn1Y": { "min": -25, "max": 26 },
+    "spawn2X": { "min": -49, "max": 49 },
+    "spawn2Y": { "min": -25, "max": 26 },
+    "platformSpawnDuration": { "min": 1, "max": 5, "kind": "offAtZero" },
+    "spawnInvulnDuration": { "min": 1, "max": 3, "kind": "offAtZero" },
+    "spawn3X": { "min": -49, "max": 49 },
+    "spawn3Y": { "min": -25, "max": 26 },
+    "spawn4X": { "min": -49, "max": 49 },
+    "spawn4Y": { "min": -25, "max": 26 }
+  }
+}

@@ -320,4 +320,10 @@ We currently have room for four player GUIs at the bottom of the screen. We need
 
 All stages need to have spawn points, regardless of number of players from now on. Spawn points should follow existing rules, not overlapping with other spawns, always over a platform, etc.
 
-##
+## Game Builder
+Have an organized view of games that can be created, edited, or deleted. When a game is opened, you can see the characters and map of the game generated. For each of these elements, you can "add" them to a game. A game is considered complete when there are 8 characters and 4 stages included. Games can be edited and have characters/levels removed from it. The UI should be more game-menu like than file-explorer, and should offer previews of level layouts, characters, and their moves.
+
+Games should be compiled into a parameterized document similar to our current setup of levels/characters. 
+
+## Game Player
+Have an organized view of games that can be played. When a game is selected for play, there should be a character select screen. We are going to stay very close to the Smash-Bros style of interface. 

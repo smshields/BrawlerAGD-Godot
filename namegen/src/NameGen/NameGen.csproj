@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>10</LangVersion>
+    <Nullable>enable</Nullable>
+    <RootNamespace>NameGen</RootNamespace>
+    <AssemblyName>NameGen</AssemblyName>
+    <Description>Offline, data-driven name generator for procedurally generated fighting game characters and stages. Zero dependencies, no engine coupling.</Description>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Data/**/*.json" />
+  </ItemGroup>
+
+</Project>

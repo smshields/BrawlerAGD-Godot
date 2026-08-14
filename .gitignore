@@ -14,6 +14,9 @@ godot/.godot/
 # Export/build artifacts (regenerate with tools/export-macos.sh)
 dist/
 
+# The namegen source archive (the extracted namegen/ tree is the tracked copy)
+namegen.zip
+
 # Evolution run output (checkpoints, results, replays) + archived runs
 runs/
 archive/

@@ -1,0 +1,48 @@
+{
+  // The comedy pool. Any register can rarely pull from here (mundaneProbability):
+  // "Gorthak Jenkins", "The Rotting Food Court". No trait tags on purpose; the joke
+  // is that these point at nothing.
+  "morphemes": [
+    { "form": "jenkins", "positions": ["family"], "gloss": "mundane surname" },
+    { "form": "perkins", "positions": ["family"], "gloss": "mundane surname" },
+    { "form": "smith", "positions": ["family"], "gloss": "mundane surname" },
+    { "form": "wilson", "positions": ["family"], "gloss": "mundane surname" },
+    { "form": "dinkle", "positions": ["family"], "gloss": "mundane surname" },
+    { "form": "crabtree", "positions": ["family"], "gloss": "mundane surname" },
+    { "form": "hornsby", "positions": ["family"], "gloss": "mundane surname" },
+
+    { "form": "gary", "positions": ["given"], "gloss": "mundane given" },
+    { "form": "steve", "positions": ["given"], "gloss": "mundane given" },
+    { "form": "janet", "positions": ["given"], "gloss": "mundane given" },
+    { "form": "bob", "positions": ["given"], "gloss": "mundane given" },
+    { "form": "carol", "positions": ["given"], "gloss": "mundane given" },
+    { "form": "kevin", "positions": ["given"], "gloss": "mundane given" },
+
+    { "form": "beans", "positions": ["standalone"], "gloss": "mundane noun" },
+    { "form": "pickle", "positions": ["standalone"], "gloss": "mundane noun" },
+    { "form": "waffle", "positions": ["standalone"], "gloss": "mundane noun" },
+    { "form": "turnip", "positions": ["standalone"], "gloss": "mundane noun" },
+    { "form": "mop", "positions": ["standalone"], "gloss": "mundane noun" },
+    { "form": "spatula", "positions": ["standalone"], "gloss": "mundane noun" },
+    { "form": "gravy", "positions": ["standalone"], "gloss": "mundane noun" },
+    { "form": "lunchbox", "positions": ["standalone"], "gloss": "mundane noun" },
+    { "form": "doorknob", "positions": ["standalone"], "gloss": "mundane noun" },
+    { "form": "meatloaf", "positions": ["standalone"], "gloss": "mundane noun" },
+    { "form": "casserole", "positions": ["standalone"], "gloss": "mundane noun" },
+    { "form": "staple", "positions": ["standalone"], "gloss": "mundane noun" },
+
+    { "form": "beige", "positions": ["adjective"], "gloss": "mundane adjective" },
+    { "form": "lukewarm", "positions": ["adjective"], "gloss": "mundane adjective" },
+    { "form": "damp", "positions": ["adjective"], "gloss": "mundane adjective" },
+    { "form": "complimentary", "positions": ["adjective"], "gloss": "mundane adjective" },
+    { "form": "scented", "positions": ["adjective"], "gloss": "mundane adjective" },
+    { "form": "adequate", "positions": ["adjective"], "gloss": "mundane adjective" },
+
+    { "form": "break room", "positions": ["place"], "gloss": "mundane venue" },
+    { "form": "food court", "positions": ["place"], "gloss": "mundane venue" },
+    { "form": "petting zoo", "positions": ["place"], "gloss": "mundane venue" },
+    { "form": "gift shop", "positions": ["place"], "gloss": "mundane venue" },
+    { "form": "loading dock", "positions": ["place"], "gloss": "mundane venue" },
+    { "form": "cul-de-sac", "positions": ["place"], "gloss": "mundane venue" }
+  ]
+}
