@@ -5,10 +5,6 @@
     "fuck", "shit", "cunt", "nigg", "fagg", "kike", "spic", "chink", "gook",
     "tranny", "retard", "rape", "cock", "dick", "twat", "wank", "jizz",
     "piss", "tits", "boob", "penis", "vagin", "whore", "slut", "bitch",
-    "asshole", "nazi", "hitler", "semen", "smegma", "queef",
-    // Real-person collisions: independent ordinary morphemes can compose into a
-    // well-known name (found on integration day: phil + hartman). Normalization
-    // strips spaces, so block the fused form; extend as more are spotted.
-    "philhartman"
+    "asshole", "nazi", "hitler", "semen", "smegma", "queef"
   ]
 }
