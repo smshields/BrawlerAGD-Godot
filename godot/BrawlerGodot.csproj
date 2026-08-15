@@ -12,5 +12,8 @@
       docs/CONVERSION_PLAN.md, "The determinism contract".
     -->
     <ProjectReference Include="..\BrawlerSim\BrawlerSim.csproj" />
+    <!-- Game Player (2026-08-14): character/stage names generated on built-game
+         open — namegen's first shipping reference (docs/features/game-player.md). -->
+    <ProjectReference Include="..\namegen\src\NameGen\NameGen.csproj" />
   </ItemGroup>
 </Project>

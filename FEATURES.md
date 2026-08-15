@@ -326,4 +326,38 @@ Have an organized view of games that can be created, edited, or deleted. When a 
 Games should be compiled into a parameterized document similar to our current setup of levels/characters. 
 
 ## Game Player
-Have an organized view of games that can be played. When a game is selected for play, there should be a character select screen. We are going to stay very close to the Smash-Bros style of interface. 
+Have an organized view of games that can be played. When a game is selected for play, there should be a character select screen. We are going to stay very close to the Smash-Bros style of interface. There is a sketched image of this interface in the root of the repository to inform layout. 
+
+Here are the key pieces of functionality:
+
+1. Player Addition
+- There are four panes, each representing a player. 
+- Until a player is confirmed by joining (clicking, pressing a button on a controller), the pane is greyed out and says "JOIN".
+- A player can change their name by clicking the "Player #" and updating it using a small keyboard presented in the space of the character.
+- An Icon in the upper right of the pane indicates if it's a human player or cpu.
+- When a character is selected, that character is displayed in the pane.
+- The character performs all available actions in the pane to give it a preview.
+- Clicking through the CPU/Player selection can turn off the panel as well.
+- If a pane is set with a CPU, there is a button to select the character for them.
+- If a pane is set with a CPU, there is an option to change level. This change changes the randomness of their utility agent action selection and response delays.
+
+2. Stage Selection
+- There are four stages selectable, with the selected stage highlighted with a thick white border.
+- There is a window below the stage select (see sketch) that previews the current stage zoomed out.
+- Stages can be selected by any player.
+
+3. Player Control
+- Each player has a colored cursor.
+- The player addition pane matches color of cursor.
+
+4. Character Selection
+- Characters can be selected by a player's cursor.
+- Selected characters glow with the player's cursor color.
+- If more than one player is on the same character, the cursor color border is mixed between all players.
+
+5. Header menu
+- on the left, a back button brings you back to game selection screen.
+- in the middle, selection for stock/time based game, along with configuration for number of stocks and minutes of the game.
+- on the right, start. This is only active when a stage and all joined players have been selected.
+
+6. Character and stage names are generated using the namegen library if they do not yet exist in the game spec doc.

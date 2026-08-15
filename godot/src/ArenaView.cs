@@ -359,6 +359,7 @@ public partial class ArenaView : Node2D
     private void BackToMenu()
     {
         MatchSession.Trace = null;
+        MatchSession.PlayerSpecs = null; // a quick match after a Game Player match is clean
         GetTree().ChangeSceneToFile("res://scenes/main_menu.tscn");
     }
 
@@ -374,6 +375,20 @@ public partial class ArenaView : Node2D
         if (MatchSession.Mode == MatchMode.Replay)
         {
             return ReplaySources(players);
+        }
+        // Game Player launches (2026-08-14): explicit per-player specs — humans on
+        // the action set they joined with, CPUs at their chosen level.
+        if (MatchSession.PlayerSpecs is { } specs && specs.Count == players)
+        {
+            var configured = new IInputSource[players];
+            for (int i = 0; i < players; i++)
+            {
+                configured[i] = specs[i].Human
+                    ? new HumanInputSource(specs[i].PlayerNumber, ShieldHoldMask(i))
+                    : (specs[i].Agent ?? AgentConfig.Default)
+                        .CreateSource(new Pcg32(MatchSession.AiSeed, (ulong)i));
+            }
+            return configured;
         }
         var sources = new IInputSource[players];
         for (int i = 0; i < players; i++)

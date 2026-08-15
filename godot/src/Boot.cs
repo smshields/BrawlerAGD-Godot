@@ -101,11 +101,53 @@ public partial class Boot : Node
         AddKey("p1_action4", Key.L);
 
         // Pads: P2 gets the FIRST pad (2P requires a controller; the keyboard is P1's);
-        // P1 can use a second pad. Same layout on both.
+        // P1 can use a second pad. Same layout on both. P3/P4 (Game Player 2026-08-14,
+        // multi-human 3/4P) default to devices 2/3; the character select REBINDS each
+        // action set to the pad that actually joined (BindPadToPlayer).
         RegisterPadLayout(playerNumber: 1, device: 1);
         RegisterPadLayout(playerNumber: 2, device: 0);
+        RegisterPadLayout(playerNumber: 3, device: 2);
+        RegisterPadLayout(playerNumber: 4, device: 3);
 
         AddKey("ui_pause", Key.Escape);
+    }
+
+    /// <summary>
+    /// Points a player's action set at a specific pad (Game Player join flow,
+    /// 2026-08-14): pad events for p{n}_* are replaced with the given device's
+    /// layout; KEYBOARD events (P1's WASD set) are kept. ResetPadBindings restores
+    /// the boot defaults — the main menu calls it so quick matches stay predictable.
+    /// </summary>
+    public static void BindPadToPlayer(int playerNumber, int device)
+    {
+        foreach (string suffix in new[]
+                 {
+                     "left", "right", "up", "down", "jump",
+                     "action0", "action1", "action2", "action3", "action4",
+                 })
+        {
+            string action = $"p{playerNumber}_{suffix}";
+            if (!InputMap.HasAction(action))
+            {
+                continue;
+            }
+            foreach (InputEvent existing in InputMap.ActionGetEvents(action))
+            {
+                if (existing is InputEventJoypadButton or InputEventJoypadMotion)
+                {
+                    InputMap.ActionEraseEvent(action, existing);
+                }
+            }
+        }
+        RegisterPadLayout(playerNumber, device);
+    }
+
+    public static void ResetPadBindings()
+    {
+        BindPadToPlayer(1, 1);
+        BindPadToPlayer(2, 0);
+        BindPadToPlayer(3, 2);
+        BindPadToPlayer(4, 3);
     }
 
     /// <summary>

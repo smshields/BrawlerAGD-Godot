@@ -120,6 +120,42 @@ public class BuiltGameJsonTests
         Assert.Throws<NotSupportedException>(() => BuiltGameJson.Deserialize(json));
     }
 
+    // ── Naming rules (Game Player, 2026-08-14 — docs/features/game-player.md) ────
+
+    [Fact]
+    public void BuilderDefaultShapedNamesNeedGenerationManualRenamesDoNot()
+    {
+        // Builder provenance defaults → renamed by the player's namegen pass.
+        Assert.True(BuiltGameNaming.NeedsGeneratedName("CANNONBALL-ARENA P1"));
+        Assert.True(BuiltGameNaming.NeedsGeneratedName("RUN-1-G99-GAME22-2 P4"));
+        Assert.True(BuiltGameNaming.NeedsGeneratedName("SPAWN-SANCTUARY STAGE"));
+        Assert.True(BuiltGameNaming.NeedsGeneratedName(""));
+        Assert.True(BuiltGameNaming.NeedsGeneratedName("   "));
+        Assert.True(BuiltGameNaming.NeedsGeneratedName(null));
+        // Anything a human typed (or namegen produced) survives.
+        Assert.False(BuiltGameNaming.NeedsGeneratedName("BOB"));
+        Assert.False(BuiltGameNaming.NeedsGeneratedName("Dreadfang"));
+        Assert.False(BuiltGameNaming.NeedsGeneratedName("The Obsidian Sanctum"));
+        Assert.False(BuiltGameNaming.NeedsGeneratedName("GORTHAK JENKINS"));
+        Assert.False(BuiltGameNaming.NeedsGeneratedName("P1 THE DESTROYER"));
+    }
+
+    [Fact]
+    public void NamingSeedsAreContentDerivedAndStable()
+    {
+        GameGenome a = Source(5);
+        GameGenome b = Source(6);
+        // Same content → same seed (any session names the same fighter identically);
+        // different content → different seed.
+        Assert.Equal(
+            BuiltGameNaming.NamingSeed(a.Characters[0]),
+            BuiltGameNaming.NamingSeed(a.Characters[0]));
+        Assert.NotEqual(
+            BuiltGameNaming.NamingSeed(a.Characters[0]),
+            BuiltGameNaming.NamingSeed(a.Characters[1]));
+        Assert.NotEqual(BuiltGameNaming.NamingSeed(a.Stage), BuiltGameNaming.NamingSeed(b.Stage));
+    }
+
     /// <summary>The whole point of compiling: a loaded built game must feed the
     /// EXISTING sim path — pick fighters + a stage, assemble a GameGenome, and a full
     /// AI match runs deterministically (self-contained, no source files needed).</summary>

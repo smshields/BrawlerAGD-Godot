@@ -35,4 +35,14 @@ public static class MatchSession
     public static MatchConfig BuildMatchConfig() => EndRule == MatchEndRule.Timed
         ? MatchConfig.Default with { EndRule = MatchEndRule.Timed, MaxMatchSeconds = TimedMatchSeconds }
         : MatchConfig.Default;
+
+    /// <summary>One match participant configured by the Game Player's character
+    /// select (2026-08-14): a human on a numbered action set (p1 = keyboard,
+    /// p2-p4 = the pads bound at join time) or a CPU with its leveled config.</summary>
+    public sealed record PlayerSpec(bool Human, int PlayerNumber, BrawlerSim.Agents.AgentConfig? Agent);
+
+    /// <summary>Non-null = the match was launched from the Game Player: ArenaView
+    /// builds one source per spec (index = player index) instead of the quick-match
+    /// modes. Cleared when the arena returns to the menu.</summary>
+    public static System.Collections.Generic.List<PlayerSpec>? PlayerSpecs;
 }
