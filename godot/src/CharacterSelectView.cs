@@ -77,13 +77,13 @@ public partial class CharacterSelectView : Control
 
     public override void _Ready()
     {
-        if (BuiltGameSession.Game is null || BuiltGameSession.Path is null)
+        if (BuiltGameSession.Game is null)
         {
-            GetTree().ChangeSceneToFile("res://scenes/game_select.tscn");
+            GetTree().ChangeSceneToFile(Standalone.MenuScene());
             return;
         }
         _game = BuiltGameSession.Game;
-        _path = BuiltGameSession.Path;
+        _path = BuiltGameSession.Path ?? "";
         for (int i = 0; i < PaneCount; i++)
         {
             _panes[i] = new Pane();
@@ -407,9 +407,10 @@ public partial class CharacterSelectView : Control
         header.AddThemeConstantOverride("separation", 12);
         AddChild(header);
 
+        string backScene = Standalone.Active ? "res://scenes/title.tscn" : "res://scenes/game_select.tscn";
         Button back = HeaderButton("BACK");
-        back.Pressed += () => GetTree().ChangeSceneToFile("res://scenes/game_select.tscn");
-        Register(back, _ => GetTree().ChangeSceneToFile("res://scenes/game_select.tscn"));
+        back.Pressed += () => GetTree().ChangeSceneToFile(backScene);
+        Register(back, _ => GetTree().ChangeSceneToFile(backScene));
         header.AddChild(back);
 
         var gameName = new Label

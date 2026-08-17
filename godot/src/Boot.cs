@@ -41,6 +41,15 @@ public partial class Boot : Node
             GetTree().Quit(1);
         }
 
+        // Packaged games (2026-08-15): the embedded game routes boot to the title
+        // screen and applies player-facing first-run defaults; the dev menus are
+        // unreachable in standalone mode.
+        if (Standalone.Active)
+        {
+            Standalone.ApplyFirstRunDefaults();
+            CallDeferred(nameof(GoToScene), "res://scenes/title.tscn");
+        }
+
         // Scene navigation for automation: BRAWLER_SCENE="evolve"|"manage" jumps there.
         string scene = OS.GetEnvironment("BRAWLER_SCENE");
         if (scene.Length > 0)

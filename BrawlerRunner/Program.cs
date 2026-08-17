@@ -11,5 +11,6 @@ return args.Length == 0
         "bench" => Commands.BenchCommand(args),
         "noise" => Commands.Noise(args),
         "popdiv" => Commands.PopDiv(args),
+        "prep-game" => Commands.PrepGame(args),
         _ => Commands.Usage(),
     };

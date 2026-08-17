@@ -360,7 +360,7 @@ public partial class ArenaView : Node2D
     {
         MatchSession.Trace = null;
         MatchSession.PlayerSpecs = null; // a quick match after a Game Player match is clean
-        GetTree().ChangeSceneToFile("res://scenes/main_menu.tscn");
+        GetTree().ChangeSceneToFile(Standalone.MenuScene());
     }
 
     /// <summary>

@@ -34,6 +34,9 @@ internal static class Commands
         Console.WriteLine("  noise    --games <g1.json,g2.json,...> [--reps 20] [--rounds 5] [--aggregate median|mean]");
         Console.WriteLine("           [--max-seconds 60] [--target-seconds 45] [--seed 1] [--agent ...] — fitness noise per genome (CSV)");
         Console.WriteLine("  popdiv   --run <run dir> — mean pairwise normalized genome distance of the population");
+        Console.WriteLine("  prep-game --game <built-game.json> --out <embedded.json> — packaging gate:");
+        Console.WriteLine("           requires a COMPLETE built game (8 chars + 4 stages) and applies the");
+        Console.WriteLine("           namegen naming pass so packaged games never ship default names");
         return 1;
     }
 
@@ -287,6 +290,100 @@ internal static class Commands
         }
         Bench.Run(args[1]);
         return 0;
+    }
+
+    /// <summary>
+    /// Packaging gate (Packaged Games, 2026-08-15 — docs/features/packaged-games.md):
+    /// loads a built game, refuses incomplete ones, applies the SAME naming rules as
+    /// the Game Player (BuiltGameNaming pattern + content-derived seeds, roster-unique
+    /// via UniqueNameSession), and writes the embedded document the packaged app
+    /// boots from. The genome→namegen mapping mirrors BuiltGameNamer (godot/) — the
+    /// app layer and this dev tool are the two namegen consumers by design.
+    /// </summary>
+    public static int PrepGame(string[] args)
+    {
+        var opts = ParseOptions(args);
+        BuiltGame game = BuiltGameJson.Load(Require(opts, "game"));
+        if (!game.IsComplete)
+        {
+            Console.Error.WriteLine(
+                $"'{game.Name}' is incomplete ({game.Characters.Count}/{BuiltGame.RequiredCharacters} characters, "
+                + $"{game.Stages.Count}/{BuiltGame.RequiredStages} stages) — finish it in BUILD GAME first.");
+            return 1;
+        }
+
+        var generator = NameGen.NameGenerator.CreateDefault();
+        var session = new NameGen.UniqueNameSession(generator);
+        foreach (BuiltCharacter c in game.Characters.Where(c => !BuiltGameNaming.NeedsGeneratedName(c.DisplayName)))
+        {
+            session.Reserve(c.DisplayName);
+        }
+        foreach (BuiltStage s in game.Stages.Where(s => !BuiltGameNaming.NeedsGeneratedName(s.DisplayName)))
+        {
+            session.Reserve(s.DisplayName);
+        }
+        int named = 0;
+        for (int i = 0; i < game.Characters.Count; i++)
+        {
+            if (!BuiltGameNaming.NeedsGeneratedName(game.Characters[i].DisplayName))
+            {
+                continue;
+            }
+            game.Characters[i] = game.Characters[i] with
+            {
+                DisplayName = session.GenerateCharacterName(
+                    MapCharacter(game.Characters[i].Character),
+                    new NameGen.NameOptions
+                    {
+                        Seed = BuiltGameNaming.NamingSeed(game.Characters[i].Character),
+                    }).Display,
+            };
+            named++;
+        }
+        for (int i = 0; i < game.Stages.Count; i++)
+        {
+            if (!BuiltGameNaming.NeedsGeneratedName(game.Stages[i].DisplayName))
+            {
+                continue;
+            }
+            game.Stages[i] = game.Stages[i] with
+            {
+                DisplayName = session.GenerateStageName(
+                    new NameGen.StageGenome(game.Stages[i].Stage.Params.ToDictionary()),
+                    new NameGen.NameOptions
+                    {
+                        Seed = BuiltGameNaming.NamingSeed(game.Stages[i].Stage),
+                    }).Display,
+            };
+            named++;
+        }
+        BuiltGameJson.Save(game, Require(opts, "out"));
+        Console.WriteLine($"prepared '{game.Name}': named {named} elements → {opts["out"]}");
+        // The shell packager reads these two lines to brand the build.
+        Console.WriteLine($"name={game.Name}");
+        Console.WriteLine($"slug={Slug(game.Name)}");
+        return 0;
+    }
+
+    private static NameGen.CharacterGenome MapCharacter(CharacterGenome c) => new(
+        c.Params.ToDictionary(),
+        c.Moves.Select(m => new NameGen.MoveGenome(m.Type switch
+        {
+            MoveType.Shield => NameGen.MoveKind.Shield,
+            MoveType.Dash => NameGen.MoveKind.Dash,
+            MoveType.Projectile => NameGen.MoveKind.Projectile,
+            _ => NameGen.MoveKind.Melee,
+        }, m.Params.ToDictionary())).ToList());
+
+    private static string Slug(string name)
+    {
+        var slug = new string(name.ToLowerInvariant()
+            .Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray()).Trim('-');
+        while (slug.Contains("--"))
+        {
+            slug = slug.Replace("--", "-");
+        }
+        return slug.Length > 0 ? slug : "game";
     }
 
     private static IInputSource[] AiSources(ulong seed, AgentConfig agent, int players = 2)

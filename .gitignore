@@ -17,6 +17,10 @@ dist/
 # The namegen source archive (the extracted namegen/ tree is the tracked copy)
 namegen.zip
 
+# The packaged-game switch: written into build copies by tools/package-game.sh,
+# never present in the dev project (its presence IS standalone mode)
+godot/standalone_game.json
+
 # Evolution run output (checkpoints, results, replays) + archived runs
 runs/
 archive/
