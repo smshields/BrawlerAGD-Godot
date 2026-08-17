@@ -90,9 +90,10 @@ public partial class MovesetPreview : SubViewportContainer
         _performer.Sync();
         _projectiles?.Sync();
 
-        // Fixed crop centered a little above the floor (the performer's arena).
+        // Crop centered on the PERFORMER's body (2026-08-17, designer: the fighter
+        // must sit centered in the pane), holding a fixed height above the floor.
         Vector2 size = _viewport.Size;
-        _root.Position = new Vector2(size.X / 2f, size.Y / 2f - 0.4f * Ppu * -1f);
+        _root.Position = new Vector2(size.X / 2f - _performer.Position.X, size.Y / 2f + 0.4f * Ppu);
     }
 
     /// <summary>Cycles: settle → jump → each mapped button (shields held, others

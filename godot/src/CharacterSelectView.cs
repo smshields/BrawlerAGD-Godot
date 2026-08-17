@@ -82,6 +82,13 @@ public partial class CharacterSelectView : Control
             GetTree().ChangeSceneToFile(Standalone.MenuScene());
             return;
         }
+        // The root must NOT consume clicks (2026-08-17, designer: "selection is
+        // completely broken"): a Control's default MouseFilter is STOP, which ate
+        // every click that wasn't on a Button before _UnhandledInput could hit-test
+        // the hotspots. Real mice never reached the grid/stage cards; only the
+        // automation path (which calls handlers directly) ever "worked".
+        MouseFilter = MouseFilterEnum.Ignore;
+        Theme = BuildButtonTheme();
         _game = BuiltGameSession.Game;
         _path = BuiltGameSession.Path ?? "";
         for (int i = 0; i < PaneCount; i++)
@@ -403,6 +410,7 @@ public partial class CharacterSelectView : Control
         var header = new HBoxContainer
         {
             AnchorRight = 1f, OffsetLeft = 16f, OffsetTop = 10f, OffsetRight = -16f,
+            MouseFilter = MouseFilterEnum.Ignore,
         };
         header.AddThemeConstantOverride("separation", 12);
         AddChild(header);
@@ -469,6 +477,7 @@ public partial class CharacterSelectView : Control
         {
             AnchorRight = 1f, AnchorBottom = 1f,
             OffsetLeft = 16f, OffsetTop = 64f, OffsetRight = -16f, OffsetBottom = -12f,
+            MouseFilter = MouseFilterEnum.Ignore,
         };
         body.AddThemeConstantOverride("separation", 14);
         AddChild(body);
@@ -485,7 +494,11 @@ public partial class CharacterSelectView : Control
 
     private VBoxContainer PaneColumn(int a, int b)
     {
-        var column = new VBoxContainer { CustomMinimumSize = new Vector2(300f, 0f) };
+        var column = new VBoxContainer
+        {
+            CustomMinimumSize = new Vector2(300f, 0f),
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
         column.AddThemeConstantOverride("separation", 12);
         foreach (int index in new[] { a, b })
         {
@@ -506,11 +519,15 @@ public partial class CharacterSelectView : Control
 
     private Control CenterColumn()
     {
-        var center = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        var center = new VBoxContainer
+        {
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
         center.AddThemeConstantOverride("separation", 10);
 
         // Character grid: 2 rows × 4 — sprite with the name below (sketch).
-        var grid = new GridContainer { Columns = 4 };
+        var grid = new GridContainer { Columns = 4, MouseFilter = MouseFilterEnum.Ignore };
         grid.AddThemeConstantOverride("h_separation", 8);
         grid.AddThemeConstantOverride("v_separation", 8);
         center.AddChild(grid);
@@ -519,7 +536,10 @@ public partial class CharacterSelectView : Control
             int cell = i;
             var card = new PanelContainer
             {
-                CustomMinimumSize = new Vector2(128f, 108f),
+                CustomMinimumSize = new Vector2(120f, 112f),
+                // Equal columns: every cell expands identically, so a long fighter
+                // name can't widen its column and knock the grid off-center.
+                SizeFlagsHorizontal = SizeFlags.ExpandFill,
                 // Hotspot cards must NOT consume mouse clicks — ActivateAt hit-tests
                 // them from _UnhandledInput (one path for mouse and pad cursors).
                 MouseFilter = MouseFilterEnum.Ignore,
@@ -534,12 +554,15 @@ public partial class CharacterSelectView : Control
                 ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
                 CustomMinimumSize = new Vector2(0f, 64f),
                 SizeFlagsVertical = SizeFlags.ExpandFill,
+                // TextureRect's default MouseFilter is STOP — it would eat the click.
+                MouseFilter = MouseFilterEnum.Ignore,
             });
             var name = new Label
             {
                 Text = _game.Characters[i].DisplayName.ToUpperInvariant(),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 ClipText = true,
+                TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
             };
             name.AddThemeFontSizeOverride("font_size", 11);
             v.AddChild(name);
@@ -549,7 +572,7 @@ public partial class CharacterSelectView : Control
         }
 
         // Stage row: 4 thumbs, thick white border on the selected one.
-        var stageRow = new HBoxContainer();
+        var stageRow = new HBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
         stageRow.AddThemeConstantOverride("separation", 8);
         center.AddChild(stageRow);
         for (int i = 0; i < _game.Stages.Count; i++)
@@ -574,6 +597,7 @@ public partial class CharacterSelectView : Control
                 Text = _game.Stages[i].DisplayName.ToUpperInvariant(),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 ClipText = true,
+                TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
             };
             name.AddThemeFontSizeOverride("font_size", 10);
             v.AddChild(name);
@@ -607,6 +631,51 @@ public partial class CharacterSelectView : Control
         var label = new Label { Name = "Label", Visible = false }; // text mirror (mode)
         button.AddChild(label);
         return button;
+    }
+
+    /// <summary>Scene-wide button styling (2026-08-17, designer: buttons must read
+    /// as buttons): bordered dark boxes with hover/pressed/disabled states, applied
+    /// as the root theme so every Button in the scene inherits it.</summary>
+    private static Theme BuildButtonTheme()
+    {
+        static StyleBoxFlat Box(Color bg, Color border) => new()
+        {
+            BgColor = bg,
+            BorderColor = border,
+            BorderWidthTop = 1, BorderWidthBottom = 1, BorderWidthLeft = 1, BorderWidthRight = 1,
+            CornerRadiusTopLeft = 6, CornerRadiusTopRight = 6,
+            CornerRadiusBottomLeft = 6, CornerRadiusBottomRight = 6,
+            ContentMarginLeft = 12f, ContentMarginRight = 12f,
+            ContentMarginTop = 5f, ContentMarginBottom = 5f,
+        };
+        var theme = new Theme();
+        theme.SetStylebox("normal", "Button", Box(new Color(0.16f, 0.17f, 0.22f), new Color(0.38f, 0.4f, 0.48f)));
+        theme.SetStylebox("hover", "Button", Box(new Color(0.21f, 0.22f, 0.28f), new Color(0.58f, 0.61f, 0.7f)));
+        theme.SetStylebox("pressed", "Button", Box(new Color(0.28f, 0.29f, 0.36f), Colors.White));
+        theme.SetStylebox("disabled", "Button", Box(new Color(0.1f, 0.1f, 0.13f), new Color(0.2f, 0.22f, 0.28f)));
+        theme.SetColor("font_color", "Button", new Color(0.92f, 0.93f, 0.96f));
+        theme.SetColor("font_hover_color", "Button", Colors.White);
+        theme.SetColor("font_pressed_color", "Button", Colors.White);
+        theme.SetColor("font_disabled_color", "Button", new Color(0.4f, 0.42f, 0.5f));
+        return theme;
+    }
+
+    /// <summary>Rename-keyboard keys are too dense for the themed margins.</summary>
+    private static void CompactKey(Button key)
+    {
+        static StyleBoxFlat Box(Color bg, Color border) => new()
+        {
+            BgColor = bg,
+            BorderColor = border,
+            BorderWidthTop = 1, BorderWidthBottom = 1, BorderWidthLeft = 1, BorderWidthRight = 1,
+            CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3,
+            CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3,
+            ContentMarginLeft = 2f, ContentMarginRight = 2f,
+            ContentMarginTop = 2f, ContentMarginBottom = 2f,
+        };
+        key.AddThemeStyleboxOverride("normal", Box(new Color(0.16f, 0.17f, 0.22f), new Color(0.38f, 0.4f, 0.48f)));
+        key.AddThemeStyleboxOverride("hover", Box(new Color(0.21f, 0.22f, 0.28f), new Color(0.58f, 0.61f, 0.7f)));
+        key.AddThemeStyleboxOverride("pressed", Box(new Color(0.28f, 0.29f, 0.36f), Colors.White));
     }
 
     private void Register(Control area, System.Action<int> activate, System.Func<bool>? enabled = null)
@@ -870,6 +939,7 @@ public partial class CharacterSelectView : Control
         {
             char c = ch;
             var key = new Button { Text = c.ToString(), CustomMinimumSize = new Vector2(24f, 24f) };
+            CompactKey(key);
             void Type(int _)
             {
                 if (p.NameOverride.Length < 14)
@@ -991,8 +1061,62 @@ public partial class CharacterSelectView : Control
                 case "start":
                     CallDeferred(nameof(StartMatch));
                     break;
+                case "click": // "pane0" / "grid3" / "stage2" — REAL mouse clicks
+                    _autoClicks.Add(kv[1]);
+                    break;
             }
         }
         RefreshAll();
+        if (_autoClicks.Count > 0)
+        {
+            ScheduleAutoClicks();
+        }
+    }
+
+    // Unlike the direct tokens above, click= targets go through Input.ParseInputEvent —
+    // the full input pipeline including GUI consumption — so they verify what a real
+    // mouse does (2026-08-17: the direct tokens masked a root MouseFilter bug).
+    private readonly List<string> _autoClicks = new();
+
+    private void ScheduleAutoClicks()
+    {
+        double at = 0.2; // after first-frame layout; all clicks land before the 1 s shot
+        foreach (string target in _autoClicks)
+        {
+            string t = target;
+            GetTree().CreateTimer(at).Timeout += () => InjectClick(t);
+            at += 0.2;
+        }
+    }
+
+    private void InjectClick(string target)
+    {
+        Control? area = target switch
+        {
+            _ when target.StartsWith("grid", System.StringComparison.Ordinal)
+                => _gridCells[int.Parse(target[4..])],
+            _ when target.StartsWith("stage", System.StringComparison.Ordinal)
+                => _stageCards[int.Parse(target[5..])],
+            _ when target.StartsWith("pane", System.StringComparison.Ordinal)
+                => _panes[int.Parse(target[4..])].Root,
+            _ => null,
+        };
+        if (area is null)
+        {
+            return;
+        }
+        // PushInput(local) delivers in canvas coords through the viewport's full
+        // pipeline (GUI consumption first, unhandled after) — ParseInputEvent would
+        // treat Position as SCREEN coords and land the click in the wrong control.
+        Vector2 pos = area.GetGlobalRect().GetCenter();
+        GetViewport().PushInput(new InputEventMouseButton
+        {
+            Position = pos, GlobalPosition = pos, ButtonIndex = MouseButton.Left, Pressed = true,
+        }, inLocalCoords: true);
+        GetViewport().PushInput(new InputEventMouseButton
+        {
+            Position = pos, GlobalPosition = pos, ButtonIndex = MouseButton.Left, Pressed = false,
+        }, inLocalCoords: true);
+        GD.Print($"autoclick: {target} @ {pos}");
     }
 }
