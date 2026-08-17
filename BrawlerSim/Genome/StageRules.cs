@@ -82,8 +82,14 @@ public static class StageRules
         foreach (PlatformGene p in platforms)
         {
             PlatformGene fixedUp = p;
-            int maxXSize = Math.Max(1, (int)MathF.Floor(max.X - min.X));
-            int maxYSize = Math.Max(1, (int)MathF.Floor(max.Y - min.Y));
+            // Size-clamp to the INTEGER-FEASIBLE span (2026-08-17): platform coords are
+            // integers, so the usable width is floor(max)-ceil(min), not the raw box
+            // width. The old raw-width clamp let an 11-wide platform survive an
+            // 11.96-wide box where no integer position contains it — the position
+            // clamp below then parked it at loX sticking out the far side (the one
+            // containment leak in 1,600 audited breedings, all pure-crossover).
+            int maxXSize = Math.Max(1, (int)MathF.Floor(max.X) - (int)MathF.Ceiling(min.X));
+            int maxYSize = Math.Max(1, (int)MathF.Floor(max.Y) - (int)MathF.Ceiling(min.Y));
             if (fixedUp.XSize > maxXSize)
             {
                 fixedUp = fixedUp with { XSize = maxXSize };

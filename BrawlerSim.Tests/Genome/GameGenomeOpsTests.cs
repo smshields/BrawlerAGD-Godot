@@ -1,5 +1,6 @@
 using BrawlerSim.Determinism;
 using BrawlerSim.Genome;
+using BrawlerSim.Params;
 using BrawlerSim.Serialization;
 using Xunit;
 
@@ -82,27 +83,64 @@ public class GameGenomeOpsTests
 
     /// <summary>Breeding sweep for the 2026-08-13 containment rule: chains of
     /// crossover + mutation (regeneration, mirror transform, platform fit, repair)
-    /// never leave a platform outside the child's playable box.</summary>
+    /// never leave a platform outside the child's playable box. Strengthened
+    /// 2026-08-17 (designer report of an escaped stage): a CHAINED pool — every
+    /// child re-enters and breeds again — across pinned AND random compositions,
+    /// the pattern that exposed the integer-feasible-span repair bug the original
+    /// fresh-pair sweep missed.</summary>
     [Fact]
     public void BredStagesKeepPlatformsInsideTheirPlayableBox()
     {
-        var rng = new Pcg32(77);
-        var pool = Enumerable.Range(0, 8)
-            .Select(i => GameGenome.Generate(GenerationConfig.Default, new Pcg32((ulong)(100 + i))))
-            .ToList();
-        for (int gen = 0; gen < 40; gen++)
+        foreach (GenerationConfig config in new[]
+                 {
+                     GenerationConfig.Default,
+                     GenerationConfig.Default with { ButtonComposition = GenerationConfig.RandomComposition },
+                 })
         {
-            var a = pool[rng.NextInt(pool.Count)];
-            var b = pool[rng.NextInt(pool.Count)];
-            var child = GameGenomeOps.Breed(a, b, 0.4f, rng);
-            (var playMin, var playMax) = StageRules.PlayableBox(child.Stage.Params);
-            foreach (PlatformGene p in child.Stage.Platforms)
+            var pool = Enumerable.Range(1, 20)
+                .Select(i => GameGenome.Generate(config, new Pcg32((ulong)i)))
+                .ToList();
+            var rng = new Pcg32(9999);
+            for (int gen = 0; gen < 40; gen++)
             {
-                Assert.True(StageRules.PlatformInPlayableBox(p, playMin, playMax),
-                    $"bred gen {gen}: platform {p} outside the child's playable box");
+                for (int i = 0; i < pool.Count; i++)
+                {
+                    var child = GameGenomeOps.Breed(pool[i], pool[(i + 1) % pool.Count], 0.5f, rng, config);
+                    (var playMin, var playMax) = StageRules.PlayableBox(child.Stage.Params);
+                    foreach (PlatformGene p in child.Stage.Platforms)
+                    {
+                        Assert.True(StageRules.PlatformInPlayableBox(p, playMin, playMax),
+                            $"bred gen {gen} idx {i}: platform {p} outside the child's playable box");
+                    }
+                    pool[i] = child;
+                }
             }
-            pool[rng.NextInt(pool.Count)] = child;
         }
+    }
+
+    /// <summary>Regression (2026-08-17, designer report): RepairPlatforms size-clamped
+    /// against the RAW playable-box width but position-clamped against integer-aligned
+    /// bounds. An 11-wide platform in an 11.96-wide box passed the size clamp, yet no
+    /// integer X contains it — the position clamp parked it at ceil(min.X), sticking
+    /// out the far side (the only containment leak in 1,600 audited breedings, all
+    /// pure-crossover children). The repaired size must be the integer-feasible span.</summary>
+    [Fact]
+    public void RepairPlatformsShrinksAPlatformNoIntegerPositionCanContain()
+    {
+        var platforms = new List<PlatformGene> { new(-5, 0, 11, 2), new(-2, -3, 4, 1) };
+        // Blast half width = 5.2 × (1 + 0.15) = 5.98: the raw box width 11.96 admits
+        // size 11, but the integer-feasible span is floor(5.98) − ceil(−5.98) = 10.
+        ParamSet stage = StageRules.LegacyParams(platforms).With(
+            (StageParams.VisibleHalfWidth, 5.2f),
+            (StageParams.KoMarginFraction, 0.15f));
+        var repaired = StageRules.RepairPlatforms(platforms, stage);
+        (var min, var max) = StageRules.PlayableBox(stage);
+        foreach (PlatformGene p in repaired)
+        {
+            Assert.True(StageRules.PlatformInPlayableBox(p, min, max),
+                $"repaired platform {p} is still outside the playable box");
+        }
+        Assert.Equal(10, repaired[0].XSize);
     }
 
     [Fact]

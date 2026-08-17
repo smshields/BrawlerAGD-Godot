@@ -804,7 +804,16 @@ public partial class CharacterSelectView : Control
                 SizeFlagsVertical = SizeFlags.ExpandFill,
                 CustomMinimumSize = new Vector2(0f, 130f),
             };
-            preview.Setup(entry.Character, entry.DisplayName);
+            // Key→move legend (2026-08-17, designer): device-correct keycaps for
+            // humans (keyboard vs the joined pad's layout); CPUs list moves only.
+            bool pad = p.Device >= 0;
+            preview.Setup(entry.Character, entry.DisplayName,
+                p.Mode == PaneMode.Human ? (pad ? "B" : "SPC") : null,
+                p.Mode == PaneMode.Human
+                    ? (pad
+                        ? new[] { "L1", "X", "A", "Y", "R1" }
+                        : new[] { "I", "J", "K", "U", "L" })
+                    : null);
             p.Body.AddChild(preview);
             var charName = new Label
             {

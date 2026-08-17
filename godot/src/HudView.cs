@@ -162,7 +162,9 @@ public partial class HudView : CanvasLayer
         };
     }
 
-    private static string MoveAbbrev(CharacterGenome character, int moveIndex)
+    /// <summary>Shared move-name vocabulary (internal since 2026-08-17: the character
+    /// select's key→move view uses the same labels as the debug strip).</summary>
+    internal static string MoveAbbrev(CharacterGenome character, int moveIndex)
     {
         MoveType type = character.Moves[moveIndex].Type;
         if (type == MoveType.Attack)
