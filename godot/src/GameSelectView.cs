@@ -21,6 +21,7 @@ public partial class GameSelectView : Control
 {
     public override void _Ready()
     {
+        Theme = UiTheme.Buttons; // app-wide button styling (2026-08-17)
         Boot.ResetPadBindings(); // leave any previous session's pad joins behind
 
         var root = new VBoxContainer

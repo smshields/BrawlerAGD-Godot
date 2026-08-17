@@ -43,8 +43,12 @@ public partial class Boot : Node
 
         // Packaged games (2026-08-15): the embedded game routes boot to the title
         // screen and applies player-facing first-run defaults; the dev menus are
-        // unreachable in standalone mode.
-        if (Standalone.Active)
+        // unreachable in standalone mode. EDITOR runs boot to the dev main menu even
+        // when a test copy of standalone_game.json is present (2026-08-17, designer)
+        // — the menu's TEST STANDALONE GAME button enters the packaged flow instead.
+        // BRAWLER_TITLE still forces title-screen routing for automation.
+        if (Standalone.HasEmbeddedGame
+            && (!OS.HasFeature("editor") || OS.GetEnvironment("BRAWLER_TITLE").Length > 0))
         {
             Standalone.ApplyFirstRunDefaults();
             CallDeferred(nameof(GoToScene), "res://scenes/title.tscn");

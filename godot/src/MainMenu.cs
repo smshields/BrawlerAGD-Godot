@@ -18,12 +18,16 @@ public partial class MainMenu : Control
 
     public override void _Ready()
     {
+        Theme = UiTheme.Buttons; // app-wide button styling (2026-08-17)
+        Standalone.ExitToDevMenu(); // the dev menu is never standalone mode
         var box = new VBoxContainer
         {
             AnchorLeft = 0.5f, AnchorRight = 0.5f, AnchorTop = 0.5f, AnchorBottom = 0.5f,
             GrowHorizontal = GrowDirection.Both, GrowVertical = GrowDirection.Both,
         };
-        box.AddThemeConstantOverride("separation", 10);
+        // 11 rows since TEST STANDALONE GAME (2026-08-17): tighter spacing keeps the
+        // centered column clear of the bottom key-layout hint at 720 px.
+        box.AddThemeConstantOverride("separation", 6);
         AddChild(box);
 
         var title = new Label { Text = "BRAWLER AGD", HorizontalAlignment = HorizontalAlignment.Center };
@@ -37,7 +41,7 @@ public partial class MainMenu : Control
         };
         subtitle.AddThemeFontSizeOverride("font_size", 15);
         box.AddChild(subtitle);
-        box.AddChild(new Control { CustomMinimumSize = new Vector2(0, 18) });
+        box.AddChild(new Control { CustomMinimumSize = new Vector2(0, 12) });
 
         _twoPlayerButton = AddButton(box, "PLAY — 2 PLAYERS", () => PickGame(MatchMode.HumanVsHuman));
         AddButton(box, "PLAY — VS CPU", () => PickGame(MatchMode.HumanVsCpu));
@@ -47,6 +51,14 @@ public partial class MainMenu : Control
         AddButton(box, "BUILD GAME", () => GetTree().ChangeSceneToFile("res://scenes/game_builder.tscn"));
         AddButton(box, "EVOLVE", () => GetTree().ChangeSceneToFile("res://scenes/evolve.tscn"));
         AddButton(box, "MANAGE GAMES", () => GetTree().ChangeSceneToFile("res://scenes/manage.tscn"));
+        // Standalone testing (2026-08-17, designer): a dev copy of a packaged game
+        // (godot/standalone_game.json, gitignored) no longer hijacks boot — this
+        // button is the way into the packaged title flow from the dev menu.
+        if (Standalone.HasEmbeddedGame)
+        {
+            AddButton(box, "TEST STANDALONE GAME",
+                () => GetTree().ChangeSceneToFile("res://scenes/title.tscn"));
+        }
         AddButton(box, "SETTINGS", OpenSettings);
         AddButton(box, "QUIT", () => GetTree().Quit());
 
@@ -262,7 +274,7 @@ public partial class MainMenu : Control
     /// corner, size, transparency — persisted via AppSettings (user://settings.cfg).</summary>
     private void OpenSettings()
     {
-        var popup = new PopupPanel();
+        var popup = new PopupPanel { Theme = UiTheme.Buttons }; // popups don't inherit the scene theme
         var box = new VBoxContainer { CustomMinimumSize = new Vector2(380f, 0f) };
         box.AddThemeConstantOverride("separation", 10);
         popup.AddChild(box);
@@ -322,7 +334,7 @@ public partial class MainMenu : Control
 
     private static Button AddButton(VBoxContainer box, string text, System.Action onPressed)
     {
-        var button = new Button { Text = text, CustomMinimumSize = new Vector2(340f, 44f) };
+        var button = new Button { Text = text, CustomMinimumSize = new Vector2(340f, 38f) };
         button.Pressed += () => onPressed();
         box.AddChild(button);
         return button;

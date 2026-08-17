@@ -20,7 +20,11 @@ public partial class PauseMenuView : CanvasLayer
 
     public override void _Ready()
     {
-        _root = new Control { AnchorRight = 1f, AnchorBottom = 1f, Visible = false };
+        _root = new Control
+        {
+            AnchorRight = 1f, AnchorBottom = 1f, Visible = false,
+            Theme = UiTheme.Buttons, // app-wide button styling (2026-08-17)
+        };
         AddChild(_root);
 
         var dim = new ColorRect
@@ -97,7 +101,7 @@ public partial class PauseMenuView : CanvasLayer
     /// mid-match per the designer's pause-menu decision.</summary>
     private void OpenSettings()
     {
-        var popup = new PopupPanel();
+        var popup = new PopupPanel { Theme = UiTheme.Buttons }; // popups don't inherit the scene theme
         var box = new VBoxContainer { CustomMinimumSize = new Vector2(380f, 0f) };
         box.AddThemeConstantOverride("separation", 10);
         popup.AddChild(box);

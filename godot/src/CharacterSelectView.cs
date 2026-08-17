@@ -88,7 +88,7 @@ public partial class CharacterSelectView : Control
         // the hotspots. Real mice never reached the grid/stage cards; only the
         // automation path (which calls handlers directly) ever "worked".
         MouseFilter = MouseFilterEnum.Ignore;
-        Theme = BuildButtonTheme();
+        Theme = UiTheme.Buttons;
         _game = BuiltGameSession.Game;
         _path = BuiltGameSession.Path ?? "";
         for (int i = 0; i < PaneCount; i++)
@@ -633,51 +633,6 @@ public partial class CharacterSelectView : Control
         return button;
     }
 
-    /// <summary>Scene-wide button styling (2026-08-17, designer: buttons must read
-    /// as buttons): bordered dark boxes with hover/pressed/disabled states, applied
-    /// as the root theme so every Button in the scene inherits it.</summary>
-    private static Theme BuildButtonTheme()
-    {
-        static StyleBoxFlat Box(Color bg, Color border) => new()
-        {
-            BgColor = bg,
-            BorderColor = border,
-            BorderWidthTop = 1, BorderWidthBottom = 1, BorderWidthLeft = 1, BorderWidthRight = 1,
-            CornerRadiusTopLeft = 6, CornerRadiusTopRight = 6,
-            CornerRadiusBottomLeft = 6, CornerRadiusBottomRight = 6,
-            ContentMarginLeft = 12f, ContentMarginRight = 12f,
-            ContentMarginTop = 5f, ContentMarginBottom = 5f,
-        };
-        var theme = new Theme();
-        theme.SetStylebox("normal", "Button", Box(new Color(0.16f, 0.17f, 0.22f), new Color(0.38f, 0.4f, 0.48f)));
-        theme.SetStylebox("hover", "Button", Box(new Color(0.21f, 0.22f, 0.28f), new Color(0.58f, 0.61f, 0.7f)));
-        theme.SetStylebox("pressed", "Button", Box(new Color(0.28f, 0.29f, 0.36f), Colors.White));
-        theme.SetStylebox("disabled", "Button", Box(new Color(0.1f, 0.1f, 0.13f), new Color(0.2f, 0.22f, 0.28f)));
-        theme.SetColor("font_color", "Button", new Color(0.92f, 0.93f, 0.96f));
-        theme.SetColor("font_hover_color", "Button", Colors.White);
-        theme.SetColor("font_pressed_color", "Button", Colors.White);
-        theme.SetColor("font_disabled_color", "Button", new Color(0.4f, 0.42f, 0.5f));
-        return theme;
-    }
-
-    /// <summary>Rename-keyboard keys are too dense for the themed margins.</summary>
-    private static void CompactKey(Button key)
-    {
-        static StyleBoxFlat Box(Color bg, Color border) => new()
-        {
-            BgColor = bg,
-            BorderColor = border,
-            BorderWidthTop = 1, BorderWidthBottom = 1, BorderWidthLeft = 1, BorderWidthRight = 1,
-            CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3,
-            CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3,
-            ContentMarginLeft = 2f, ContentMarginRight = 2f,
-            ContentMarginTop = 2f, ContentMarginBottom = 2f,
-        };
-        key.AddThemeStyleboxOverride("normal", Box(new Color(0.16f, 0.17f, 0.22f), new Color(0.38f, 0.4f, 0.48f)));
-        key.AddThemeStyleboxOverride("hover", Box(new Color(0.21f, 0.22f, 0.28f), new Color(0.58f, 0.61f, 0.7f)));
-        key.AddThemeStyleboxOverride("pressed", Box(new Color(0.28f, 0.29f, 0.36f), Colors.White));
-    }
-
     private void Register(Control area, System.Action<int> activate, System.Func<bool>? enabled = null)
         => _hotspots.Add(new Hotspot(area, activate, enabled));
 
@@ -939,7 +894,7 @@ public partial class CharacterSelectView : Control
         {
             char c = ch;
             var key = new Button { Text = c.ToString(), CustomMinimumSize = new Vector2(24f, 24f) };
-            CompactKey(key);
+            UiTheme.CompactKey(key);
             void Type(int _)
             {
                 if (p.NameOverride.Length < 14)

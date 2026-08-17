@@ -15,6 +15,11 @@ public partial class TitleView : Control
 
     public override void _Ready()
     {
+        // Reaching the title screen — exported boot, the dev menu's TEST STANDALONE
+        // GAME button, or running the scene directly — ENTERS standalone navigation
+        // (2026-08-17): character select's BACK and the arena's quit return here.
+        Standalone.Enter();
+        Theme = UiTheme.Buttons; // app-wide button styling (2026-08-17)
         Boot.ResetPadBindings();
         BuiltGame game = Standalone.Game;
 
@@ -51,6 +56,26 @@ public partial class TitleView : Control
         AddButton(box, "CREDITS", ToggleCredits);
         AddButton(box, "QUIT", () => GetTree().Quit());
 
+        // Editor-only escape hatch back to the dev menu (2026-08-17, designer:
+        // standalone testing must not lock the session out of the evolution UI).
+        // Exported packages never show it — "editor" is an editor-binary feature.
+        if (OS.HasFeature("editor"))
+        {
+            box.AddChild(new Control { CustomMinimumSize = new Vector2(0f, 10f) });
+            var dev = new Button
+            {
+                Text = "DEV MENU",
+                CustomMinimumSize = new Vector2(340f, 36f),
+                Modulate = new Color(1f, 1f, 1f, 0.6f),
+            };
+            dev.Pressed += () =>
+            {
+                Standalone.ExitToDevMenu();
+                GetTree().ChangeSceneToFile("res://scenes/main_menu.tscn");
+            };
+            box.AddChild(dev);
+        }
+
         // Automation (screenshot verification): BRAWLER_TITLE="play"|"credits"|"settings"
         // presses that button on load.
         switch (OS.GetEnvironment("BRAWLER_TITLE"))
@@ -78,7 +103,7 @@ public partial class TitleView : Control
     /// <summary>Same options as the pause menu's settings (minimap + debug strip).</summary>
     private void OpenSettings()
     {
-        var popup = new PopupPanel();
+        var popup = new PopupPanel { Theme = UiTheme.Buttons }; // popups don't inherit the scene theme
         var box = new VBoxContainer { CustomMinimumSize = new Vector2(360f, 0f) };
         box.AddThemeConstantOverride("separation", 8);
         popup.AddChild(box);

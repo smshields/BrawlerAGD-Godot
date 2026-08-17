@@ -72,6 +72,7 @@ public partial class EvolveView : Control
 
     public override void _Ready()
     {
+        Theme = UiTheme.Buttons; // app-wide button styling (2026-08-17)
         BuildUi();
         string auto = OS.GetEnvironment("BRAWLER_AUTOEVOLVE");
         if (auto.Length > 0)
