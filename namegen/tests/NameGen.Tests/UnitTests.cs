@@ -312,7 +312,7 @@ namespace NameGen.Tests
         public void EmbeddedDataLoadsAndValidates()
         {
             var data = NameGenData.LoadEmbedded();
-            Assert.Equal(4, data.Registers.Count);
+            Assert.Equal(5, data.Registers.Count);
             Assert.True(data.Traits.Character.Count >= 20);
             Assert.True(data.Traits.Stage.Count >= 8);
             Assert.True(data.Blocklist.Substrings.Count > 0);

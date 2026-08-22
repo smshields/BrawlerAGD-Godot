@@ -115,7 +115,7 @@ namespace NameGen.Tests
         {
             var rng = new Pcg32(3);
             var genome = RandomCharacter(rng);
-            foreach (var reg in new[] { "fantasy", "scifi", "horror", "normal" })
+            foreach (var reg in new[] { "fantasy", "scifi", "horror", "normal", "fey" })
             {
                 var result = Gen.GenerateCharacterName(genome, new NameOptions { Seed = 5, Register = reg });
                 Assert.Equal(reg, result.Register);

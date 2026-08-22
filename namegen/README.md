@@ -71,7 +71,7 @@ All content lives in `src/NameGen/Data/*.json`, embedded into the DLL at build. 
 
 ### Registers (`registers/*.json`)
 
-Four registers: `fantasy`, `scifi`, `horror`, `normal`. Each carries its own morphemes, templates, joiner rules, shape weights, and the two comedy dials:
+Five registers: `fantasy`, `scifi`, `horror`, `normal`, `fey` (whimsical counterweight to the fight-flavored registers; its morphemes deliberately cover the whole trait space in a soft voice, so heavy hitters land on toads and conkers rather than dodging the register). Each carries its own morphemes, templates, joiner rules, shape weights, and the two comedy dials:
 
 - `bleedProbability`: chance per slot of borrowing a morpheme from another register ("Dreadis" the sci-fi fighter).
 - `mundaneProbability`: chance (once per name) of the mundane pool hijacking a slot ("Spatulamir", "Gorthak Jenkins", "The Rotting Food Court"). Mundane entries live in `mundane.json` and deliberately carry no trait tags; the joke is that they point at nothing.

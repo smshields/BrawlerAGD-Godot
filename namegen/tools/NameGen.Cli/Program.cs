@@ -43,7 +43,7 @@ namespace NameGen.Cli
         private static int Demo(NameGenerator generator)
         {
             var rng = new Pcg32((ulong)Environment.TickCount64);
-            foreach (var register in new[] { "fantasy", "scifi", "horror", "normal" })
+            foreach (var register in new[] { "fantasy", "scifi", "horror", "normal", "fey" })
             {
                 Console.WriteLine($"== {register} ==");
                 for (int i = 0; i < 8; i++)

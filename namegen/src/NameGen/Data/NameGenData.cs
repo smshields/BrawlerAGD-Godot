@@ -19,7 +19,7 @@ namespace NameGen.Data
         public MundaneDef Mundane { get; }
         public BlocklistDef Blocklist { get; }
 
-        private static readonly string[] RegisterFiles = { "fantasy", "scifi", "horror", "normal" };
+        private static readonly string[] RegisterFiles = { "fantasy", "scifi", "horror", "normal", "fey" };
 
         public NameGenData(IReadOnlyList<RegisterDef> registers, TraitConfigDef traits,
             SchemaRangesDef ranges, MundaneDef mundane, BlocklistDef blocklist)
