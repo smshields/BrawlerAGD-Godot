@@ -3,6 +3,16 @@
 Trait vocabulary = namegen/src/NameGen/Data/traits.json (character traits).
 Affinities are 0..1; sparse. Pixel-derived tags (weightClass, paletteGroup, size traits)
 are computed in the build script, then merged with these keyword rules.
+
+FEY REGISTER (2026-08-22, applied as a hand-edit to the shipped players_v2_slices.json —
+the next full rebuild must wire this as a post-pass, since the RULES register field
+replaces rather than appends): add "fey" to a sprite's register list when
+  vibe in {goofy, cute}
+  OR id matches r"frog|toad(?!stool)|toadstool|newt|quokka|hedgehog|butterfly|firefly|"
+                r"bee\b|killer_bee|snail|slug|mushroom|fungus|jelly|faun|satyr|dryad|"
+                r"spriggan|boggart|rabbit|bunny|felid|porcupine|duck"
+     AND vibe not in {menacing, gross}.
+Tagged 55/490 on the 2026-08-22 library (namegen grew the fey register the same day).
 """
 
 # keyword (substring of filename stem or category path) -> dict of tag payloads

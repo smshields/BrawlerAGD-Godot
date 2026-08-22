@@ -637,7 +637,8 @@
    "weightClass": "heavy",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "blue"
   },
@@ -811,7 +812,8 @@
    "vibe": "cute",
    "register": [
     "normal",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "red"
   },
@@ -1015,7 +1017,8 @@
    "vibe": "goofy",
    "register": [
     "normal",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "green"
   },
@@ -1213,7 +1216,8 @@
    "weightClass": "light",
    "vibe": "neutral",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "orange"
   },
@@ -1486,7 +1490,8 @@
    "vibe": "cute",
    "register": [
     "normal",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "red"
   },
@@ -2013,7 +2018,8 @@
    "vibe": "goofy",
    "register": [
     "horror",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "blue"
   },
@@ -2142,7 +2148,8 @@
    "weightClass": "medium",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "green"
   },
@@ -2964,7 +2971,8 @@
    "weightClass": "light",
    "vibe": "neutral",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "gold"
   },
@@ -3346,7 +3354,8 @@
    "vibe": "goofy",
    "register": [
     "normal",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "grey"
   },
@@ -3694,7 +3703,8 @@
    "weightClass": "light",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "green"
   },
@@ -3730,7 +3740,8 @@
    "weightClass": "heavy",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "red"
   },
@@ -3788,7 +3799,8 @@
    "weightClass": "light",
    "vibe": "neutral",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "orange"
   },
@@ -3827,7 +3839,8 @@
    "vibe": "cute",
    "register": [
     "normal",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "red"
   },
@@ -3980,7 +3993,8 @@
    "weightClass": "light",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "orange"
   },
@@ -4085,7 +4099,8 @@
    "vibe": "goofy",
    "register": [
     "horror",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "grey"
   },
@@ -4480,7 +4495,8 @@
    "vibe": "goofy",
    "register": [
     "normal",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "orange"
   },
@@ -4522,7 +4538,8 @@
    "weightClass": "light",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "grey"
   },
@@ -4557,7 +4574,8 @@
    "vibe": "goofy",
    "register": [
     "normal",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "green"
   },
@@ -4633,7 +4651,8 @@
    "vibe": "cute",
    "register": [
     "normal",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "black"
   },
@@ -4893,7 +4912,8 @@
    "weightClass": "light",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "orange"
   },
@@ -4929,7 +4949,8 @@
    "weightClass": "heavy",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "grey"
   },
@@ -6435,7 +6456,8 @@
    "weightClass": "light",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "red"
   },
@@ -6500,7 +6522,8 @@
    "vibe": "goofy",
    "register": [
     "horror",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "purple"
   },
@@ -6758,7 +6781,8 @@
    "vibe": "goofy",
    "register": [
     "normal",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "gold"
   },
@@ -7033,7 +7057,8 @@
    "weightClass": "heavy",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "red"
   },
@@ -8722,7 +8747,8 @@
    "vibe": "goofy",
    "register": [
     "scifi",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "purple"
   },
@@ -8765,7 +8791,8 @@
    "vibe": "goofy",
    "register": [
     "scifi",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "grey"
   },
@@ -9525,7 +9552,8 @@
    "vibe": "regal",
    "register": [
     "normal",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "orange"
   },
@@ -9598,7 +9626,8 @@
    "vibe": "goofy",
    "register": [
     "normal",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "gold"
   },
@@ -9917,7 +9946,8 @@
    "weightClass": "heavy",
    "vibe": "regal",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "orange"
   },
@@ -10166,7 +10196,8 @@
    "weightClass": "medium",
    "vibe": "neutral",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "orange"
   },
@@ -10720,7 +10751,8 @@
    "weightClass": "medium",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "purple"
   },
@@ -10987,7 +11019,8 @@
    "vibe": "cute",
    "register": [
     "horror",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "black"
   },
@@ -11737,7 +11770,8 @@
    "weightClass": "light",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "purple"
   },
@@ -11777,7 +11811,8 @@
    "weightClass": "light",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "green"
   },
@@ -11817,7 +11852,8 @@
    "weightClass": "light",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "green"
   },
@@ -11857,7 +11893,8 @@
    "weightClass": "light",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "green"
   },
@@ -11897,7 +11934,8 @@
    "weightClass": "light",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "green"
   },
@@ -11937,7 +11975,8 @@
    "weightClass": "light",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "green"
   },
@@ -11977,7 +12016,8 @@
    "weightClass": "light",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "green"
   },
@@ -12017,7 +12057,8 @@
    "weightClass": "light",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "green"
   },
@@ -12145,7 +12186,8 @@
    "vibe": "goofy",
    "register": [
     "normal",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "gold"
   },
@@ -12181,7 +12223,8 @@
    "weightClass": "light",
    "vibe": "neutral",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "green"
   },
@@ -12219,7 +12262,8 @@
    "weightClass": "medium",
    "vibe": "neutral",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "green"
   },
@@ -12255,7 +12299,8 @@
    "weightClass": "light",
    "vibe": "neutral",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "green"
   },
@@ -12287,7 +12332,8 @@
    "weightClass": "medium",
    "vibe": "neutral",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "red"
   },
@@ -12323,7 +12369,8 @@
    "weightClass": "medium",
    "vibe": "neutral",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "red"
   },
@@ -12355,7 +12402,8 @@
    "weightClass": "medium",
    "vibe": "neutral",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "gold"
   },
@@ -13807,7 +13855,8 @@
    "weightClass": "medium",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "orange"
   },
@@ -14251,7 +14300,8 @@
    "vibe": "goofy",
    "register": [
     "horror",
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "purple"
   },
@@ -15862,7 +15912,8 @@
    "weightClass": "medium",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "grey"
   },
@@ -15896,7 +15947,8 @@
    "weightClass": "medium",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "orange"
   },
@@ -15930,7 +15982,8 @@
    "weightClass": "medium",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "orange"
   },
@@ -15962,7 +16015,8 @@
    "weightClass": "medium",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "orange"
   },
@@ -15994,7 +16048,8 @@
    "weightClass": "medium",
    "vibe": "goofy",
    "register": [
-    "fantasy"
+    "fantasy",
+    "fey"
    ],
    "paletteGroup": "orange"
   },
