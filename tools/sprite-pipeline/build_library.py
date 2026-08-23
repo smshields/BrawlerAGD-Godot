@@ -146,6 +146,47 @@ def apply_rules(r):
 for r in records:
     r["traits"], r["bodyPlan"], r["weightClass"], r["vibe"], r["register"] = apply_rules(r)
 
+# ---------- wields: attack classes this character plausibly uses ----------
+PLAN_NATURAL = {
+    "biped": ["burst", "object"],
+    "quadruped": ["natural", "impact", "burst", "object"],
+    "serpent": ["natural", "whip", "impact", "burst", "object"],
+    "winged": ["natural", "impact", "burst", "object"],
+    "floating": ["burst", "staff", "object"],
+    "blob": ["impact", "burst", "object"],
+    "headOnly": ["natural", "impact", "burst", "object"],
+}
+WEAPON_KEYS = [
+    (r"knight|warrior|fighter|soldier|blademaster|sword|duelist|vampire_knight|death_knight", ["blade"]),
+    (r"executioner|reaper|axe", ["axe"]),
+    (r"ogre|troll|cyclops|giant|golem|juggernaut|club", ["blunt"]),
+    (r"guard|spear|halberd|merfolk|impaler|trident", ["polearm"]),
+    (r"mage|wizard|sorcer|conjur|warlock|priest|shaman|druid|necro|lich|annihilator|summon|enchant|magus", ["staff", "burst"]),
+    (r"rogue|assassin|stalker|thief|kobold", ["blade"]),
+    (r"monk", ["impact"]),
+]
+KIT_WIELDS = {
+    "knight": ["blade"], "paladin": ["blunt"], "wizard": ["staff", "burst"],
+    "warlock": ["staff", "burst"], "archer": ["blade"], "rogue": ["blade"],
+    "monk": ["impact"], "barbarian": ["axe", "blunt"], "pirate": ["blade"],
+    "duelist": ["blade"],
+}
+import re as _re
+for r in records:
+    w = list(PLAN_NATURAL.get(r["bodyPlan"], ["burst", "object"]))
+    key = (r["rel"] + "/" + r["id"]).lower()
+    if r["rel"] == "player-composite":
+        kit = r["id"].split("_")[1]
+        w = KIT_WIELDS.get(kit, ["blade"]) + w
+    elif r["bodyPlan"] == "biped":
+        matched = False
+        for pat, classes in WEAPON_KEYS:
+            if _re.search(pat, key):
+                w = classes + w; matched = True; break
+        if not matched:
+            w = ["blade", "blunt"] + w  # generic humanoid default
+    seen_w = set(); r["wields"] = [x for x in w if not (x in seen_w or seen_w.add(x))]
+
 # ---------- quantize + pack ----------
 allmon = list((DCSS / "mon").rglob("*.png"))
 pal = build_master_palette([load_rgba(p) for p in random.sample(allmon, 150)], colors=64)
@@ -159,7 +200,7 @@ for e, r in zip(entries, records):
              sourceFile=r["rel"], license="CC0", interim=False,
              tags=sorted(r["traits"].keys()), traitAffinity=r["traits"],
              bodyPlan=r["bodyPlan"], weightClass=r["weightClass"], vibe=r["vibe"],
-             register=r["register"], paletteGroup=r["paletteGroup"])
+             register=r["register"], paletteGroup=r["paletteGroup"], wields=r["wields"])
 atlas.save(OUT / "players_v2.png")
 doc = dict(texture="players_v2.png", textureSize=list(atlas.size), cell=[40, 40],
            styleFamily="dcss", traitVocabulary=TRAITS30, sprites=entries)

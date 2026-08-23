@@ -1,0 +1,4030 @@
+{
+ "texture": "moves_v2.png",
+ "textureSize": [
+  657,
+  288
+ ],
+ "cell": [
+  40,
+  40
+ ],
+ "styleFamily": "dcss",
+ "kind": "melee",
+ "traitVocabulary": [
+  "heavy",
+  "light",
+  "giant",
+  "tiny",
+  "swift",
+  "sluggish",
+  "aerial",
+  "floaty",
+  "plummeting",
+  "grounded",
+  "brutal",
+  "gentle",
+  "stunner",
+  "launcher",
+  "spiker",
+  "reaching",
+  "patient",
+  "frantic",
+  "elusive",
+  "phantom",
+  "guardian",
+  "mirror",
+  "artillery",
+  "weaving",
+  "arcing",
+  "piercing",
+  "fragile",
+  "skulking",
+  "whirling",
+  "reckless"
+ ],
+ "sprites": [
+  {
+   "id": "mv_banana",
+   "rect": [
+    6,
+    18,
+    29,
+    23
+   ],
+   "pivot": [
+    20,
+    41
+   ],
+   "tags": [
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/food/banana.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "object",
+   "element": null,
+   "vibe": "goofy",
+   "traitAffinity": {
+    "swift": 0.4
+   },
+   "compatiblePlans": [
+    "biped",
+    "blob",
+    "floating",
+    "quadruped",
+    "serpent",
+    "winged",
+    "headOnly"
+   ],
+   "paletteGroup": "gold"
+  },
+  {
+   "id": "mv_blood_green",
+   "rect": [
+    47,
+    20,
+    29,
+    21
+   ],
+   "pivot": [
+    61,
+    41
+   ],
+   "tags": [
+    "brutal",
+    "reckless"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "misc/blood/blood_green.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "impact",
+   "element": null,
+   "vibe": "gross",
+   "traitAffinity": {
+    "brutal": 0.7,
+    "reckless": 0.4
+   },
+   "compatiblePlans": [
+    "quadruped",
+    "serpent",
+    "winged",
+    "headOnly",
+    "blob",
+    "biped"
+   ],
+   "paletteGroup": "green"
+  },
+  {
+   "id": "mv_bubbly",
+   "rect": [
+    90,
+    14,
+    25,
+    27
+   ],
+   "pivot": [
+    102,
+    41
+   ],
+   "tags": [
+    "reckless"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/potion/bubbly.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "object",
+   "element": null,
+   "vibe": "goofy",
+   "traitAffinity": {
+    "reckless": 0.4
+   },
+   "compatiblePlans": [
+    "biped",
+    "blob",
+    "floating",
+    "quadruped",
+    "serpent",
+    "winged",
+    "headOnly"
+   ],
+   "paletteGroup": "green"
+  },
+  {
+   "id": "mv_bullwhip",
+   "rect": [
+    128,
+    11,
+    31,
+    30
+   ],
+   "pivot": [
+    143,
+    41
+   ],
+   "tags": [
+    "frantic",
+    "reaching",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/bullwhip.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "whip",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "reaching": 0.8,
+    "swift": 0.5,
+    "frantic": 0.4
+   },
+   "compatiblePlans": [
+    "biped",
+    "serpent"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_cloud_acid0",
+   "rect": [
+    169,
+    11,
+    32,
+    30
+   ],
+   "pivot": [
+    185,
+    41
+   ],
+   "tags": [
+    "gentle",
+    "skulking"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_acid0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "poison",
+   "vibe": "gross",
+   "traitAffinity": {
+    "skulking": 0.5,
+    "gentle": 0.2
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "gold"
+  },
+  {
+   "id": "mv_cloud_black_smoke",
+   "rect": [
+    210,
+    9,
+    32,
+    32
+   ],
+   "pivot": [
+    226,
+    41
+   ],
+   "tags": [
+    "elusive",
+    "phantom"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_black_smoke.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "spectral",
+   "vibe": "menacing",
+   "traitAffinity": {
+    "phantom": 0.7,
+    "elusive": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_cloud_blue_smoke",
+   "rect": [
+    251,
+    9,
+    32,
+    32
+   ],
+   "pivot": [
+    267,
+    41
+   ],
+   "tags": [
+    "elusive",
+    "floaty"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_blue_smoke.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "elusive": 0.5,
+    "floaty": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_cloud_calc_dust0",
+   "rect": [
+    292,
+    9,
+    32,
+    32
+   ],
+   "pivot": [
+    308,
+    41
+   ],
+   "tags": [
+    "elusive",
+    "floaty"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_calc_dust0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "elusive": 0.5,
+    "floaty": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "grey"
+  },
+  {
+   "id": "mv_cloud_chaos1",
+   "rect": [
+    333,
+    9,
+    32,
+    32
+   ],
+   "pivot": [
+    349,
+    41
+   ],
+   "tags": [
+    "reckless",
+    "whirling"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_chaos1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "chaos",
+   "vibe": "goofy",
+   "traitAffinity": {
+    "reckless": 0.7,
+    "whirling": 0.5
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_cloud_cold0",
+   "rect": [
+    374,
+    11,
+    32,
+    30
+   ],
+   "pivot": [
+    390,
+    41
+   ],
+   "tags": [
+    "patient",
+    "stunner"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_cold0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "ice",
+   "vibe": "neutral",
+   "traitAffinity": {
+    "stunner": 0.5,
+    "patient": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_cloud_fire0",
+   "rect": [
+    415,
+    9,
+    32,
+    32
+   ],
+   "pivot": [
+    431,
+    41
+   ],
+   "tags": [
+    "brutal",
+    "reckless"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_fire0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "fire",
+   "vibe": "neutral",
+   "traitAffinity": {
+    "brutal": 0.6,
+    "reckless": 0.5
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_cloud_forest_fire",
+   "rect": [
+    456,
+    9,
+    32,
+    32
+   ],
+   "pivot": [
+    472,
+    41
+   ],
+   "tags": [
+    "brutal",
+    "reckless"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_forest_fire.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "fire",
+   "vibe": "neutral",
+   "traitAffinity": {
+    "brutal": 0.6,
+    "reckless": 0.5
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_cloud_gloom",
+   "rect": [
+    497,
+    9,
+    32,
+    32
+   ],
+   "pivot": [
+    513,
+    41
+   ],
+   "tags": [
+    "elusive",
+    "phantom"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_gloom.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "spectral",
+   "vibe": "menacing",
+   "traitAffinity": {
+    "phantom": 0.7,
+    "elusive": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_cloud_grey_smoke",
+   "rect": [
+    538,
+    9,
+    32,
+    32
+   ],
+   "pivot": [
+    554,
+    41
+   ],
+   "tags": [
+    "elusive",
+    "floaty"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_grey_smoke.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "elusive": 0.5,
+    "floaty": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "grey"
+  },
+  {
+   "id": "mv_cloud_magic_trail0",
+   "rect": [
+    584,
+    23,
+    22,
+    18
+   ],
+   "pivot": [
+    595,
+    41
+   ],
+   "tags": [
+    "elusive",
+    "floaty"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_magic_trail0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "elusive": 0.5,
+    "floaty": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "purple"
+  },
+  {
+   "id": "mv_cloud_meph0",
+   "rect": [
+    620,
+    11,
+    32,
+    30
+   ],
+   "pivot": [
+    636,
+    41
+   ],
+   "tags": [
+    "gentle",
+    "skulking"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_meph0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "poison",
+   "vibe": "gross",
+   "traitAffinity": {
+    "skulking": 0.5,
+    "gentle": 0.2
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "green"
+  },
+  {
+   "id": "mv_cloud_miasma",
+   "rect": [
+    5,
+    50,
+    32,
+    32
+   ],
+   "pivot": [
+    21,
+    82
+   ],
+   "tags": [
+    "gentle",
+    "skulking"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_miasma.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "poison",
+   "vibe": "gross",
+   "traitAffinity": {
+    "skulking": 0.5,
+    "gentle": 0.2
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_cloud_mutagenic_large1",
+   "rect": [
+    46,
+    50,
+    32,
+    32
+   ],
+   "pivot": [
+    62,
+    82
+   ],
+   "tags": [
+    "reckless",
+    "whirling"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_mutagenic_large1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "chaos",
+   "vibe": "goofy",
+   "traitAffinity": {
+    "reckless": 0.7,
+    "whirling": 0.5
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "green"
+  },
+  {
+   "id": "mv_cloud_mutagenic_medium1",
+   "rect": [
+    87,
+    50,
+    32,
+    32
+   ],
+   "pivot": [
+    103,
+    82
+   ],
+   "tags": [
+    "reckless",
+    "whirling"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_mutagenic_medium1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "chaos",
+   "vibe": "goofy",
+   "traitAffinity": {
+    "reckless": 0.7,
+    "whirling": 0.5
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "purple"
+  },
+  {
+   "id": "mv_cloud_mutagenic_small1",
+   "rect": [
+    128,
+    52,
+    31,
+    30
+   ],
+   "pivot": [
+    143,
+    82
+   ],
+   "tags": [
+    "reckless",
+    "whirling"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_mutagenic_small1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "chaos",
+   "vibe": "goofy",
+   "traitAffinity": {
+    "reckless": 0.7,
+    "whirling": 0.5
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_cloud_neg0",
+   "rect": [
+    169,
+    50,
+    32,
+    32
+   ],
+   "pivot": [
+    185,
+    82
+   ],
+   "tags": [
+    "elusive",
+    "phantom"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_neg0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "spectral",
+   "vibe": "menacing",
+   "traitAffinity": {
+    "phantom": 0.7,
+    "elusive": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_cloud_poison0",
+   "rect": [
+    210,
+    52,
+    32,
+    30
+   ],
+   "pivot": [
+    226,
+    82
+   ],
+   "tags": [
+    "gentle",
+    "skulking"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_poison0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "poison",
+   "vibe": "gross",
+   "traitAffinity": {
+    "skulking": 0.5,
+    "gentle": 0.2
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "green"
+  },
+  {
+   "id": "mv_cloud_rain1",
+   "rect": [
+    251,
+    50,
+    32,
+    32
+   ],
+   "pivot": [
+    267,
+    82
+   ],
+   "tags": [
+    "elusive",
+    "floaty"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_rain1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "elusive": 0.5,
+    "floaty": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_cloud_spectral0",
+   "rect": [
+    292,
+    50,
+    32,
+    32
+   ],
+   "pivot": [
+    308,
+    82
+   ],
+   "tags": [
+    "elusive",
+    "phantom"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_spectral0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "spectral",
+   "vibe": "menacing",
+   "traitAffinity": {
+    "phantom": 0.7,
+    "elusive": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_cloud_storm1",
+   "rect": [
+    333,
+    50,
+    32,
+    32
+   ],
+   "pivot": [
+    349,
+    82
+   ],
+   "tags": [
+    "frantic",
+    "stunner",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_storm1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "electric",
+   "vibe": "neutral",
+   "traitAffinity": {
+    "stunner": 0.7,
+    "swift": 0.5,
+    "frantic": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_cloud_tloc_energy",
+   "rect": [
+    374,
+    50,
+    32,
+    32
+   ],
+   "pivot": [
+    390,
+    82
+   ],
+   "tags": [
+    "frantic",
+    "stunner",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_tloc_energy.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "electric",
+   "vibe": "neutral",
+   "traitAffinity": {
+    "stunner": 0.7,
+    "swift": 0.5,
+    "frantic": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "purple"
+  },
+  {
+   "id": "mv_cloud_yellow_smoke",
+   "rect": [
+    415,
+    50,
+    32,
+    32
+   ],
+   "pivot": [
+    431,
+    82
+   ],
+   "tags": [
+    "elusive",
+    "floaty"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/cloud_yellow_smoke.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "elusive": 0.5,
+    "floaty": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "gold"
+  },
+  {
+   "id": "mv_club",
+   "rect": [
+    460,
+    59,
+    23,
+    23
+   ],
+   "pivot": [
+    471,
+    82
+   ],
+   "tags": [
+    "brutal",
+    "heavy",
+    "sluggish",
+    "stunner"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/club.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blunt",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "brutal": 0.6,
+    "stunner": 0.7,
+    "heavy": 0.5,
+    "sluggish": 0.3
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_dagger",
+   "rect": [
+    504,
+    65,
+    17,
+    17
+   ],
+   "pivot": [
+    512,
+    82
+   ],
+   "tags": [
+    "elusive",
+    "frantic",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/dagger.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "piercing": 0.8,
+    "swift": 0.7,
+    "elusive": 0.5,
+    "frantic": 0.4
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_dire_flail1",
+   "rect": [
+    538,
+    53,
+    31,
+    29
+   ],
+   "pivot": [
+    553,
+    82
+   ],
+   "tags": [
+    "brutal",
+    "heavy",
+    "sluggish",
+    "stunner"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/dire_flail1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blunt",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "brutal": 0.6,
+    "stunner": 0.7,
+    "heavy": 0.5,
+    "sluggish": 0.3
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_disjunct0",
+   "rect": [
+    579,
+    50,
+    32,
+    32
+   ],
+   "pivot": [
+    595,
+    82
+   ],
+   "tags": [
+    "reckless",
+    "whirling"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/disjunct0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "chaos",
+   "vibe": "goofy",
+   "traitAffinity": {
+    "reckless": 0.7,
+    "whirling": 0.5
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_double_sword",
+   "rect": [
+    620,
+    52,
+    31,
+    30
+   ],
+   "pivot": [
+    635,
+    82
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/double_sword.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "piercing": 0.5,
+    "swift": 0.4,
+    "brutal": 0.4
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_drain0",
+   "rect": [
+    6,
+    93,
+    29,
+    30
+   ],
+   "pivot": [
+    20,
+    123
+   ],
+   "tags": [
+    "elusive",
+    "phantom"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/drain0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "spectral",
+   "vibe": "menacing",
+   "traitAffinity": {
+    "phantom": 0.7,
+    "elusive": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_eveningstar1",
+   "rect": [
+    46,
+    91,
+    31,
+    32
+   ],
+   "pivot": [
+    61,
+    123
+   ],
+   "tags": [
+    "brutal",
+    "heavy",
+    "sluggish",
+    "stunner"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/eveningstar1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blunt",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "brutal": 0.6,
+    "stunner": 0.7,
+    "heavy": 0.5,
+    "sluggish": 0.3
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_falchion1",
+   "rect": [
+    90,
+    95,
+    25,
+    28
+   ],
+   "pivot": [
+    102,
+    123
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/falchion1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "piercing": 0.5,
+    "swift": 0.4,
+    "brutal": 0.4
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_flail1",
+   "rect": [
+    129,
+    95,
+    30,
+    28
+   ],
+   "pivot": [
+    144,
+    123
+   ],
+   "tags": [
+    "brutal",
+    "heavy",
+    "sluggish",
+    "stunner"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/flail1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blunt",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "brutal": 0.6,
+    "stunner": 0.7,
+    "heavy": 0.5,
+    "sluggish": 0.3
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_flame0",
+   "rect": [
+    177,
+    108,
+    16,
+    15
+   ],
+   "pivot": [
+    185,
+    123
+   ],
+   "tags": [
+    "brutal",
+    "reckless"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/flame0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "fire",
+   "vibe": "neutral",
+   "traitAffinity": {
+    "brutal": 0.6,
+    "reckless": 0.5
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_frost0",
+   "rect": [
+    215,
+    110,
+    21,
+    13
+   ],
+   "pivot": [
+    225,
+    123
+   ],
+   "tags": [
+    "patient",
+    "stunner"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/frost0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "ice",
+   "vibe": "neutral",
+   "traitAffinity": {
+    "stunner": 0.5,
+    "patient": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_giant_club",
+   "rect": [
+    252,
+    93,
+    30,
+    30
+   ],
+   "pivot": [
+    267,
+    123
+   ],
+   "tags": [
+    "brutal",
+    "heavy",
+    "sluggish",
+    "stunner"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/giant_club.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blunt",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "brutal": 0.6,
+    "stunner": 0.7,
+    "heavy": 0.5,
+    "sluggish": 0.3
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_giant_spiked_club",
+   "rect": [
+    292,
+    92,
+    31,
+    31
+   ],
+   "pivot": [
+    307,
+    123
+   ],
+   "tags": [
+    "brutal",
+    "heavy",
+    "sluggish",
+    "stunner"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/giant_spiked_club.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blunt",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "brutal": 0.6,
+    "stunner": 0.7,
+    "heavy": 0.5,
+    "sluggish": 0.3
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_greatsword1",
+   "rect": [
+    333,
+    91,
+    32,
+    32
+   ],
+   "pivot": [
+    349,
+    123
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/greatsword1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "piercing": 0.5,
+    "swift": 0.4,
+    "brutal": 0.4
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "grey"
+  },
+  {
+   "id": "mv_hand_axe1",
+   "rect": [
+    378,
+    103,
+    24,
+    20
+   ],
+   "pivot": [
+    390,
+    123
+   ],
+   "tags": [
+    "brutal",
+    "heavy",
+    "reckless"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/hand_axe1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "axe",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "brutal": 0.8,
+    "heavy": 0.5,
+    "reckless": 0.4
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_heataura0",
+   "rect": [
+    415,
+    91,
+    32,
+    32
+   ],
+   "pivot": [
+    431,
+    123
+   ],
+   "tags": [
+    "frantic",
+    "stunner",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/heataura0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "electric",
+   "vibe": "neutral",
+   "traitAffinity": {
+    "stunner": 0.7,
+    "swift": 0.5,
+    "frantic": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_irradiate0",
+   "rect": [
+    456,
+    91,
+    32,
+    32
+   ],
+   "pivot": [
+    472,
+    123
+   ],
+   "tags": [
+    "reckless",
+    "whirling"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/irradiate0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "chaos",
+   "vibe": "goofy",
+   "traitAffinity": {
+    "reckless": 0.7,
+    "whirling": 0.5
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_lemon",
+   "rect": [
+    501,
+    103,
+    24,
+    20
+   ],
+   "pivot": [
+    513,
+    123
+   ],
+   "tags": [
+    "gentle"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/food/lemon.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "object",
+   "element": null,
+   "vibe": "goofy",
+   "traitAffinity": {
+    "gentle": 0.3
+   },
+   "compatiblePlans": [
+    "biped",
+    "blob",
+    "floating",
+    "quadruped",
+    "serpent",
+    "winged",
+    "headOnly"
+   ],
+   "paletteGroup": "gold"
+  },
+  {
+   "id": "mv_long_sword1",
+   "rect": [
+    540,
+    95,
+    28,
+    28
+   ],
+   "pivot": [
+    554,
+    123
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/long_sword1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "piercing": 0.5,
+    "swift": 0.4,
+    "brutal": 0.4
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_mace1",
+   "rect": [
+    583,
+    98,
+    24,
+    25
+   ],
+   "pivot": [
+    595,
+    123
+   ],
+   "tags": [
+    "brutal",
+    "heavy",
+    "sluggish",
+    "stunner"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/mace1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blunt",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "brutal": 0.6,
+    "stunner": 0.7,
+    "heavy": 0.5,
+    "sluggish": 0.3
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_mace_large1",
+   "rect": [
+    620,
+    91,
+    32,
+    32
+   ],
+   "pivot": [
+    636,
+    123
+   ],
+   "tags": [
+    "brutal",
+    "heavy",
+    "sluggish",
+    "stunner"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/mace_large1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blunt",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "brutal": 0.6,
+    "stunner": 0.7,
+    "heavy": 0.5,
+    "sluggish": 0.3
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_magenta",
+   "rect": [
+    8,
+    137,
+    25,
+    27
+   ],
+   "pivot": [
+    20,
+    164
+   ],
+   "tags": [
+    "reckless"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/potion/magenta.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "object",
+   "element": null,
+   "vibe": "goofy",
+   "traitAffinity": {
+    "reckless": 0.5
+   },
+   "compatiblePlans": [
+    "biped",
+    "blob",
+    "floating",
+    "quadruped",
+    "serpent",
+    "winged",
+    "headOnly"
+   ],
+   "paletteGroup": "purple"
+  },
+  {
+   "id": "mv_meat_ration",
+   "rect": [
+    49,
+    146,
+    25,
+    18
+   ],
+   "pivot": [
+    61,
+    164
+   ],
+   "tags": [
+    "heavy"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/food/meat_ration.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "object",
+   "element": null,
+   "vibe": "goofy",
+   "traitAffinity": {
+    "heavy": 0.4
+   },
+   "compatiblePlans": [
+    "biped",
+    "blob",
+    "floating",
+    "quadruped",
+    "serpent",
+    "winged",
+    "headOnly"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_misc_box",
+   "rect": [
+    90,
+    142,
+    26,
+    22
+   ],
+   "pivot": [
+    103,
+    164
+   ],
+   "tags": [
+    "patient"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/misc/misc_box.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "object",
+   "element": null,
+   "vibe": "goofy",
+   "traitAffinity": {
+    "patient": 0.4
+   },
+   "compatiblePlans": [
+    "biped",
+    "blob",
+    "floating",
+    "quadruped",
+    "serpent",
+    "winged",
+    "headOnly"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_misc_crystal",
+   "rect": [
+    129,
+    137,
+    30,
+    27
+   ],
+   "pivot": [
+    144,
+    164
+   ],
+   "tags": [
+    "arcing"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/misc/misc_crystal.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "object",
+   "element": null,
+   "vibe": "goofy",
+   "traitAffinity": {
+    "arcing": 0.5
+   },
+   "compatiblePlans": [
+    "biped",
+    "blob",
+    "floating",
+    "quadruped",
+    "serpent",
+    "winged",
+    "headOnly"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_misc_fan",
+   "rect": [
+    170,
+    135,
+    29,
+    29
+   ],
+   "pivot": [
+    184,
+    164
+   ],
+   "tags": [
+    "floaty"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/misc/misc_fan.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "object",
+   "element": null,
+   "vibe": "goofy",
+   "traitAffinity": {
+    "floaty": 0.5
+   },
+   "compatiblePlans": [
+    "biped",
+    "blob",
+    "floating",
+    "quadruped",
+    "serpent",
+    "winged",
+    "headOnly"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_misc_lamp",
+   "rect": [
+    213,
+    133,
+    26,
+    31
+   ],
+   "pivot": [
+    226,
+    164
+   ],
+   "tags": [
+    "arcing"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/misc/misc_lamp.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "object",
+   "element": null,
+   "vibe": "goofy",
+   "traitAffinity": {
+    "arcing": 0.4
+   },
+   "compatiblePlans": [
+    "biped",
+    "blob",
+    "floating",
+    "quadruped",
+    "serpent",
+    "winged",
+    "headOnly"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_morningstar1",
+   "rect": [
+    252,
+    136,
+    30,
+    28
+   ],
+   "pivot": [
+    267,
+    164
+   ],
+   "tags": [
+    "brutal",
+    "heavy",
+    "sluggish",
+    "stunner"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/morningstar1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blunt",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "brutal": 0.6,
+    "stunner": 0.7,
+    "heavy": 0.5,
+    "sluggish": 0.3
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_quarterstaff",
+   "rect": [
+    292,
+    133,
+    32,
+    31
+   ],
+   "pivot": [
+    308,
+    164
+   ],
+   "tags": [
+    "arcing",
+    "guardian",
+    "patient"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/quarterstaff.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "staff",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "arcing": 0.6,
+    "patient": 0.5,
+    "guardian": 0.3
+   },
+   "compatiblePlans": [
+    "biped",
+    "floating"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_rapier1",
+   "rect": [
+    337,
+    141,
+    24,
+    23
+   ],
+   "pivot": [
+    349,
+    164
+   ],
+   "tags": [
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/rapier1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "piercing": 0.9,
+    "swift": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_sandblast0",
+   "rect": [
+    383,
+    150,
+    13,
+    14
+   ],
+   "pivot": [
+    389,
+    164
+   ],
+   "tags": [
+    "elusive",
+    "floaty"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/sandblast0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "elusive": 0.5,
+    "floaty": 0.4
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "gold"
+  },
+  {
+   "id": "mv_scimitar1",
+   "rect": [
+    418,
+    132,
+    25,
+    32
+   ],
+   "pivot": [
+    430,
+    164
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/scimitar1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "piercing": 0.5,
+    "swift": 0.4,
+    "brutal": 0.4
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_scythe1",
+   "rect": [
+    459,
+    132,
+    26,
+    32
+   ],
+   "pivot": [
+    472,
+    164
+   ],
+   "tags": [
+    "patient",
+    "piercing",
+    "reaching"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/scythe1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "polearm",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "reaching": 0.9,
+    "piercing": 0.6,
+    "patient": 0.4
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_searing_ray0",
+   "rect": [
+    503,
+    144,
+    20,
+    20
+   ],
+   "pivot": [
+    513,
+    164
+   ],
+   "tags": [
+    "brutal",
+    "reckless"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/searing_ray0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "burst",
+   "element": "fire",
+   "vibe": "neutral",
+   "traitAffinity": {
+    "brutal": 0.6,
+    "reckless": 0.5
+   },
+   "compatiblePlans": [
+    "floating",
+    "blob",
+    "winged",
+    "biped",
+    "serpent",
+    "quadruped",
+    "headOnly"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_short_sword1",
+   "rect": [
+    542,
+    141,
+    23,
+    23
+   ],
+   "pivot": [
+    553,
+    164
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/short_sword1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "piercing": 0.5,
+    "swift": 0.4,
+    "brutal": 0.4
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_spear1",
+   "rect": [
+    579,
+    133,
+    31,
+    31
+   ],
+   "pivot": [
+    594,
+    164
+   ],
+   "tags": [
+    "patient",
+    "piercing",
+    "reaching"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/spear1.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "polearm",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "reaching": 0.9,
+    "piercing": 0.6,
+    "patient": 0.4
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_spwpn_glaive_of_prune",
+   "rect": [
+    620,
+    132,
+    32,
+    32
+   ],
+   "pivot": [
+    636,
+    164
+   ],
+   "tags": [
+    "brutal",
+    "patient",
+    "piercing",
+    "reaching"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/spwpn_glaive_of_prune.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "polearm",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "reaching": 0.9,
+    "piercing": 0.6,
+    "patient": 0.4,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "purple"
+  },
+  {
+   "id": "mv_spwpn_mace_of_variability",
+   "rect": [
+    5,
+    175,
+    31,
+    30
+   ],
+   "pivot": [
+    20,
+    205
+   ],
+   "tags": [
+    "brutal",
+    "heavy",
+    "sluggish",
+    "stunner"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/spwpn_mace_of_variability.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blunt",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "brutal": 0.6,
+    "stunner": 0.7,
+    "heavy": 0.5,
+    "sluggish": 0.3
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "green"
+  },
+  {
+   "id": "mv_spwpn_majin",
+   "rect": [
+    46,
+    173,
+    32,
+    32
+   ],
+   "pivot": [
+    62,
+    205
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/spwpn_majin.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "purple"
+  },
+  {
+   "id": "mv_spwpn_sceptre_of_asmodeus",
+   "rect": [
+    88,
+    176,
+    30,
+    29
+   ],
+   "pivot": [
+    103,
+    205
+   ],
+   "tags": [
+    "arcing",
+    "brutal",
+    "guardian",
+    "patient"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/spwpn_sceptre_of_asmodeus.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "staff",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "arcing": 0.6,
+    "patient": 0.5,
+    "guardian": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped",
+    "floating"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_spwpn_sceptre_of_torment",
+   "rect": [
+    128,
+    173,
+    32,
+    32
+   ],
+   "pivot": [
+    144,
+    205
+   ],
+   "tags": [
+    "arcing",
+    "brutal",
+    "guardian",
+    "patient"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/spwpn_sceptre_of_torment.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "staff",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "arcing": 0.6,
+    "patient": 0.5,
+    "guardian": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped",
+    "floating"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_spwpn_scythe_of_curses",
+   "rect": [
+    169,
+    174,
+    32,
+    31
+   ],
+   "pivot": [
+    185,
+    205
+   ],
+   "tags": [
+    "brutal",
+    "patient",
+    "piercing",
+    "reaching"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/spwpn_scythe_of_curses.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "polearm",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "reaching": 0.9,
+    "piercing": 0.6,
+    "patient": 0.4,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_spwpn_staff_of_dispater",
+   "rect": [
+    210,
+    174,
+    32,
+    31
+   ],
+   "pivot": [
+    226,
+    205
+   ],
+   "tags": [
+    "arcing",
+    "brutal",
+    "guardian",
+    "patient"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/spwpn_staff_of_dispater.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "staff",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "arcing": 0.6,
+    "patient": 0.5,
+    "guardian": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped",
+    "floating"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_spwpn_staff_of_olgreb",
+   "rect": [
+    251,
+    175,
+    31,
+    30
+   ],
+   "pivot": [
+    266,
+    205
+   ],
+   "tags": [
+    "arcing",
+    "brutal",
+    "guardian",
+    "patient"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/spwpn_staff_of_olgreb.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "staff",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "arcing": 0.6,
+    "patient": 0.5,
+    "guardian": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped",
+    "floating"
+   ],
+   "paletteGroup": "green"
+  },
+  {
+   "id": "mv_spwpn_sword_of_cerebov",
+   "rect": [
+    292,
+    173,
+    32,
+    32
+   ],
+   "pivot": [
+    308,
+    205
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/spwpn_sword_of_cerebov.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.5,
+    "swift": 0.4,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_spwpn_sword_of_power",
+   "rect": [
+    333,
+    173,
+    32,
+    32
+   ],
+   "pivot": [
+    349,
+    205
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/spwpn_sword_of_power.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.5,
+    "swift": 0.4,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_spwpn_sword_of_zonguldrok",
+   "rect": [
+    374,
+    173,
+    31,
+    32
+   ],
+   "pivot": [
+    389,
+    205
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/spwpn_sword_of_zonguldrok.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.5,
+    "swift": 0.4,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_spwpn_vampires_tooth",
+   "rect": [
+    415,
+    177,
+    31,
+    28
+   ],
+   "pivot": [
+    430,
+    205
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "skulking"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/spwpn_vampires_tooth.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "natural",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.6,
+    "brutal": 0.6,
+    "skulking": 0.4
+   },
+   "compatiblePlans": [
+    "quadruped",
+    "serpent",
+    "winged",
+    "headOnly",
+    "biped"
+   ],
+   "paletteGroup": "grey"
+  },
+  {
+   "id": "mv_spwpn_wrath_of_trog",
+   "rect": [
+    456,
+    173,
+    32,
+    32
+   ],
+   "pivot": [
+    472,
+    205
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/spwpn_wrath_of_trog.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "axe",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_spwpn_wucad_mu",
+   "rect": [
+    497,
+    175,
+    31,
+    30
+   ],
+   "pivot": [
+    512,
+    205
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/spwpn_wucad_mu.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_staff_mummy",
+   "rect": [
+    538,
+    173,
+    32,
+    32
+   ],
+   "pivot": [
+    554,
+    205
+   ],
+   "tags": [
+    "arcing",
+    "guardian",
+    "patient"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/staff_mummy.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "staff",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "arcing": 0.6,
+    "patient": 0.5,
+    "guardian": 0.3
+   },
+   "compatiblePlans": [
+    "biped",
+    "floating"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_sting0",
+   "rect": [
+    590,
+    195,
+    10,
+    10
+   ],
+   "pivot": [
+    595,
+    205
+   ],
+   "tags": [
+    "piercing",
+    "skulking"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "effect/sting0.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "natural",
+   "element": "poison",
+   "vibe": "neutral",
+   "traitAffinity": {
+    "piercing": 0.7,
+    "skulking": 0.5
+   },
+   "compatiblePlans": [
+    "quadruped",
+    "serpent",
+    "winged",
+    "headOnly",
+    "biped"
+   ],
+   "paletteGroup": "green"
+  },
+  {
+   "id": "mv_triple_sword",
+   "rect": [
+    620,
+    173,
+    32,
+    32
+   ],
+   "pivot": [
+    636,
+    205
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/triple_sword.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "neutral",
+   "traitAffinity": {
+    "piercing": 0.5,
+    "swift": 0.4,
+    "brutal": 0.4
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_urand_arc_blade",
+   "rect": [
+    9,
+    220,
+    24,
+    26
+   ],
+   "pivot": [
+    21,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_arc_blade.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.5,
+    "swift": 0.4,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_urand_arga",
+   "rect": [
+    46,
+    217,
+    32,
+    29
+   ],
+   "pivot": [
+    62,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_arga.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_urand_axe_of_woe",
+   "rect": [
+    87,
+    214,
+    32,
+    32
+   ],
+   "pivot": [
+    103,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "heavy",
+    "reckless"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_axe_of_woe.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "axe",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "brutal": 0.8,
+    "heavy": 0.5,
+    "reckless": 0.4
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_urand_bloodbane",
+   "rect": [
+    129,
+    217,
+    30,
+    29
+   ],
+   "pivot": [
+    144,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "reckless"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_bloodbane.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "impact",
+   "element": null,
+   "vibe": "gross",
+   "traitAffinity": {
+    "brutal": 0.7,
+    "reckless": 0.4
+   },
+   "compatiblePlans": [
+    "quadruped",
+    "serpent",
+    "winged",
+    "headOnly",
+    "blob",
+    "biped"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_urand_botono",
+   "rect": [
+    169,
+    217,
+    31,
+    29
+   ],
+   "pivot": [
+    184,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_botono.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_urand_brilliance",
+   "rect": [
+    212,
+    220,
+    27,
+    26
+   ],
+   "pivot": [
+    225,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_brilliance.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "gold"
+  },
+  {
+   "id": "mv_urand_chilly_death",
+   "rect": [
+    257,
+    226,
+    20,
+    20
+   ],
+   "pivot": [
+    267,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_chilly_death.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_urand_crystal_spear",
+   "rect": [
+    292,
+    214,
+    32,
+    32
+   ],
+   "pivot": [
+    308,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "patient",
+    "piercing",
+    "reaching"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_crystal_spear.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "polearm",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "reaching": 0.9,
+    "piercing": 0.6,
+    "patient": 0.4,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_urand_cutlass",
+   "rect": [
+    335,
+    215,
+    27,
+    31
+   ],
+   "pivot": [
+    348,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_cutlass.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.5,
+    "swift": 0.4,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_urand_doom_knight",
+   "rect": [
+    374,
+    214,
+    32,
+    32
+   ],
+   "pivot": [
+    390,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_doom_knight.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_urand_elemental",
+   "rect": [
+    415,
+    215,
+    31,
+    31
+   ],
+   "pivot": [
+    430,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_elemental.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_urand_eos",
+   "rect": [
+    457,
+    217,
+    29,
+    29
+   ],
+   "pivot": [
+    471,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_eos.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_urand_finisher",
+   "rect": [
+    497,
+    216,
+    32,
+    30
+   ],
+   "pivot": [
+    513,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_finisher.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_urand_firestarter",
+   "rect": [
+    538,
+    214,
+    32,
+    32
+   ],
+   "pivot": [
+    554,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_firestarter.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_urand_flaming_death",
+   "rect": [
+    580,
+    214,
+    30,
+    32
+   ],
+   "pivot": [
+    595,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_flaming_death.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_urand_guard",
+   "rect": [
+    620,
+    214,
+    32,
+    32
+   ],
+   "pivot": [
+    636,
+    246
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_guard.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_urand_gyre",
+   "rect": [
+    5,
+    256,
+    31,
+    31
+   ],
+   "pivot": [
+    20,
+    287
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_gyre.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_urand_jihad",
+   "rect": [
+    46,
+    255,
+    32,
+    32
+   ],
+   "pivot": [
+    62,
+    287
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_jihad.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_urand_katana",
+   "rect": [
+    87,
+    255,
+    32,
+    32
+   ],
+   "pivot": [
+    103,
+    287
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_katana.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.5,
+    "swift": 0.4,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_urand_knife_of_accuracy",
+   "rect": [
+    129,
+    260,
+    29,
+    27
+   ],
+   "pivot": [
+    143,
+    287
+   ],
+   "tags": [
+    "brutal",
+    "elusive",
+    "frantic",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_knife_of_accuracy.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.8,
+    "swift": 0.7,
+    "elusive": 0.5,
+    "frantic": 0.4,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_urand_morg",
+   "rect": [
+    170,
+    257,
+    30,
+    30
+   ],
+   "pivot": [
+    185,
+    287
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_morg.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "orange"
+  },
+  {
+   "id": "mv_urand_octopus_king",
+   "rect": [
+    211,
+    257,
+    30,
+    30
+   ],
+   "pivot": [
+    226,
+    287
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_octopus_king.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blunt",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_urand_order",
+   "rect": [
+    251,
+    255,
+    32,
+    32
+   ],
+   "pivot": [
+    267,
+    287
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_order.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "blue"
+  },
+  {
+   "id": "mv_urand_piercer",
+   "rect": [
+    292,
+    255,
+    32,
+    32
+   ],
+   "pivot": [
+    308,
+    287
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_piercer.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_urand_plutonium",
+   "rect": [
+    333,
+    256,
+    31,
+    31
+   ],
+   "pivot": [
+    348,
+    287
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_plutonium.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "green"
+  },
+  {
+   "id": "mv_urand_shillelagh",
+   "rect": [
+    378,
+    259,
+    24,
+    28
+   ],
+   "pivot": [
+    390,
+    287
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_shillelagh.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blunt",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_urand_skullcrusher",
+   "rect": [
+    417,
+    261,
+    28,
+    26
+   ],
+   "pivot": [
+    431,
+    287
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_skullcrusher.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blunt",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_urand_snakebite",
+   "rect": [
+    456,
+    258,
+    32,
+    29
+   ],
+   "pivot": [
+    472,
+    287
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_snakebite.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "black"
+  },
+  {
+   "id": "mv_urand_spriggans_knife",
+   "rect": [
+    504,
+    269,
+    17,
+    18
+   ],
+   "pivot": [
+    512,
+    287
+   ],
+   "tags": [
+    "brutal",
+    "elusive",
+    "frantic",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_spriggans_knife.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.8,
+    "swift": 0.7,
+    "elusive": 0.5,
+    "frantic": 0.4,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "red"
+  },
+  {
+   "id": "mv_urand_undeadhunter",
+   "rect": [
+    538,
+    256,
+    32,
+    31
+   ],
+   "pivot": [
+    554,
+    287
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_undeadhunter.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "grey"
+  },
+  {
+   "id": "mv_urand_wyrmbane",
+   "rect": [
+    580,
+    257,
+    30,
+    30
+   ],
+   "pivot": [
+    595,
+    287
+   ],
+   "tags": [
+    "brutal",
+    "piercing",
+    "swift"
+   ],
+   "source": "dcss-tiles",
+   "sourceFile": "item/weapon/artefact/urand_wyrmbane.png",
+   "license": "CC0",
+   "interim": false,
+   "attackClass": "blade",
+   "element": null,
+   "vibe": "menacing",
+   "traitAffinity": {
+    "piercing": 0.4,
+    "swift": 0.3,
+    "brutal": 0.6
+   },
+   "compatiblePlans": [
+    "biped"
+   ],
+   "paletteGroup": "green"
+  }
+ ]
+}
