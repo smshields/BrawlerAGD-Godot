@@ -37,10 +37,17 @@ namespace BrawlerSim.Serialization;
 ///       characters list may hold 2–4 entries. ≤8 files derive spawns 3/4
 ///       deterministically (StageRules.DeriveExtraSpawns); 2P matches never read
 ///       them, so old games and traces replay bit-identically.
+///  10 — 2026-08-22 sprite selection: characters gained "spriteId" (the semantic
+///       sprite gene into players_v2 — docs/features/sprite-selection.md), omitted
+///       when null. ≤9 files load with spriteId = null (per designer, no v1→v2 look
+///       mapping: old games are archived; a null gene renders from the legacy v1
+///       sheet and is resolved fresh if it enters a sprite-enabled pipeline).
+///       spriteIndex is retained for round-trip. Purely cosmetic — replays and
+///       goldens are untouched.
 /// </summary>
 public static class GameGenomeJson
 {
-    public const int CurrentFormatVersion = 9; // 2026-08-12 four-player support (see header)
+    public const int CurrentFormatVersion = 10; // 2026-08-22 sprite selection (see header)
     private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = new()
@@ -71,6 +78,7 @@ public static class GameGenomeJson
         Name = c.Name,
         Stocks = c.Stocks,
         SpriteIndex = c.SpriteIndex,
+        SpriteId = c.SpriteId,
         Params = c.Params.ToDictionary(),
         ButtonMoves = c.ButtonMoves.ToList(),
         Moves = c.Moves.Select(m => new MoveDoc
@@ -153,7 +161,8 @@ public static class GameGenomeJson
                     ParamSet.FromDictionary(config.MoveSchema, Require(m.Params, "move params")),
                     m.SpriteIndex),
             }),
-            MigrateButtonMoves(c.ButtonMoves)); // null (v1 files) → all-zeros default in the ctor
+            MigrateButtonMoves(c.ButtonMoves), // null (v1 files) → all-zeros default in the ctor
+            c.SpriteId); // absent (≤v9 files) → null: legacy v1-sheet rendering
 
     internal static StageGenome StageFromDoc(StageDoc doc, GenerationConfig config)
     {
@@ -251,6 +260,7 @@ public static class GameGenomeJson
         public string? Name { get; set; }
         public int Stocks { get; set; }
         public int SpriteIndex { get; set; }
+        public string? SpriteId { get; set; } // v10+; omitted when null
         public Dictionary<string, float>? Params { get; set; }
         public List<int>? ButtonMoves { get; set; }
         public List<MoveDoc>? Moves { get; set; }

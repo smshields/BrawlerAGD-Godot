@@ -1,0 +1,14 @@
+{
+  "goofBudget": 0.12,
+  "bipedCap": 0.55,
+  "softmaxTemperature": 0.35,
+  "repairFloor": 0.05,
+  "candidateCount": 6,
+  "maxNegotiationIterations": 6,
+  "compatibilityThreshold": 0.2,
+  "aspectBonusWeight": 0.15,
+  "overusePenalty": 0.5,
+  "registerPoolFloor": 20,
+  "maxSpriteShare": 0.04,
+  "partTagWeight": 0.3
+}

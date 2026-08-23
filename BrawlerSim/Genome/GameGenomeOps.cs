@@ -31,6 +31,9 @@ public static class GameGenomeOps
         StageGenome stage = StageGenome.SinglePointCrossover(a.Stage, b.Stage, rng);
         // Crossover can merge platform lists into a layout one character can't traverse —
         // fit it to both children (2026-07-22, RNG-free; docs/features/spawn-and-polish.md).
+        // Sprite repair (2026-08-22, sprite-selection.md decision 2): the inherited
+        // sprite stands until it stops making sense against the child's salient traits.
+        GameGenome.ResolveSprites(children, config);
         return new GameGenome(children, GameGenome.FitStage(stage, children));
     }
 
@@ -46,6 +49,10 @@ public static class GameGenomeOps
                     .Select(m => new MoveGenome(
                         GenomeOps.Mutate(m.Params, rng), rng.NextInt(config.MoveSpriteCount), m.Type))
                     .ToList();
+            // The legacy SpriteIndex re-randomizes (Unity parity, and the draw keeps the
+            // stream aligned); the semantic SpriteId is HEREDITY — it rides through and
+            // the repair pass below re-resolves it only if the mutated params contradict
+            // it (sprite-selection.md decision 2).
             mutated.Add(new CharacterGenome(
                 character.Name,
                 character.Stocks,
@@ -54,8 +61,10 @@ public static class GameGenomeOps
                 moves,
                 config.IsComposed
                     ? Enumerable.Range(0, character.ButtonMoves.Count).ToArray() // identity invariant
-                    : MutateButtonMoves(character, rng)));
+                    : MutateButtonMoves(character, rng),
+                character.SpriteId));
         }
+        GameGenome.ResolveSprites(mutated, config);
         return new GameGenome(mutated, GameGenome.FitStage(MutateStage(genome.Stage, config, rng), mutated));
     }
 
@@ -199,7 +208,11 @@ public static class GameGenomeOps
                 $"Cannot cross characters with different move counts ({a.Moves.Count} vs {b.Moves.Count}).");
         }
         ParamSet childParams = GenomeOps.SinglePointCrossover(a.Params, b.Params, rng);
-        int spriteIndex = rng.NextInt(2) == 0 ? a.SpriteIndex : b.SpriteIndex;
+        // ONE coin flip covers both sprite genes (legacy index + semantic id), so the
+        // draw order is bit-identical to pre-sprite-selection crossover (2026-08-22).
+        bool spriteFromA = rng.NextInt(2) == 0;
+        int spriteIndex = spriteFromA ? a.SpriteIndex : b.SpriteIndex;
+        string? spriteId = spriteFromA ? a.SpriteId : b.SpriteId;
         var moves = new List<MoveGenome>(a.Moves.Count);
         for (int m = 0; m < a.Moves.Count; m++)
         {
@@ -221,7 +234,7 @@ public static class GameGenomeOps
             // Composed mode: buttons are identity by structural invariant — nothing to
             // cross, no draws consumed.
             return new CharacterGenome(a.Name, a.Stocks, spriteIndex, childParams, moves,
-                Enumerable.Range(0, a.ButtonMoves.Count).ToArray());
+                Enumerable.Range(0, a.ButtonMoves.Count).ToArray(), spriteId);
         }
         // Per-button coin flip between parents, RNG-gated like MutateButtonMoves: with a
         // single move both parents' genes are identical zeros, so no draw is consumed.
@@ -239,6 +252,6 @@ public static class GameGenomeOps
         {
             buttonMoves[buttonMoves.Length - 1] = dashSlot;
         }
-        return new CharacterGenome(a.Name, a.Stocks, spriteIndex, childParams, moves, buttonMoves);
+        return new CharacterGenome(a.Name, a.Stocks, spriteIndex, childParams, moves, buttonMoves, spriteId);
     }
 }

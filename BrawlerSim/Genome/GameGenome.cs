@@ -84,6 +84,14 @@ public sealed class CharacterGenome
     public string Name { get; }
     public int Stocks { get; }
     public int SpriteIndex { get; }
+
+    /// <summary>Semantic sprite gene (2026-08-22, docs/features/sprite-selection.md):
+    /// an id into the v2 sprite library. A structural gene like SpriteIndex — children
+    /// inherit a parent's look, repaired only when it stops making sense
+    /// (SpriteSelector.EnsureGene). Null on pre-v10 files and when generation runs
+    /// without a sprite library; SpriteIndex is retained for legacy round-trip.</summary>
+    public string? SpriteId { get; }
+
     public ParamSet Params { get; }
     public IReadOnlyList<MoveGenome> Moves { get; }
 
@@ -97,11 +105,12 @@ public sealed class CharacterGenome
     public IReadOnlyList<int> ButtonMoves { get; }
 
     public CharacterGenome(string name, int stocks, int spriteIndex, ParamSet @params, IEnumerable<MoveGenome> moves,
-        IEnumerable<int>? buttonMoves = null)
+        IEnumerable<int>? buttonMoves = null, string? spriteId = null)
     {
         Name = name;
         Stocks = stocks;
         SpriteIndex = spriteIndex;
+        SpriteId = spriteId;
         Params = @params;
         Moves = moves.ToArray();
         ButtonMoves = buttonMoves?.ToArray() ?? new int[Sim.InputFrame.ActionCount];
@@ -120,6 +129,13 @@ public sealed class CharacterGenome
             }
         }
     }
+
+    /// <summary>Copy with a different sprite gene (selection/repair — everything else
+    /// is shared, ParamSets and moves being immutable).</summary>
+    public CharacterGenome WithSpriteId(string? spriteId) =>
+        ReferenceEquals(spriteId, SpriteId) || spriteId == SpriteId
+            ? this
+            : new CharacterGenome(Name, Stocks, SpriteIndex, Params, Moves, ButtonMoves, spriteId);
 
     public static CharacterGenome Generate(string name, GenerationConfig config, Pcg32 rng)
     {
@@ -260,7 +276,30 @@ public sealed class GameGenome
         // Per-character platform fit (2026-07-22): move platforms so BOTH characters can
         // traverse and no gap is asymmetrically passable. Deterministic, RNG-free — the
         // stream stays aligned (docs/features/spawn-and-polish.md §Platform fit).
+        ResolveSprites(characters, config);
         return new GameGenome(characters, FitStage(stage, characters));
+    }
+
+    /// <summary>Sprite-gene upkeep over a whole game (2026-08-22, sprite-selection.md):
+    /// assigns/repairs each character's SpriteId via the content-seeded selector,
+    /// threading per-game usage counts so duplicate-looking fighters diverge. RNG-free
+    /// — the generation/breeding streams stay aligned, like FitStage. No-op without a
+    /// sprite library on the config.</summary>
+    internal static void ResolveSprites(List<CharacterGenome> characters, GenerationConfig config)
+    {
+        if (config.SpriteSelector is not { } selector)
+        {
+            return;
+        }
+        var usage = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (int i = 0; i < characters.Count; i++)
+        {
+            characters[i] = selector.EnsureGene(characters[i], usage);
+            if (characters[i].SpriteId is { } id)
+            {
+                usage[id] = usage.TryGetValue(id, out int n) ? n + 1 : 1;
+            }
+        }
     }
 
     /// <summary>Applies the per-character platform fit using the match constants the

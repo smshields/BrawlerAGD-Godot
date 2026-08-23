@@ -70,6 +70,12 @@ public class Phase1PipelineTests
     [Fact]
     public void PopulationFingerprintMatchesGoldenValue()
     {
+        // Re-pinned 2026-08-22: sprite selection — game.json is v10 ("formatVersion"
+        // in the serialized bytes; docs/features/sprite-selection.md). BYTES ONLY,
+        // like the v5 precedent: GenerationConfig.Default has no sprite library, so
+        // spriteId stays null (omitted) and every draw stream is untouched. Match
+        // goldens + utility golden + 4P golden unmoved. ContentKey/naming seeds
+        // verified byte-stable (null suppression). Prior pin: 14350526745249818436.
         // Re-pinned 2026-08-13: Smash-style stage containment (designer;
         // docs/features/four-player.md follow-up, DEVIATIONS #33) — every platform
         // must sit completely inside the kill box and the floor must clear the bottom
@@ -113,6 +119,6 @@ public class Phase1PipelineTests
         // (fast fall/crouch/DI), 16079587979934170348 (dash slot),
         // 10607725140721060960 (shield), 5432710911100783110 (two moves),
         // 13551893661434631362, 9300943650238635838.
-        Assert.Equal(14350526745249818436UL, RunPipeline(20260707));
+        Assert.Equal(2474481017872847468UL, RunPipeline(20260707));
     }
 }

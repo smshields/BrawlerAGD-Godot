@@ -71,12 +71,29 @@ public sealed class BuiltGame
 
     /// <summary>Content identity — the serialized element bytes (display names and
     /// provenance excluded), so the same evolved fighter/stage is a duplicate no
-    /// matter which file it came from.</summary>
-    public static string ContentKey(CharacterGenome character) =>
-        JsonSerializer.Serialize(GameGenomeJson.ToCharacterDoc(character));
+    /// matter which file it came from. The semantic sprite gene is excluded too
+    /// (2026-08-22, sprite-selection.md): it is presentation, not identity, and the
+    /// naming/sprite seed derives from this key — the shared seed must not shift when
+    /// selection or repair changes the look. Byte-identical to the pre-sprite key for
+    /// every existing (null-gene) character.</summary>
+    public static string ContentKey(CharacterGenome character)
+    {
+        GameGenomeJson.CharacterDoc doc = GameGenomeJson.ToCharacterDoc(character);
+        doc.SpriteId = null;
+        return JsonSerializer.Serialize(doc, ContentKeyOptions);
+    }
 
     public static string ContentKey(StageGenome stage) =>
-        JsonSerializer.Serialize(GameGenomeJson.ToStageDoc(stage));
+        JsonSerializer.Serialize(GameGenomeJson.ToStageDoc(stage), ContentKeyOptions);
+
+    /// <summary>Null suppression keeps ContentKey (and therefore the naming/sprite
+    /// seeds) byte-identical to the pre-spriteId era: no doc field other than the new
+    /// SpriteId was ever null, so omitting nulls changes nothing for legacy content
+    /// while keeping the new gene out of the bytes.</summary>
+    private static readonly JsonSerializerOptions ContentKeyOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
 }
 
 /// <summary>

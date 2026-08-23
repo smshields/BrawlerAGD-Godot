@@ -9,9 +9,10 @@ namespace BrawlerSim.Tests.Integration;
 
 /// <summary>
 /// Test integration of the namegen library (designer, 2026-08-14) — proving it works
-/// against REAL evolved-game data before the naming feature is built. The mapping
-/// below (ParamSet.ToDictionary + MoveType→MoveKind) is exactly what the future
-/// feature will lift. Test-only: no shipping project references NameGen yet.
+/// against REAL evolved-game data before the naming feature was built. The mapping
+/// below (ParamSet.ToDictionary + MoveType→MoveKind) was lifted into the shipping
+/// code as SpriteSelector.Map when sprite selection landed (2026-08-22); this copy
+/// stays as the original independent proof.
 /// </summary>
 public class NameGenIntegrationTests
 {

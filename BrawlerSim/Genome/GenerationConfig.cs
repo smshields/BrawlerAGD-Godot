@@ -80,6 +80,13 @@ public sealed record GenerationConfig
     public static IReadOnlyList<SlotSpec> RandomComposition { get; } =
         Enumerable.Repeat(SlotSpec.Random, Sim.InputFrame.ActionCount).ToArray();
 
+    /// <summary>Semantic sprite selection (2026-08-22, sprite-selection.md). Null
+    /// (default) = the feature is off: genomes carry SpriteId = null and only the
+    /// legacy SpriteIndex, byte-identical to pre-feature behavior. Non-null: fresh
+    /// generations resolve a SpriteId gene and breeding repairs incoherent inherits —
+    /// all content-seeded and RNG-free, so evolution streams never move.</summary>
+    public Sprites.SpriteSelector? SpriteSelector { get; init; }
+
     /// <summary>The active range overrides, recorded in run.json (empty = stock schemas).</summary>
     public IReadOnlyList<RangeOverride> RangeOverrides { get; init; } = Array.Empty<RangeOverride>();
 

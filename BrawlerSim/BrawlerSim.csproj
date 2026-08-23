@@ -1,9 +1,17 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Sprite selection (2026-08-22, docs/features/sprite-selection.md): the selector
+         reuses the namegen FeatureExtractor/TraitScorer and register data. NameGen is
+         pure netstandard2.1 with zero Godot references — the determinism contract's
+         engine-free rule holds. -->
+    <ProjectReference Include="..\namegen\src\NameGen\NameGen.csproj" />
+  </ItemGroup>
 
 </Project>

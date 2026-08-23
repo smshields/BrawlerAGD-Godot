@@ -24,8 +24,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\BrawlerSim\BrawlerSim.csproj" />
-    <!-- Test-only integration of the namegen library (2026-08-14): the shipping
-         projects do not reference it until the naming feature lands. -->
+    <!-- NameGen started as a test-only integration (2026-08-14); since sprite
+         selection (2026-08-22) BrawlerSim itself references it, so this is now
+         just an explicit statement of a transitive dependency. -->
     <ProjectReference Include="..\namegen\src\NameGen\NameGen.csproj" />
   </ItemGroup>
 
