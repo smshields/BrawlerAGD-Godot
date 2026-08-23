@@ -24,6 +24,10 @@ public sealed record SpriteDef
     public IReadOnlyList<string> Registers { get; init; } = Array.Empty<string>();
     public string PaletteGroup { get; init; } = "";
 
+    /// <summary>Attack classes this character plausibly uses, most characteristic
+    /// first (2026-08-23, M4b — the character-to-attack thematic link).</summary>
+    public IReadOnlyList<string> Wields { get; init; } = Array.Empty<string>();
+
     /// <summary>Sprite w/h as drawn (aspect matching against the genome's
     /// widthScalar/heightScalar ratio).</summary>
     public double Aspect => H > 0 ? (double)W / H : 1.0;
@@ -92,6 +96,7 @@ public sealed class SpriteLibrary
                 Vibe = s.Vibe ?? "neutral",
                 Registers = s.Register ?? new List<string>(),
                 PaletteGroup = s.PaletteGroup ?? "",
+                Wields = s.Wields ?? new List<string>(),
             });
         }
         return new SpriteLibrary(
@@ -130,5 +135,6 @@ public sealed class SpriteLibrary
         public string? Vibe { get; set; }
         public List<string>? Register { get; set; }
         public string? PaletteGroup { get; set; }
+        public List<string>? Wields { get; set; }
     }
 }

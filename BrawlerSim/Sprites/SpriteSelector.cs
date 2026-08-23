@@ -29,16 +29,26 @@ public sealed class SpriteSelector
     /// stream (which runs on the Pcg32 default sequence) even under the same seed.</summary>
     private const ulong SpriteSequence = 0x5350524954453276UL; // "SPRITE2v"
 
+    /// <summary>Move-sprite draws get their own sequence too, so per-move sampling
+    /// can never collide with character selection under related seeds.</summary>
+    private const ulong MoveSequence = 0x4d4f56455350524bUL; // "MOVESPRK"
+
     private readonly NameGenData _data;
     private readonly FeatureExtractor _extractor;
 
     public SpriteLibrary Library { get; }
     public SpriteSelectionConfig Config { get; }
 
-    public SpriteSelector(SpriteLibrary library, SpriteSelectionConfig? config = null, NameGenData? data = null)
+    /// <summary>The melee attack library (M4b, 2026-08-23). Null = attack sprite
+    /// selection off; genomes keep null move genes.</summary>
+    public MoveSpriteLibrary? MoveLibrary { get; }
+
+    public SpriteSelector(SpriteLibrary library, SpriteSelectionConfig? config = null, NameGenData? data = null,
+        MoveSpriteLibrary? moveLibrary = null)
     {
         Library = library;
         Config = config ?? SpriteSelectionConfig.Default;
+        MoveLibrary = moveLibrary;
         _data = data ?? NameGenData.LoadEmbedded();
         _extractor = new FeatureExtractor(_data.Ranges);
     }
@@ -289,6 +299,355 @@ public sealed class SpriteSelector
             }
         }
         return compatibility;
+    }
+
+    // ── Melee attack sprite selection (M4b, 2026-08-23 —
+    // docs/features/attack-sprite-selection.md). Runs AFTER character resolution,
+    // consuming its outputs (the resolved sprite entry, the shared register). ──────
+
+    /// <summary>The register the shared seed picks — identical to what
+    /// SelectCandidates(seed) reports, recomputable without re-sampling.</summary>
+    public string PickRegister(ulong seed) => PickRegister(new NgPcg(seed, SpriteSequence));
+
+    /// <summary>Per-move seed: Hash(NamingSeed(character), moveIndex) — same genome,
+    /// same character, same move index = same attack sprite, everywhere.</summary>
+    public static ulong MoveSpriteSeed(Genome.CharacterGenome character, int moveIndex)
+    {
+        ulong seed = SpriteSeed(character);
+        Span<byte> bytes = stackalloc byte[9];
+        for (int i = 0; i < 8; i++)
+        {
+            bytes[i] = (byte)(seed >> (8 * i));
+        }
+        bytes[8] = (byte)moveIndex;
+        return Determinism.Fnv1a.Hash(bytes, Determinism.Fnv1a.OffsetBasis);
+    }
+
+    /// <summary>The move's semantic trait vector from its OWN params, normalized by
+    /// its schema ranges, mirroring the FeatureExtractor convention (neutral mid-range
+    /// contributes nothing; only extremes fire). Also reports the hitbox sweep shape:
+    /// horizontal (wide) favors blade/polearm/whip, vertical (tall) favors slam
+    /// classes (blunt/impact).</summary>
+    public static (Dictionary<string, double> Traits, double Horizontal, double Vertical)
+        MoveTraits(Params.ParamSet moveParams)
+    {
+        double Norm(string key)
+        {
+            var schema = moveParams.Schema;
+            int i = schema.IndexOf(key);
+            if (i < 0)
+            {
+                return 0.5;
+            }
+            Params.ParamSpec spec = schema[i];
+            return spec.Max <= spec.Min
+                ? 0.5
+                : Math.Clamp((moveParams.Get(key) - spec.Min) / (double)(spec.Max - spec.Min), 0, 1);
+        }
+        double Fire(double normalized) => Math.Max(0, 2 * normalized - 1);
+
+        var traits = new Dictionary<string, double>(StringComparer.Ordinal)
+        {
+            ["brutal"] = Fire(Norm(Genome.MoveParams.DamageFactor)),
+            ["stunner"] = Fire(Norm(Genome.MoveParams.HitstunDuration)),
+        };
+        double knockback = Fire(Norm(Genome.MoveParams.KnockbackScalar));
+        float modY = moveParams.Get(Genome.MoveParams.KnockbackModY);
+        if (modY > 0.3f)
+        {
+            traits["launcher"] = knockback;
+        }
+        else if (modY < -0.3f)
+        {
+            traits["spiker"] = knockback;
+        }
+        else
+        {
+            traits["launcher"] = knockback / 2;
+            traits["spiker"] = knockback / 2;
+        }
+        double extent = (Norm(Genome.MoveParams.WidthScalar) + Norm(Genome.MoveParams.HeightScalar)) / 2;
+        traits["reaching"] = Fire((Norm(Genome.MoveParams.MoveDist) + extent) / 2);
+        double commitment =
+            (Norm(Genome.MoveParams.WarmUpDuration) + Norm(Genome.MoveParams.CoolDownDuration)) / 2;
+        traits["patient"] = Fire(commitment);
+        double haste = Math.Max(0, 1 - 2 * commitment);
+        traits["frantic"] = haste;
+        traits["swift"] = haste;
+
+        double ratio = moveParams.Get(Genome.MoveParams.WidthScalar)
+            / Math.Max(0.01f, moveParams.Get(Genome.MoveParams.HeightScalar));
+        return (traits, Math.Clamp(ratio - 1, 0, 1), Math.Clamp(1 / ratio - 1, 0, 1));
+    }
+
+    private static readonly string[] HorizontalClasses = { "blade", "polearm", "whip" };
+    private static readonly string[] VerticalClasses = { "blunt", "impact" };
+
+    /// <summary>The semantic half of a move sprite's score (also the repair metric):
+    /// trait dot product plus the sweep-shape class bonus.</summary>
+    public double MoveTraitScore(MoveSpriteDef sprite,
+        Dictionary<string, double> traits, double horizontal, double vertical)
+    {
+        double score = 0;
+        foreach ((string trait, double weight) in traits)
+        {
+            if (sprite.TraitAffinity.TryGetValue(trait, out float affinity))
+            {
+                score += weight * affinity;
+            }
+        }
+        if (horizontal > 0 && Array.IndexOf(HorizontalClasses, sprite.AttackClass) >= 0)
+        {
+            score += Config.Moves.SweepBonus * horizontal;
+        }
+        if (vertical > 0 && Array.IndexOf(VerticalClasses, sprite.AttackClass) >= 0)
+        {
+            score += Config.Moves.SweepBonus * vertical;
+        }
+        return score;
+    }
+
+    /// <summary>Full score (attack-sprite-selection.md step 3): traitDot + wieldsBonus
+    /// + registerBonus + paletteBonus − cross-character duplicate penalty. Same-character
+    /// duplication is a HARD exclusion upstream, never a penalty here.</summary>
+    public double ScoreMoveSprite(MoveSpriteDef sprite, Dictionary<string, double> traits,
+        double horizontal, double vertical, SpriteDef characterSprite, string register,
+        IReadOnlyDictionary<string, int>? gameUsage)
+    {
+        MoveSelectionConfig tuning = Config.Moves;
+        double score = MoveTraitScore(sprite, traits, horizontal, vertical);
+
+        int wieldsIndex = -1;
+        for (int i = 0; i < characterSprite.Wields.Count; i++)
+        {
+            if (characterSprite.Wields[i] == sprite.AttackClass)
+            {
+                wieldsIndex = i;
+                break;
+            }
+        }
+        score += wieldsIndex switch
+        {
+            0 => tuning.WieldsFirstBonus,
+            > 0 => tuning.WieldsOtherBonus,
+            _ => -tuning.WieldsMissingPenalty,
+        };
+
+        if (tuning.RegisterAffinities.TryGetValue(register, out RegisterAffinityDef? affinity)
+            && ((sprite.Element is { } element && affinity.Elements.Contains(element))
+                || affinity.Classes.Contains(sprite.AttackClass)))
+        {
+            score += tuning.RegisterBonus;
+        }
+        if (sprite.PaletteGroup == characterSprite.PaletteGroup
+            || tuning.NeutralPalettes.Contains(sprite.PaletteGroup))
+        {
+            score += tuning.PaletteBonus;
+        }
+        if (gameUsage is not null && gameUsage.TryGetValue(sprite.Id, out int uses))
+        {
+            score -= tuning.CrossDuplicatePenalty * uses;
+        }
+        return score;
+    }
+
+    /// <summary>Select one attack sprite: compatiblePlans hard filter, same-character
+    /// ids hard-excluded, scored per step 3, object goof budget pinned EXACTLY, blade
+    /// mass capped, seeded softmax top-1.</summary>
+    public string SelectMoveSpriteId(Genome.MoveGenome move, SpriteDef characterSprite,
+        string register, ulong seed, IReadOnlyCollection<string>? excludeIds = null,
+        IReadOnlyDictionary<string, int>? gameUsage = null)
+    {
+        if (MoveLibrary is null)
+        {
+            throw new InvalidOperationException("no move sprite library loaded.");
+        }
+        var pool = MoveLibrary.Sprites
+            .Where(s => s.CompatiblePlans.Contains(characterSprite.BodyPlan)
+                && excludeIds?.Contains(s.Id) != true)
+            .ToList();
+        if (pool.Count == 0)
+        {
+            // Exhausted plan pool (only possible with a pathological exclusion list)
+            // — distinctness yields before we fail to render anything.
+            pool = MoveLibrary.Sprites
+                .Where(s => s.CompatiblePlans.Contains(characterSprite.BodyPlan)).ToList();
+        }
+        if (pool.Count == 0)
+        {
+            pool = MoveLibrary.Sprites.ToList(); // unknown body plan: full library
+        }
+
+        (Dictionary<string, double> traits, double horizontal, double vertical) = MoveTraits(move.Params);
+        var scores = new double[pool.Count];
+        for (int i = 0; i < pool.Count; i++)
+        {
+            scores[i] = ScoreMoveSprite(pool[i], traits, horizontal, vertical,
+                characterSprite, register, gameUsage);
+        }
+        double[] probs = Softmax(scores, Config.Moves.SoftmaxTemperature);
+        NormalizeClassPriors(pool, probs, Config.Moves.ClassPriorExponent);
+        ScaleMoveClass(pool, probs, s => s.AttackClass == "object", Config.Moves.ObjectBudget, exact: true);
+
+        var rng = new NgPcg(seed, MoveSequence);
+        return pool[SampleIndex(probs, rng)].Id;
+    }
+
+    /// <summary>Move-gene upkeep for one character (breeding pipeline): every Attack
+    /// move keeps its inherited sprite unless it is missing/unknown, its class left
+    /// the character sprite's wields AND scores below the floor, or an earlier move
+    /// of this character already wears it (distinctness is a hard rule). RNG-free
+    /// with respect to the evolution stream; no-op without libraries or when the
+    /// character has no resolved sprite entry.</summary>
+    public Genome.CharacterGenome EnsureMoveGenes(Genome.CharacterGenome character,
+        IReadOnlyDictionary<string, int>? gameUsage = null)
+    {
+        SpriteDef? entry = Library.ById(character.SpriteId);
+        if (MoveLibrary is null || entry is null)
+        {
+            return character;
+        }
+        string register = PickRegister(SpriteSeed(character));
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        List<Genome.MoveGenome>? rebuilt = null;
+        for (int m = 0; m < character.Moves.Count; m++)
+        {
+            Genome.MoveGenome move = character.Moves[m];
+            if (move.Type != Genome.MoveType.Attack)
+            {
+                continue;
+            }
+            if (!NeedsMoveRepair(move, entry, used))
+            {
+                used.Add(move.SpriteId!);
+                continue;
+            }
+            string id = SelectMoveSpriteId(move, entry, register,
+                MoveSpriteSeed(character, m), used, gameUsage);
+            used.Add(id);
+            rebuilt ??= character.Moves.ToList();
+            rebuilt[m] = move.WithSpriteId(id);
+        }
+        return rebuilt is null
+            ? character
+            : new Genome.CharacterGenome(character.Name, character.Stocks, character.SpriteIndex,
+                character.Params, rebuilt, character.ButtonMoves, character.SpriteId);
+    }
+
+    /// <summary>Presentation-side resolution (built-game pass): per-move attack
+    /// sprite ids around an EXPLICIT character sprite entry — the NEGOTIATED one,
+    /// whose wields/bodyPlan may differ from the genome gene's. Inherited move genes
+    /// that still hold against that entry are kept (heredity); the rest re-resolve on
+    /// their per-move seeds. Returns one id per move, null on non-attack slots.</summary>
+    public IReadOnlyList<string?> ResolveMoveSpriteIds(Genome.CharacterGenome character,
+        SpriteDef presentedSprite, string register, IReadOnlyDictionary<string, int>? gameUsage = null)
+    {
+        var result = new List<string?>(character.Moves.Count);
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        for (int m = 0; m < character.Moves.Count; m++)
+        {
+            Genome.MoveGenome move = character.Moves[m];
+            if (move.Type != Genome.MoveType.Attack)
+            {
+                result.Add(null);
+                continue;
+            }
+            if (!NeedsMoveRepair(move, presentedSprite, used))
+            {
+                used.Add(move.SpriteId!);
+                result.Add(move.SpriteId);
+                continue;
+            }
+            string id = SelectMoveSpriteId(move, presentedSprite, register,
+                MoveSpriteSeed(character, m), used, gameUsage);
+            used.Add(id);
+            result.Add(id);
+        }
+        return result;
+    }
+
+    /// <summary>The M4b repair rule: missing/unknown id; duplicate within the
+    /// character; or class no longer in the character sprite's wields AND the
+    /// semantic score below the floor.</summary>
+    public bool NeedsMoveRepair(Genome.MoveGenome move, SpriteDef characterSprite,
+        IReadOnlyCollection<string>? usedByCharacter = null)
+    {
+        MoveSpriteDef? sprite = MoveLibrary?.ById(move.SpriteId);
+        if (sprite is null)
+        {
+            return true;
+        }
+        if (usedByCharacter?.Contains(sprite.Id) == true)
+        {
+            return true;
+        }
+        if (!sprite.CompatiblePlans.Contains(characterSprite.BodyPlan))
+        {
+            return true; // the hard filter holds across inheritance too
+        }
+        if (characterSprite.Wields.Contains(sprite.AttackClass))
+        {
+            return false;
+        }
+        (Dictionary<string, double> traits, double h, double v) = MoveTraits(move.Params);
+        return MoveTraitScore(sprite, traits, h, v) < Config.Moves.RepairFloor;
+    }
+
+    /// <summary>Class-size prior normalization (see MoveSelectionConfig): classes
+    /// compete by score, members split their class's mass.</summary>
+    private static void NormalizeClassPriors(List<MoveSpriteDef> pool, double[] probs, float exponent)
+    {
+        if (exponent <= 0)
+        {
+            return;
+        }
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (MoveSpriteDef sprite in pool)
+        {
+            counts[sprite.AttackClass] = counts.TryGetValue(sprite.AttackClass, out int n) ? n + 1 : 1;
+        }
+        double total = 0;
+        for (int i = 0; i < pool.Count; i++)
+        {
+            probs[i] /= Math.Pow(counts[pool[i].AttackClass], exponent);
+            total += probs[i];
+        }
+        if (total <= 0)
+        {
+            return;
+        }
+        for (int i = 0; i < probs.Length; i++)
+        {
+            probs[i] /= total;
+        }
+    }
+
+    private static void ScaleMoveClass(List<MoveSpriteDef> pool, double[] probs,
+        Func<MoveSpriteDef, bool> inClass, float share, bool exact)
+    {
+        double classMass = 0;
+        double otherMass = 0;
+        for (int i = 0; i < pool.Count; i++)
+        {
+            if (inClass(pool[i]))
+            {
+                classMass += probs[i];
+            }
+            else
+            {
+                otherMass += probs[i];
+            }
+        }
+        if (classMass <= 0 || otherMass <= 0 || (!exact && classMass <= share))
+        {
+            return;
+        }
+        double classFactor = share / classMass;
+        double otherFactor = (1.0 - share) / otherMass;
+        for (int i = 0; i < pool.Count; i++)
+        {
+            probs[i] *= inClass(pool[i]) ? classFactor : otherFactor;
+        }
     }
 
     private string PickRegister(NgPcg rng)

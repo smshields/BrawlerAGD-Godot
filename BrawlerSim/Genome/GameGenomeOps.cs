@@ -47,7 +47,8 @@ public static class GameGenomeOps
                 ? MutateComposedMoves(character, composition, config, rng)
                 : character.Moves
                     .Select(m => new MoveGenome(
-                        GenomeOps.Mutate(m.Params, rng), rng.NextInt(config.MoveSpriteCount), m.Type))
+                        GenomeOps.Mutate(m.Params, rng), rng.NextInt(config.MoveSpriteCount), m.Type,
+                        m.SpriteId)) // semantic id is heredity; the repair pass judges it
                     .ToList();
             // The legacy SpriteIndex re-randomizes (Unity parity, and the draw keeps the
             // stream aligned); the semantic SpriteId is HEREDITY — it rides through and
@@ -149,7 +150,8 @@ public static class GameGenomeOps
                 moves.Add(MoveGenome.GenerateOfType((MoveType)rng.NextInt(4), config, rng));
                 continue;
             }
-            moves.Add(new MoveGenome(GenomeOps.Mutate(m.Params, rng), rng.NextInt(config.MoveSpriteCount), m.Type));
+            moves.Add(new MoveGenome(
+                GenomeOps.Mutate(m.Params, rng), rng.NextInt(config.MoveSpriteCount), m.Type, m.SpriteId));
         }
         return moves;
     }
@@ -226,8 +228,12 @@ public static class GameGenomeOps
                 continue;
             }
             ParamSet moveParams = GenomeOps.SinglePointCrossover(a.Moves[m].Params, b.Moves[m].Params, rng);
-            int moveSprite = rng.NextInt(2) == 0 ? a.Moves[m].SpriteIndex : b.Moves[m].SpriteIndex;
-            moves.Add(new MoveGenome(moveParams, moveSprite, a.Moves[m].Type));
+            // One flip carries both move sprite genes (legacy index + semantic id,
+            // 2026-08-23 M4b) — draw order bit-identical to pre-feature crossover.
+            bool moveFromA = rng.NextInt(2) == 0;
+            int moveSprite = moveFromA ? a.Moves[m].SpriteIndex : b.Moves[m].SpriteIndex;
+            string? moveSpriteId = moveFromA ? a.Moves[m].SpriteId : b.Moves[m].SpriteId;
+            moves.Add(new MoveGenome(moveParams, moveSprite, a.Moves[m].Type, moveSpriteId));
         }
         if (config.IsComposed)
         {

@@ -23,12 +23,25 @@ public sealed class MoveGenome
     public ParamSet Params { get; }
     public int SpriteIndex { get; }
 
-    public MoveGenome(ParamSet @params, int spriteIndex, MoveType type = MoveType.Attack)
+    /// <summary>Semantic melee attack sprite gene (2026-08-23, M4b —
+    /// docs/features/attack-sprite-selection.md): an id into the moves_v2 library.
+    /// Assigned only on Attack moves (shields/dashes render procedurally; projectile
+    /// sprites are a later track); null on pre-v11 files and without a move library.
+    /// Same heredity/repair pattern as CharacterGenome.SpriteId.</summary>
+    public string? SpriteId { get; }
+
+    public MoveGenome(ParamSet @params, int spriteIndex, MoveType type = MoveType.Attack,
+        string? spriteId = null)
     {
         Type = type;
         Params = @params;
         SpriteIndex = spriteIndex;
+        SpriteId = spriteId;
     }
+
+    /// <summary>Copy with a different sprite gene (selection/repair).</summary>
+    public MoveGenome WithSpriteId(string? spriteId) =>
+        spriteId == SpriteId ? this : new MoveGenome(Params, SpriteIndex, Type, spriteId);
 
     public static MoveGenome Generate(GenerationConfig config, Pcg32 rng)
     {
@@ -280,9 +293,11 @@ public sealed class GameGenome
         return new GameGenome(characters, FitStage(stage, characters));
     }
 
-    /// <summary>Sprite-gene upkeep over a whole game (2026-08-22, sprite-selection.md):
-    /// assigns/repairs each character's SpriteId via the content-seeded selector,
-    /// threading per-game usage counts so duplicate-looking fighters diverge. RNG-free
+    /// <summary>Sprite-gene upkeep over a whole game (2026-08-22, sprite-selection.md;
+    /// melee move genes added 2026-08-23, attack-sprite-selection.md): assigns/repairs
+    /// each character's SpriteId, then each attack move's SpriteId AFTER it (move
+    /// selection consumes the resolved character entry) — all via the content-seeded
+    /// selector, threading per-game usage counts so duplicate looks diverge. RNG-free
     /// — the generation/breeding streams stay aligned, like FitStage. No-op without a
     /// sprite library on the config.</summary>
     internal static void ResolveSprites(List<CharacterGenome> characters, GenerationConfig config)
@@ -292,12 +307,21 @@ public sealed class GameGenome
             return;
         }
         var usage = new Dictionary<string, int>(StringComparer.Ordinal);
+        var moveUsage = new Dictionary<string, int>(StringComparer.Ordinal);
         for (int i = 0; i < characters.Count; i++)
         {
             characters[i] = selector.EnsureGene(characters[i], usage);
             if (characters[i].SpriteId is { } id)
             {
                 usage[id] = usage.TryGetValue(id, out int n) ? n + 1 : 1;
+            }
+            characters[i] = selector.EnsureMoveGenes(characters[i], moveUsage);
+            foreach (MoveGenome move in characters[i].Moves)
+            {
+                if (move.SpriteId is { } moveId)
+                {
+                    moveUsage[moveId] = moveUsage.TryGetValue(moveId, out int n) ? n + 1 : 1;
+                }
             }
         }
     }

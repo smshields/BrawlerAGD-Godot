@@ -11,12 +11,35 @@ namespace BrawlerSim.Serialization;
 /// (name compatibility, per-roster overuse), and what it settles on persists here,
 /// leaving the genome untouched.</summary>
 public sealed record BuiltCharacter(string DisplayName, string? Origin, CharacterGenome Character,
-    string? SpriteId = null, string? Register = null)
+    string? SpriteId = null, string? Register = null, IReadOnlyList<string?>? MoveSpriteIds = null)
 {
-    /// <summary>The genome as this roster presents it: the negotiated sprite injected
-    /// over the inherited gene (views and match launches read this; the stored genome
-    /// stays untouched).</summary>
-    public CharacterGenome Presented => SpriteId is null ? Character : Character.WithSpriteId(SpriteId);
+    /// <summary>The genome as this roster presents it: the negotiated character sprite
+    /// and per-move attack sprites (M4b) injected over the inherited genes — views and
+    /// match launches read this; the stored genome stays untouched.</summary>
+    public CharacterGenome Presented
+    {
+        get
+        {
+            CharacterGenome presented = SpriteId is null ? Character : Character.WithSpriteId(SpriteId);
+            if (MoveSpriteIds is null || MoveSpriteIds.Count != presented.Moves.Count)
+            {
+                return presented;
+            }
+            List<MoveGenome>? moves = null;
+            for (int m = 0; m < presented.Moves.Count; m++)
+            {
+                if (MoveSpriteIds[m] is { } id && id != presented.Moves[m].SpriteId)
+                {
+                    moves ??= presented.Moves.ToList();
+                    moves[m] = presented.Moves[m].WithSpriteId(id);
+                }
+            }
+            return moves is null
+                ? presented
+                : new CharacterGenome(presented.Name, presented.Stocks, presented.SpriteIndex,
+                    presented.Params, moves, presented.ButtonMoves, presented.SpriteId);
+        }
+    }
 }
 
 public sealed record BuiltStage(string DisplayName, string? Origin, StageGenome Stage);
@@ -91,6 +114,15 @@ public sealed class BuiltGame
     {
         GameGenomeJson.CharacterDoc doc = GameGenomeJson.ToCharacterDoc(character);
         doc.SpriteId = null;
+        if (doc.Moves is not null)
+        {
+            foreach (GameGenomeJson.MoveDoc move in doc.Moves)
+            {
+                move.SpriteId = null; // move sprites are presentation too (M4b) — and
+                                      // the shared seed derives from this key, so it
+                                      // must not shift when move genes get assigned
+            }
+        }
         return JsonSerializer.Serialize(doc, ContentKeyOptions);
     }
 
@@ -120,10 +152,14 @@ public sealed class BuiltGame
 ///       "register" (the negotiated presentation, persisted once by the game-open
 ///       pass like names are; omitted when null). v1 files load with nulls and get
 ///       both on their next open.
+///   3 — 2026-08-23 melee attack sprites (M4b): character entries gained
+///       "moveSpriteIds" — one entry per move, null on non-attack slots; resolved
+///       around the NEGOTIATED character sprite (whose wields may differ from the
+///       genome gene's) and persisted once. ≤2 files gain them on next open.
 /// </summary>
 public static class BuiltGameJson
 {
-    public const int CurrentFormatVersion = 2;
+    public const int CurrentFormatVersion = 3;
 
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -144,6 +180,7 @@ public static class BuiltGameJson
                 Origin = c.Origin,
                 SpriteId = c.SpriteId,
                 Register = c.Register,
+                MoveSpriteIds = c.MoveSpriteIds?.ToList(),
                 Character = GameGenomeJson.ToCharacterDoc(c.Character),
             }).ToList(),
             Stages = game.Stages.Select(s => new BuiltStageDoc
@@ -176,7 +213,8 @@ public static class BuiltGameJson
                     c.Character ?? throw new JsonException("built game entry is missing its character."),
                     config),
                 c.SpriteId,
-                c.Register));
+                c.Register,
+                c.MoveSpriteIds));
         }
         foreach (BuiltStageDoc s in doc.Stages ?? new List<BuiltStageDoc>())
         {
@@ -213,6 +251,7 @@ public static class BuiltGameJson
         public string? Origin { get; set; }
         public string? SpriteId { get; set; } // v2+; the negotiated presentation
         public string? Register { get; set; } // v2+
+        public List<string?>? MoveSpriteIds { get; set; } // v3+; null on non-attack slots
         public GameGenomeJson.CharacterDoc? Character { get; set; }
     }
 

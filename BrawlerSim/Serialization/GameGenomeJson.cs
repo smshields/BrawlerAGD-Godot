@@ -44,10 +44,14 @@ namespace BrawlerSim.Serialization;
 ///       sheet and is resolved fresh if it enters a sprite-enabled pipeline).
 ///       spriteIndex is retained for round-trip. Purely cosmetic — replays and
 ///       goldens are untouched.
+///  11 — 2026-08-23 melee attack sprites (M4b, attack-sprite-selection.md): moves
+///       gained "spriteId" (moves_v2 library; assigned on Attack moves only),
+///       omitted when null. ≤10 files load with null move genes — same legacy
+///       stance as v10. Purely cosmetic.
 /// </summary>
 public static class GameGenomeJson
 {
-    public const int CurrentFormatVersion = 10; // 2026-08-22 sprite selection (see header)
+    public const int CurrentFormatVersion = 11; // 2026-08-23 melee attack sprites (see header)
     private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = new()
@@ -91,6 +95,7 @@ public static class GameGenomeJson
                 _ => "attack",
             },
             SpriteIndex = m.SpriteIndex,
+            SpriteId = m.SpriteId,
             Params = m.Params.ToDictionary(),
         }).ToList(),
     };
@@ -149,17 +154,17 @@ public static class GameGenomeJson
                 "shield" => new MoveGenome(
                     ParamSet.FromDictionary(config.ShieldSchema,
                         WithReflectDefault(Require(m.Params, "shield params"))),
-                    m.SpriteIndex, MoveType.Shield),
+                    m.SpriteIndex, MoveType.Shield, m.SpriteId),
                 "dash" => new MoveGenome(
                     ParamSet.FromDictionary(config.DashSchema,
                         WithReflectDefault(Require(m.Params, "dash params"))),
-                    m.SpriteIndex, MoveType.Dash),
+                    m.SpriteIndex, MoveType.Dash, m.SpriteId),
                 "projectile" => new MoveGenome(
                     ParamSet.FromDictionary(config.ProjectileSchema, Require(m.Params, "projectile params")),
-                    m.SpriteIndex, MoveType.Projectile),
+                    m.SpriteIndex, MoveType.Projectile, m.SpriteId),
                 _ => new MoveGenome(
                     ParamSet.FromDictionary(config.MoveSchema, Require(m.Params, "move params")),
-                    m.SpriteIndex),
+                    m.SpriteIndex, MoveType.Attack, m.SpriteId), // absent (≤v10) → null
             }),
             MigrateButtonMoves(c.ButtonMoves), // null (v1 files) → all-zeros default in the ctor
             c.SpriteId); // absent (≤v9 files) → null: legacy v1-sheet rendering
@@ -270,6 +275,7 @@ public static class GameGenomeJson
     {
         public string? Type { get; set; } // null/absent (v1/v2) → attack
         public int SpriteIndex { get; set; }
+        public string? SpriteId { get; set; } // v11+; omitted when null
         public Dictionary<string, float>? Params { get; set; }
     }
 

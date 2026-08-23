@@ -24,9 +24,13 @@ public class SpriteSelectionTests
     private static readonly Lazy<SpriteSelectionConfig> TuningLazy = new(() =>
         SpriteSelectionConfig.LoadFile(FindRepoFile(Path.Combine("godot", "assets", "sprite_selection.json"))));
 
+    internal static readonly Lazy<MoveSpriteLibrary> MoveLibraryLazy = new(() =>
+        MoveSpriteLibrary.LoadFile(FindRepoFile(Path.Combine("godot", "assets", "moves_v2_slices.json"))));
+
     private static SpriteLibrary Library => LibraryLazy.Value;
 
-    private static SpriteSelector NewSelector() => new(Library, TuningLazy.Value);
+    private static SpriteSelector NewSelector() =>
+        new(Library, TuningLazy.Value, moveLibrary: MoveLibraryLazy.Value);
 
     private static GenerationConfig SpriteConfig(int players = 2) =>
         GenerationConfig.Default with { CharacterCount = players, SpriteSelector = NewSelector() };
@@ -76,10 +80,17 @@ public class SpriteSelectionTests
     [Fact]
     public void ShippedTuningFileBindsEveryKnob()
     {
-        SpriteSelectionConfig tuning = TuningLazy.Value;
         // The shipped file starts at the code defaults; if this fails the two drifted —
         // retune BOTH or neither (the JSON is the hot-editable source of truth).
-        Assert.Equal(SpriteSelectionConfig.Default, tuning);
+        // Compared as canonical JSON: record equality reference-compares the nested
+        // collections (Moves lists/maps), which is not the question being asked.
+        var options = new System.Text.Json.JsonSerializerOptions
+        {
+            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+        };
+        Assert.Equal(
+            System.Text.Json.JsonSerializer.Serialize(SpriteSelectionConfig.Default, options),
+            System.Text.Json.JsonSerializer.Serialize(TuningLazy.Value, options));
     }
 
     [Fact]
@@ -386,7 +397,7 @@ public class SpriteSelectionTests
         BuiltGame game = NewBuiltGame(500);
         int changed = BuiltGamePresentation.EnsurePresented(
             game, NG.NameGenerator.CreateDefault(), NewSelector());
-        Assert.Equal(12, changed); // 8 characters + 4 stages
+        Assert.Equal(20, changed); // 8 names/sprites + 8 move-sprite lists + 4 stages
 
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (BuiltCharacter c in game.Characters)

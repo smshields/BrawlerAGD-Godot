@@ -10,5 +10,26 @@
   "overusePenalty": 0.5,
   "registerPoolFloor": 20,
   "maxSpriteShare": 0.04,
-  "partTagWeight": 0.3
+  "partTagWeight": 0.3,
+  "moves": {
+    "objectBudget": 0.10,
+    "classPriorExponent": 1.0,
+    "softmaxTemperature": 0.35,
+    "wieldsFirstBonus": 0.6,
+    "wieldsOtherBonus": 0.35,
+    "wieldsMissingPenalty": 0.4,
+    "registerBonus": 0.2,
+    "paletteBonus": 0.1,
+    "neutralPalettes": ["grey", "bone", "black"],
+    "crossDuplicatePenalty": 0.3,
+    "sweepBonus": 0.15,
+    "repairFloor": 0.05,
+    "registerAffinities": {
+      "fantasy": { "elements": ["fire", "ice", "chaos"], "classes": [] },
+      "scifi": { "elements": ["electric"], "classes": [] },
+      "horror": { "elements": ["spectral", "poison"], "classes": ["impact"] },
+      "normal": { "elements": [], "classes": ["blunt", "object", "natural"] },
+      "fey": { "elements": ["chaos"], "classes": ["object", "natural"] }
+    }
+  }
 }

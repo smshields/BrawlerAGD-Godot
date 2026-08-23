@@ -50,6 +50,20 @@ public static class BuiltGamePresentation
             }
         }
 
+        // Melee move sprites (M4b): ids already persisted on the roster pre-count
+        // into the cross-character duplicate penalty, exactly like character usage.
+        var moveUsage = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (BuiltCharacter c in game.Characters)
+        {
+            foreach (string? id in c.MoveSpriteIds ?? Array.Empty<string?>())
+            {
+                if (id is not null)
+                {
+                    moveUsage[id] = moveUsage.TryGetValue(id, out int n) ? n + 1 : 1;
+                }
+            }
+        }
+
         int changed = 0;
         for (int i = 0; i < game.Characters.Count; i++)
         {
@@ -59,6 +73,7 @@ public static class BuiltGamePresentation
                 && (entry.SpriteId is null || !selector.Library.Contains(entry.SpriteId));
             if (!needsName && !needsSprite)
             {
+                changed += EnsureMoveSprites(game, i, selector, moveUsage);
                 continue;
             }
             ulong seed = BuiltGameNaming.NamingSeed(entry.Character);
@@ -101,6 +116,7 @@ public static class BuiltGamePresentation
                     Register = presented.Register,
                 };
                 changed++;
+                changed += EnsureMoveSprites(game, i, selector, moveUsage);
                 continue;
             }
             if (needsName)
@@ -127,6 +143,7 @@ public static class BuiltGamePresentation
             Count(usage, spriteId);
             game.Characters[i] = entry with { SpriteId = spriteId, Register = register };
             changed++;
+            changed += EnsureMoveSprites(game, i, selector, moveUsage);
         }
 
         for (int i = 0; i < game.Stages.Count; i++)
@@ -143,6 +160,46 @@ public static class BuiltGamePresentation
             changed++;
         }
         return changed;
+    }
+
+    /// <summary>Melee move sprites for one roster entry (M4b): resolved around the
+    /// NEGOTIATED character sprite and persisted once — entries that already carry a
+    /// full, valid list keep it. Returns 1 when the entry changed, else 0; newly
+    /// resolved ids join the cross-character usage pool.</summary>
+    private static int EnsureMoveSprites(BuiltGame game, int i, SpriteSelector? selector,
+        Dictionary<string, int> moveUsage)
+    {
+        if (selector?.MoveLibrary is null)
+        {
+            return 0;
+        }
+        BuiltCharacter entry = game.Characters[i];
+        SpriteDef? presentedSprite = selector.Library.ById(entry.SpriteId ?? entry.Character.SpriteId);
+        if (presentedSprite is null)
+        {
+            return 0; // no resolvable look to wield around (no character library data)
+        }
+        if (entry.MoveSpriteIds is { } existing && existing.Count == entry.Character.Moves.Count
+            && Enumerable.Range(0, existing.Count).All(m =>
+                entry.Character.Moves[m].Type != MoveType.Attack
+                    ? existing[m] is null
+                    : selector.MoveLibrary.Contains(existing[m])))
+        {
+            return 0; // persisted once — settled lists stand
+        }
+        ulong seed = BuiltGameNaming.NamingSeed(entry.Character);
+        string register = entry.Register ?? selector.PickRegister(seed);
+        IReadOnlyList<string?> ids = selector.ResolveMoveSpriteIds(
+            entry.Character, presentedSprite, register, moveUsage);
+        foreach (string? id in ids)
+        {
+            if (id is not null)
+            {
+                Count(moveUsage, id);
+            }
+        }
+        game.Characters[i] = entry with { MoveSpriteIds = ids };
+        return 1;
     }
 
     private static void Count(Dictionary<string, int> usage, string id) =>
