@@ -187,7 +187,9 @@ public partial class TitleView : Control
             + "(Shields Games and Research).");
         Line("Built on \"Searching for Balanced 2D Brawler Games: Successes and Failures "
             + "of Automated Evaluation\" (Shields, Mawhorter, Melcer, Mateas — AIIDE 2022).");
-        Line("Engine: Godot. Sprites: Kenney 1-bit pack (kenney.nl). "
+        Line("Engine: Godot. Character sprites: Dungeon Crawl Stone Soup tiles "
+            + "(CC0 — thank you to the DCSS artists; github.com/crawl/tiles). "
+            + "Move/tile sprites: Kenney 1-bit pack (kenney.nl). "
             + "Fighter and stage names: namegen.");
         text.AddChild(new Control { CustomMinimumSize = new Vector2(0f, 14f) });
 
