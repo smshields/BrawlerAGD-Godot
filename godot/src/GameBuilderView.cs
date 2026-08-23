@@ -410,7 +410,7 @@ public partial class GameBuilderView : Control
             chip.AddThemeConstantOverride("separation", 2);
             chip.AddChild(new TextureRect
             {
-                Texture = SpriteBank.Move(move.SpriteIndex),
+                Texture = SpriteBank.MoveFor(move),
                 TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
                 StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
                 ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,

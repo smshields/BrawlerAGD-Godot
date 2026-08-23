@@ -22,9 +22,12 @@ public static class SpriteBank
     private static AtlasTexture[]? _players;
     private static AtlasTexture[]? _moves;
     private static SpriteLibrary? _library;
+    private static MoveSpriteLibrary? _moveLibrary;
     private static SpriteSelector? _selector;
     private static Texture2D? _playersV2;
+    private static Texture2D? _movesV2;
     private static readonly System.Collections.Generic.Dictionary<string, AtlasTexture> _v2Cache = new();
+    private static readonly System.Collections.Generic.Dictionary<string, AtlasTexture> _v2MoveCache = new();
 
     public static AtlasTexture Player(int index) => Get(ref _players, "players")[Wrap(index, _players!.Length)];
 
@@ -35,10 +38,42 @@ public static class SpriteBank
     public static SpriteLibrary Library =>
         _library ??= SpriteLibrary.Parse(FileAccess.GetFileAsString("res://assets/players_v2_slices.json"));
 
+    /// <summary>The v2 MELEE attack library (M4b, 2026-08-23).</summary>
+    public static MoveSpriteLibrary MoveLibrary =>
+        _moveLibrary ??= MoveSpriteLibrary.Parse(FileAccess.GetFileAsString("res://assets/moves_v2_slices.json"));
+
     /// <summary>The app's shared selector, on the shipped hot-editable tuning file.</summary>
     public static SpriteSelector Selector =>
         _selector ??= new SpriteSelector(Library,
-            SpriteSelectionConfig.Parse(FileAccess.GetFileAsString("res://assets/sprite_selection.json")));
+            SpriteSelectionConfig.Parse(FileAccess.GetFileAsString("res://assets/sprite_selection.json")),
+            moveLibrary: MoveLibrary);
+
+    /// <summary>The v2 attack sprite for an id; null when the id is null/unknown.</summary>
+    public static AtlasTexture? MoveById(string? id)
+    {
+        MoveSpriteDef? def = MoveLibrary.ById(id);
+        if (def is null)
+        {
+            return null;
+        }
+        if (_v2MoveCache.TryGetValue(def.Id, out AtlasTexture? cached))
+        {
+            return cached;
+        }
+        _movesV2 ??= GD.Load<Texture2D>("res://assets/moves_v2.png");
+        var slice = new AtlasTexture
+        {
+            Atlas = _movesV2,
+            Region = new Rect2(def.X, def.Y, def.W, def.H),
+        };
+        _v2MoveCache[def.Id] = slice;
+        return slice;
+    }
+
+    /// <summary>The one resolution rule for attack sprites: semantic v2 when the move
+    /// carries a known gene, else the legacy v1 glyph by index.</summary>
+    public static Texture2D MoveFor(MoveGenome move) =>
+        MoveById(move.SpriteId) ?? (Texture2D)Move(move.SpriteIndex);
 
     /// <summary>The v2 sprite for an id; null when the id is null/unknown.</summary>
     public static AtlasTexture? PlayerById(string? id)

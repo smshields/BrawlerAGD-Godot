@@ -341,11 +341,18 @@ internal static class Commands
             return null;
         }
         var library = BrawlerSim.Sprites.SpriteLibrary.LoadFile(slices);
-        string tuning = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(slices))!, "sprite_selection.json");
+        string dir = Path.GetDirectoryName(Path.GetFullPath(slices))!;
+        string tuning = Path.Combine(dir, "sprite_selection.json");
         var config = File.Exists(tuning)
             ? BrawlerSim.Sprites.SpriteSelectionConfig.LoadFile(tuning)
             : BrawlerSim.Sprites.SpriteSelectionConfig.Default;
-        return new BrawlerSim.Sprites.SpriteSelector(library, config);
+        // Melee attack sprites (M4b) ride along whenever their library sits next to
+        // the character slices; absent = character selection only.
+        string moves = Path.Combine(dir, "moves_v2_slices.json");
+        var moveLibrary = File.Exists(moves)
+            ? BrawlerSim.Sprites.MoveSpriteLibrary.LoadFile(moves)
+            : null;
+        return new BrawlerSim.Sprites.SpriteSelector(library, config, moveLibrary: moveLibrary);
     }
 
     private static string? FindUpward(string relative)

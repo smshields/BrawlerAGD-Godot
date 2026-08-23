@@ -13,6 +13,7 @@ public partial class PlayerView : Node2D
 {
     private SimPlayer _player = null!;
     private Texture2D[] _moveTextures = System.Array.Empty<Texture2D>();
+    private Vector2[] _moveBases = System.Array.Empty<Vector2>(); // hitbox-fill divisors per move
     private Sprite2D _body = null!;
     private Sprite2D _move = null!;
     private Label _name = null!;
@@ -76,9 +77,17 @@ public partial class PlayerView : Node2D
         _player = player;
         _ppu = ppu;
         _moveTextures = new Texture2D[character.Moves.Count];
+        _moveBases = new Vector2[character.Moves.Count];
         for (int m = 0; m < character.Moves.Count; m++)
         {
-            _moveTextures[m] = SpriteBank.Move(character.Moves[m].SpriteIndex);
+            // Semantic v2 attack sprites when the gene is set (M4b, 2026-08-23);
+            // legacy Kenney glyphs otherwise. Like the body, v1 keeps the fixed
+            // 16 px divisor and v2 stretches its own rect to fill the hitbox.
+            var move = character.Moves[m];
+            _moveTextures[m] = SpriteBank.MoveFor(move);
+            _moveBases[m] = move.SpriteId is not null && SpriteBank.MoveLibrary.Contains(move.SpriteId)
+                ? new Vector2(_moveTextures[m].GetWidth(), _moveTextures[m].GetHeight())
+                : new Vector2(16f, 16f);
         }
 
         // Sprite selection (2026-08-22): a semantic v2 sprite when the genome carries
@@ -189,8 +198,12 @@ public partial class PlayerView : Node2D
             _move.Position = new Vector2(
                 (hitbox.Center.X - _player.Position.X) * _ppu,
                 -(hitbox.Center.Y - _player.Position.Y) * _ppu);
-            // Fill the hitbox: the slice is nominally 16 px = 1 unit.
-            _move.Scale = new Vector2(hitbox.Half.X, hitbox.Half.Y) * 2f * (_ppu / 16f);
+            // Fill the hitbox: v1 slices are nominally 16 px = 1 unit; v2 slices
+            // stretch their own rect (the library favors bursts and diagonal glyphs
+            // that survive arbitrary aspect ratios — attack-sprite-selection.md).
+            Vector2 basis = _moveBases[_player.CurrentMoveIndex];
+            _move.Scale = new Vector2(
+                hitbox.Half.X / basis.X, hitbox.Half.Y / basis.Y) * 2f * _ppu;
             _move.FlipH = _player.Facing < 0;
         }
     }
