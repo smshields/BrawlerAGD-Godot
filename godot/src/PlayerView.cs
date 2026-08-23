@@ -17,6 +17,7 @@ public partial class PlayerView : Node2D
     private Sprite2D _move = null!;
     private Label _name = null!;
     private float _ppu;
+    private Vector2 _spriteBase = new(16f, 16f); // scale divisor: 16 (v1 parity) or the v2 rect size
     private int _flashClock; // cosmetic strobe phase (view-only, not sim state)
 
     // Motion trail (FEATURES.md §Movement Blur; re-rendered 2026-07-23, designer:
@@ -70,22 +71,33 @@ public partial class PlayerView : Node2D
     private float _lastStrength;
     private const float DyingDecay = 0.90f; // per frame ⇒ ~0.5 s linger
 
-    public void Setup(SimPlayer player, int spriteIndex, int[] moveSpriteIndices, float ppu)
+    public void Setup(SimPlayer player, BrawlerSim.Genome.CharacterGenome character, float ppu)
     {
         _player = player;
         _ppu = ppu;
-        _moveTextures = new Texture2D[moveSpriteIndices.Length];
-        for (int m = 0; m < moveSpriteIndices.Length; m++)
+        _moveTextures = new Texture2D[character.Moves.Count];
+        for (int m = 0; m < character.Moves.Count; m++)
         {
-            _moveTextures[m] = SpriteBank.Move(moveSpriteIndices[m]);
+            _moveTextures[m] = SpriteBank.Move(character.Moves[m].SpriteIndex);
         }
+
+        // Sprite selection (2026-08-22): a semantic v2 sprite when the genome carries
+        // one, else the legacy Kenney glyph. v1 keeps the Unity-parity fixed 16 px
+        // divisor (glyphs render at their natural relative sizes); v2 sprites stretch
+        // to the body box exactly — the hitbox is what you see, and the selector's
+        // aspect bonus already biased toward sprites whose natural w/h matches the
+        // genome's scalars, keeping the distortion small.
+        Texture2D bodyTexture = SpriteBank.PlayerFor(character);
+        _spriteBase = character.SpriteId is not null && SpriteBank.Library.Contains(character.SpriteId)
+            ? new Vector2(bodyTexture.GetWidth(), bodyTexture.GetHeight())
+            : new Vector2(16f, 16f);
 
         // Ghosts are added FIRST so the live body always draws over its own trail.
         for (int g = 0; g < GhostCount; g++)
         {
             _ghosts[g] = new Sprite2D
             {
-                Texture = SpriteBank.Player(spriteIndex),
+                Texture = bodyTexture,
                 TextureFilter = TextureFilterEnum.Nearest,
                 Visible = false,
             };
@@ -94,8 +106,8 @@ public partial class PlayerView : Node2D
 
         _body = new Sprite2D
         {
-            Texture = SpriteBank.Player(spriteIndex),
-            Scale = new Vector2(player.WidthScalar, player.HeightScalar) * (_ppu / 16f),
+            Texture = bodyTexture,
+            Scale = new Vector2(player.WidthScalar / _spriteBase.X, player.HeightScalar / _spriteBase.Y) * _ppu,
             TextureFilter = TextureFilterEnum.Nearest,
         };
         AddChild(_body);
@@ -152,7 +164,8 @@ public partial class PlayerView : Node2D
         QueueRedraw(); // shield circle tracks sim state every frame
         // Crouch squish (2026-07-13): scale from sim state, feet planted.
         float crouch = _player.CrouchScale;
-        _body.Scale = new Vector2(_player.WidthScalar, _player.HeightScalar * crouch) * (_ppu / 16f);
+        _body.Scale = new Vector2(
+            _player.WidthScalar / _spriteBase.X, _player.HeightScalar * crouch / _spriteBase.Y) * _ppu;
         _body.Position = new Vector2(0f, _player.BodyHalf.Y * (1f - crouch) * _ppu);
         _body.FlipH = _player.Facing < 0;
         // Alpha vocabulary (view-only): spawn invulnerability = a SLOW shimmer pulse

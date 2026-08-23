@@ -109,8 +109,7 @@ public partial class MatchPreview : Node2D
     private void CharacterGenomeView(int i, PlayerView view)
     {
         var character = _record!.Genome.Characters[i];
-        view.Setup(_world!.Players[i], character.SpriteIndex,
-            character.Moves.Select(m => m.SpriteIndex).ToArray(), Ppu);
+        view.Setup(_world!.Players[i], character, Ppu);
         view.Sync();
     }
 

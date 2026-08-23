@@ -36,7 +36,7 @@ public partial class MovesetPreview : SubViewportContainer
         // The performer carries the built game's display name so the in-world tag
         // matches the pane; the parked twin gets a blank tag.
         character = new CharacterGenome(displayName, character.Stocks, character.SpriteIndex,
-            character.Params, character.Moves, character.ButtonMoves);
+            character.Params, character.Moves, character.ButtonMoves, character.SpriteId);
         Stretch = true;
         _viewport = new SubViewport
         {
@@ -70,8 +70,7 @@ public partial class MovesetPreview : SubViewportContainer
         stageView.Setup(_world, Ppu);
         _performer = new PlayerView();
         _root.AddChild(_performer);
-        _performer.Setup(_world.Players[0], character.SpriteIndex,
-            character.Moves.Select(m => m.SpriteIndex).ToArray(), Ppu);
+        _performer.Setup(_world.Players[0], character, Ppu);
         var projectiles = new ProjectileLayer();
         _root.AddChild(projectiles);
         projectiles.Setup(_world, Ppu);

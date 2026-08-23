@@ -70,6 +70,9 @@ public static class RunStore
                 {
                     Schema = o.Schema, Key = o.Key, Min = o.Min, Max = o.Max,
                 }).ToList(),
+            // Sprite selection (2026-08-22): absent = off, so pre-feature manifests
+            // stay byte-compatible and resume exactly as they ran.
+            Sprites = config.Generation.SpriteSelector is null ? null : true,
             GenerationsCompleted = engine.GenerationsCompleted,
             RngState = state,
             RngInc = inc,
@@ -93,7 +96,11 @@ public static class RunStore
         InputTraceJson.Save(trace, Path.Combine(runDir, "best.trace.json"));
     }
 
-    public static (EvolutionEngine Engine, EvolutionConfig Config, List<GenerationStats> History) Load(string runDir)
+    /// <summary>Resumes a checkpoint. spriteSelector re-attaches sprite selection to
+    /// runs that recorded it (run.json "sprites"); callers own locating the library —
+    /// null degrades gracefully (new children keep null genes, everything else exact).</summary>
+    public static (EvolutionEngine Engine, EvolutionConfig Config, List<GenerationStats> History) Load(
+        string runDir, Sprites.SpriteSelector? spriteSelector = null)
     {
         string manifestPath = Path.Combine(runDir, "run.json");
         RunManifest manifest = JsonSerializer.Deserialize<RunManifest>(File.ReadAllText(manifestPath), Options)
@@ -127,7 +134,9 @@ public static class RunStore
                 MaxStunSeconds = manifest.MaxStunSeconds ?? float.PositiveInfinity,
             },
             DiversityWeight = manifest.DiversityWeight ?? 0f,
-            Generation = BuildGenerationConfig(manifest),
+            Generation = manifest.Sprites == true && spriteSelector is not null
+                ? BuildGenerationConfig(manifest) with { SpriteSelector = spriteSelector }
+                : BuildGenerationConfig(manifest),
         };
 
         var population = new List<GameGenome>(manifest.PopulationSize);
@@ -196,6 +205,7 @@ public static class RunStore
         public float? DiversityWeight { get; set; }
         public float? FitnessCollisionScalar { get; set; }
         public int? Players { get; set; } // 2026-08-12 four-player; absent = 2
+        public bool? Sprites { get; set; } // 2026-08-22 sprite selection; absent = off
         public List<string>? Composition { get; set; }
         public float? TypeRerollRate { get; set; }
         public List<RangeOverrideDoc>? RangeOverrides { get; set; }

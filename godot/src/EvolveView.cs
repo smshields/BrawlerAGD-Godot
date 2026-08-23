@@ -257,6 +257,7 @@ public partial class EvolveView : Control
         GenerationConfig generation = GenerationConfig.Default with
         {
             CharacterCount = _numPlayers.Selected + 2, // 2026-08-12 four-player
+            SpriteSelector = SpriteBank.Selector, // 2026-08-22 sprite selection (cosmetic, RNG-free)
         };
         if (_compositionMode.Selected == 1)
         {

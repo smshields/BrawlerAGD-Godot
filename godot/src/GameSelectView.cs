@@ -126,11 +126,12 @@ public partial class GameSelectView : Control
 
     private void OpenGame(BuiltGame game, string path)
     {
-        // Item 6: names are generated on open and persisted once (BuiltGameNamer
-        // leaves manual renames and previously generated names alone).
-        if (BuiltGameNamer.EnsureNamed(game, path))
+        // Item 6 + sprite selection: names AND sprites are settled on open and
+        // persisted once (BuiltGamePresenter leaves manual renames and previously
+        // settled presentations alone).
+        if (BuiltGamePresenter.EnsurePresented(game, path))
         {
-            GD.Print($"named built game elements: {path}");
+            GD.Print($"presented built game elements: {path}");
         }
         BuiltGameSession.Game = game;
         BuiltGameSession.Path = path;

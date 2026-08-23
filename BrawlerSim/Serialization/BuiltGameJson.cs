@@ -5,8 +5,19 @@ using BrawlerSim.Genome;
 namespace BrawlerSim.Serialization;
 
 /// <summary>One roster entry: a display name the builder can edit, the provenance of
-/// the element (source game.json's origin/path), and the compiled genome.</summary>
-public sealed record BuiltCharacter(string DisplayName, string? Origin, CharacterGenome Character);
+/// the element (source game.json's origin/path), and the compiled genome. SpriteId +
+/// Register (2026-08-22, sprite-selection.md) are the NEGOTIATED presentation — the
+/// game-open pass may settle on a different sprite than the genome's inherited gene
+/// (name compatibility, per-roster overuse), and what it settles on persists here,
+/// leaving the genome untouched.</summary>
+public sealed record BuiltCharacter(string DisplayName, string? Origin, CharacterGenome Character,
+    string? SpriteId = null, string? Register = null)
+{
+    /// <summary>The genome as this roster presents it: the negotiated sprite injected
+    /// over the inherited gene (views and match launches read this; the stored genome
+    /// stays untouched).</summary>
+    public CharacterGenome Presented => SpriteId is null ? Character : Character.WithSpriteId(SpriteId);
+}
 
 public sealed record BuiltStage(string DisplayName, string? Origin, StageGenome Stage);
 
@@ -105,10 +116,14 @@ public sealed class BuiltGame
 /// Format history:
 ///   1 — original: { formatVersion, name, characters: [{ displayName, origin,
 ///       character }], stages: [{ displayName, origin, stage }] }.
+///   2 — 2026-08-22 sprite selection: character entries gained "spriteId" +
+///       "register" (the negotiated presentation, persisted once by the game-open
+///       pass like names are; omitted when null). v1 files load with nulls and get
+///       both on their next open.
 /// </summary>
 public static class BuiltGameJson
 {
-    public const int CurrentFormatVersion = 1;
+    public const int CurrentFormatVersion = 2;
 
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -127,6 +142,8 @@ public static class BuiltGameJson
             {
                 DisplayName = c.DisplayName,
                 Origin = c.Origin,
+                SpriteId = c.SpriteId,
+                Register = c.Register,
                 Character = GameGenomeJson.ToCharacterDoc(c.Character),
             }).ToList(),
             Stages = game.Stages.Select(s => new BuiltStageDoc
@@ -157,7 +174,9 @@ public static class BuiltGameJson
                 c.Origin,
                 GameGenomeJson.CharacterFromDoc(
                     c.Character ?? throw new JsonException("built game entry is missing its character."),
-                    config)));
+                    config),
+                c.SpriteId,
+                c.Register));
         }
         foreach (BuiltStageDoc s in doc.Stages ?? new List<BuiltStageDoc>())
         {
@@ -192,6 +211,8 @@ public static class BuiltGameJson
     {
         public string? DisplayName { get; set; }
         public string? Origin { get; set; }
+        public string? SpriteId { get; set; } // v2+; the negotiated presentation
+        public string? Register { get; set; } // v2+
         public GameGenomeJson.CharacterDoc? Character { get; set; }
     }
 

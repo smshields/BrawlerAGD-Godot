@@ -123,7 +123,7 @@ internal static class Commands
         List<GenerationStats> history;
         if (opts.ContainsKey("resume"))
         {
-            (engine, config, history) = RunStore.Load(outDir);
+            (engine, config, history) = RunStore.Load(outDir, LoadSpriteSelector(opts));
             Console.WriteLine($"Resumed {outDir} at generation {engine.GenerationsCompleted}.");
         }
         else
@@ -147,7 +147,11 @@ internal static class Commands
                 FitnessName = opts.GetValueOrDefault("fitness"),
                 FitnessCollisionScalar = opts.ContainsKey("collision-scalar")
                     ? GetFloat(opts, "collision-scalar", 0f) : null,
-                Generation = ParseGeneration(opts),
+                // Sprite selection (2026-08-22): on whenever the library is found —
+                // cosmetic, RNG-free, fitness-blind; --no-sprites turns it off.
+                Generation = opts.ContainsKey("no-sprites")
+                    ? ParseGeneration(opts)
+                    : ParseGeneration(opts) with { SpriteSelector = LoadSpriteSelector(opts) },
             };
             engine = new EvolutionEngine(config);
             history = new List<GenerationStats>();
@@ -294,11 +298,10 @@ internal static class Commands
 
     /// <summary>
     /// Packaging gate (Packaged Games, 2026-08-15 — docs/features/packaged-games.md):
-    /// loads a built game, refuses incomplete ones, applies the SAME naming rules as
-    /// the Game Player (BuiltGameNaming pattern + content-derived seeds, roster-unique
-    /// via UniqueNameSession), and writes the embedded document the packaged app
-    /// boots from. The genome→namegen mapping mirrors BuiltGameNamer (godot/) — the
-    /// app layer and this dev tool are the two namegen consumers by design.
+    /// loads a built game, refuses incomplete ones, applies the SAME presentation pass
+    /// as the Game Player (BuiltGamePresentation: names + sprites + shared register,
+    /// content-derived seeds, roster-unique), and writes the embedded document the
+    /// packaged app boots from.
     /// </summary>
     public static int PrepGame(string[] args)
     {
@@ -313,67 +316,52 @@ internal static class Commands
         }
 
         var generator = NameGen.NameGenerator.CreateDefault();
-        var session = new NameGen.UniqueNameSession(generator);
-        foreach (BuiltCharacter c in game.Characters.Where(c => !BuiltGameNaming.NeedsGeneratedName(c.DisplayName)))
-        {
-            session.Reserve(c.DisplayName);
-        }
-        foreach (BuiltStage s in game.Stages.Where(s => !BuiltGameNaming.NeedsGeneratedName(s.DisplayName)))
-        {
-            session.Reserve(s.DisplayName);
-        }
-        int named = 0;
-        for (int i = 0; i < game.Characters.Count; i++)
-        {
-            if (!BuiltGameNaming.NeedsGeneratedName(game.Characters[i].DisplayName))
-            {
-                continue;
-            }
-            game.Characters[i] = game.Characters[i] with
-            {
-                DisplayName = session.GenerateCharacterName(
-                    MapCharacter(game.Characters[i].Character),
-                    new NameGen.NameOptions
-                    {
-                        Seed = BuiltGameNaming.NamingSeed(game.Characters[i].Character),
-                    }).Display,
-            };
-            named++;
-        }
-        for (int i = 0; i < game.Stages.Count; i++)
-        {
-            if (!BuiltGameNaming.NeedsGeneratedName(game.Stages[i].DisplayName))
-            {
-                continue;
-            }
-            game.Stages[i] = game.Stages[i] with
-            {
-                DisplayName = session.GenerateStageName(
-                    new NameGen.StageGenome(game.Stages[i].Stage.Params.ToDictionary()),
-                    new NameGen.NameOptions
-                    {
-                        Seed = BuiltGameNaming.NamingSeed(game.Stages[i].Stage),
-                    }).Display,
-            };
-            named++;
-        }
+        int changed = BuiltGamePresentation.EnsurePresented(game, generator, LoadSpriteSelector(opts));
         BuiltGameJson.Save(game, Require(opts, "out"));
-        Console.WriteLine($"prepared '{game.Name}': named {named} elements → {opts["out"]}");
+        Console.WriteLine($"prepared '{game.Name}': presented {changed} elements → {opts["out"]}");
         // The shell packager reads these two lines to brand the build.
         Console.WriteLine($"name={game.Name}");
         Console.WriteLine($"slug={Slug(game.Name)}");
         return 0;
     }
 
-    private static NameGen.CharacterGenome MapCharacter(CharacterGenome c) => new(
-        c.Params.ToDictionary(),
-        c.Moves.Select(m => new NameGen.MoveGenome(m.Type switch
+    /// <summary>The sprite library + tuning, from --sprites <slices.json> or found by
+    /// walking up from the working directory (the repo's godot/assets). Null — with a
+    /// loud warning — degrades the presentation pass to names only.</summary>
+    internal static BrawlerSim.Sprites.SpriteSelector? LoadSpriteSelector(Dictionary<string, string> opts)
+    {
+        string? slices = opts.TryGetValue("sprites", out string? given)
+            ? given
+            : FindUpward(Path.Combine("godot", "assets", "players_v2_slices.json"));
+        if (slices is null || !File.Exists(slices))
         {
-            MoveType.Shield => NameGen.MoveKind.Shield,
-            MoveType.Dash => NameGen.MoveKind.Dash,
-            MoveType.Projectile => NameGen.MoveKind.Projectile,
-            _ => NameGen.MoveKind.Melee,
-        }, m.Params.ToDictionary())).ToList());
+            Console.Error.WriteLine(
+                "warning: sprite library not found (godot/assets/players_v2_slices.json; "
+                + "override with --sprites) — running without sprite selection.");
+            return null;
+        }
+        var library = BrawlerSim.Sprites.SpriteLibrary.LoadFile(slices);
+        string tuning = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(slices))!, "sprite_selection.json");
+        var config = File.Exists(tuning)
+            ? BrawlerSim.Sprites.SpriteSelectionConfig.LoadFile(tuning)
+            : BrawlerSim.Sprites.SpriteSelectionConfig.Default;
+        return new BrawlerSim.Sprites.SpriteSelector(library, config);
+    }
+
+    private static string? FindUpward(string relative)
+    {
+        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (dir is not null)
+        {
+            string candidate = Path.Combine(dir.FullName, relative);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+            dir = dir.Parent;
+        }
+        return null;
+    }
 
     private static string Slug(string name)
     {

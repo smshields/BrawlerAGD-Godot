@@ -285,7 +285,7 @@ public partial class HudView : CanvasLayer
             // Character sprite (so you know which player is which).
             var sprite = new TextureRect
             {
-                Texture = SpriteBank.Player(character.SpriteIndex),
+                Texture = SpriteBank.PlayerFor(character),
                 TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
                 StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
                 ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,

@@ -193,7 +193,7 @@ public partial class GameBuilderView : Control
             int index = i;
             BuiltCharacter entry = _game.Characters[i];
             _rosterCharacters.AddChild(CharacterCard(
-                entry.Character, entry.DisplayName, entry.Origin,
+                entry.Presented, entry.DisplayName, entry.Origin,
                 rename: newName =>
                 {
                     _game.Characters[index] = _game.Characters[index] with { DisplayName = newName };
@@ -388,7 +388,7 @@ public partial class GameBuilderView : Control
 
         row.AddChild(new TextureRect
         {
-            Texture = SpriteBank.Player(character.SpriteIndex),
+            Texture = SpriteBank.PlayerFor(character),
             TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
             StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
             ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,

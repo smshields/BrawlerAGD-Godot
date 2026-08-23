@@ -380,10 +380,10 @@ public partial class CharacterSelectView : Control
         foreach (Pane p in active)
         {
             BuiltCharacter entry = _game.Characters[p.CharacterIndex];
-            CharacterGenome c = entry.Character;
+            CharacterGenome c = entry.Presented; // negotiated sprite rides into the match
             fighters.Add(new CharacterGenome(
                 p.NameOverride.Trim().Length > 0 ? p.NameOverride.Trim() : entry.DisplayName,
-                _stocks, c.SpriteIndex, c.Params, c.Moves, c.ButtonMoves));
+                _stocks, c.SpriteIndex, c.Params, c.Moves, c.ButtonMoves, c.SpriteId));
             // (player rename wins; otherwise the fighter's generated name shows)
             specs.Add(p.Mode == PaneMode.Human
                 ? new MatchSession.PlayerSpec(true, p.PlayerNumber, null)
@@ -548,7 +548,7 @@ public partial class CharacterSelectView : Control
             card.AddChild(v);
             v.AddChild(new TextureRect
             {
-                Texture = SpriteBank.Player(_game.Characters[i].Character.SpriteIndex),
+                Texture = SpriteBank.PlayerFor(_game.Characters[i].Presented),
                 TextureFilter = CanvasItem.TextureFilterEnum.Nearest,
                 StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
                 ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
@@ -807,7 +807,7 @@ public partial class CharacterSelectView : Control
             // Key→move legend (2026-08-17, designer): device-correct keycaps for
             // humans (keyboard vs the joined pad's layout); CPUs list moves only.
             bool pad = p.Device >= 0;
-            preview.Setup(entry.Character, entry.DisplayName,
+            preview.Setup(entry.Presented, entry.DisplayName,
                 p.Mode == PaneMode.Human ? (pad ? "B" : "SPC") : null,
                 p.Mode == PaneMode.Human
                     ? (pad

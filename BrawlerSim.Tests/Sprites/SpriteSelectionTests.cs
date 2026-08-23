@@ -365,6 +365,82 @@ public class SpriteSelectionTests
         }
     }
 
+    // ── the built-game presentation pass ────────────────────────────────────────
+
+    private static BuiltGame NewBuiltGame(ulong seed, bool sprites = false)
+    {
+        var game = new BuiltGame { Name = "TEST GAME" };
+        for (ulong i = 0; i < 4; i++)
+        {
+            GameGenome g = Game(seed + i, players: 2, sprites: sprites);
+            Assert.True(game.TryAddCharacter(new BuiltCharacter("SRC P1", null, g.Characters[0]), out _));
+            Assert.True(game.TryAddCharacter(new BuiltCharacter("SRC P2", null, g.Characters[1]), out _));
+            Assert.True(game.TryAddStage(new BuiltStage("SRC STAGE", null, g.Stage), out _));
+        }
+        return game;
+    }
+
+    [Fact]
+    public void PresentationPassSettlesNamesSpritesAndRegistersTogether()
+    {
+        BuiltGame game = NewBuiltGame(500);
+        int changed = BuiltGamePresentation.EnsurePresented(
+            game, NG.NameGenerator.CreateDefault(), NewSelector());
+        Assert.Equal(12, changed); // 8 characters + 4 stages
+
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (BuiltCharacter c in game.Characters)
+        {
+            Assert.False(BuiltGameNaming.NeedsGeneratedName(c.DisplayName));
+            Assert.True(names.Add(c.DisplayName), $"duplicate roster name {c.DisplayName}");
+            Assert.True(Library.Contains(c.SpriteId));
+            Assert.False(string.IsNullOrEmpty(c.Register));
+            Assert.Equal(c.SpriteId, c.Presented.SpriteId); // views read Presented
+        }
+        Assert.All(game.Stages, s => Assert.False(BuiltGameNaming.NeedsGeneratedName(s.DisplayName)));
+
+        // Persisted once: a second pass over the settled game changes nothing.
+        Assert.Equal(0, BuiltGamePresentation.EnsurePresented(
+            game, NG.NameGenerator.CreateDefault(), NewSelector()));
+
+        // Deterministic: a fresh copy of the same content settles identically.
+        BuiltGame again = NewBuiltGame(500);
+        BuiltGamePresentation.EnsurePresented(again, NG.NameGenerator.CreateDefault(), NewSelector());
+        Assert.Equal(
+            game.Characters.Select(c => (c.DisplayName, c.SpriteId, c.Register)),
+            again.Characters.Select(c => (c.DisplayName, c.SpriteId, c.Register)));
+    }
+
+    [Fact]
+    public void PresentationKeepsManualNamesButStillAssignsSprites()
+    {
+        BuiltGame game = NewBuiltGame(600);
+        game.Characters[0] = game.Characters[0] with { DisplayName = "The Designer's Favorite" };
+        BuiltGamePresentation.EnsurePresented(game, NG.NameGenerator.CreateDefault(), NewSelector());
+        Assert.Equal("The Designer's Favorite", game.Characters[0].DisplayName);
+        Assert.True(Library.Contains(game.Characters[0].SpriteId));
+        Assert.False(string.IsNullOrEmpty(game.Characters[0].Register));
+    }
+
+    [Fact]
+    public void BuiltGameV2RoundTripsPresentationAndReadsV1WithNulls()
+    {
+        BuiltGame game = NewBuiltGame(700);
+        BuiltGamePresentation.EnsurePresented(game, NG.NameGenerator.CreateDefault(), NewSelector());
+        string json = BuiltGameJson.Serialize(game);
+        Assert.Contains("\"spriteId\"", json);
+        Assert.Contains("\"register\"", json);
+
+        BuiltGame reloaded = BuiltGameJson.Deserialize(json);
+        Assert.Equal(
+            game.Characters.Select(c => (c.DisplayName, c.SpriteId, c.Register)),
+            reloaded.Characters.Select(c => (c.DisplayName, c.SpriteId, c.Register)));
+
+        // A v1-shaped document (no presentation fields) loads with nulls.
+        BuiltGame v1 = BuiltGameJson.Deserialize(BuiltGameJson.Serialize(NewBuiltGame(700)));
+        Assert.All(v1.Characters, c => Assert.Null(c.Register));
+    }
+
     [Fact]
     public void OveruseDivergesDuplicateFighters()
     {

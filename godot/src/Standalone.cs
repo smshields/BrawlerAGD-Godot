@@ -47,6 +47,11 @@ public static class Standalone
             {
                 using var file = FileAccess.Open(EmbeddedPath, FileAccess.ModeFlags.Read);
                 _game = BuiltGameJson.Deserialize(file.GetAsText());
+                // Sprite selection (2026-08-22): a game packaged before sprites (or by
+                // an older prep-game) presents in memory on load — deterministic, so
+                // every boot shows the same roster; the embedded doc is read-only and
+                // never re-persisted (null path).
+                BuiltGamePresenter.EnsurePresented(_game, null);
             }
             return _game;
         }
