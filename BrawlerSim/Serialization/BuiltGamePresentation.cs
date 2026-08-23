@@ -63,11 +63,21 @@ public static class BuiltGamePresentation
             }
             ulong seed = BuiltGameNaming.NamingSeed(entry.Character);
 
+            // Roster distinctness beats heredity here (the overuse rule's intent —
+            // "duplicate fighters diverge"): an inherited sprite ALREADY worn by an
+            // earlier roster entry loses its candidate-#1 privilege and the entry
+            // selects fresh, with the usage penalty steering it elsewhere.
+            string? inherited = entry.SpriteId ?? entry.Character.SpriteId;
+            if (inherited is not null && usage.ContainsKey(inherited))
+            {
+                inherited = null;
+            }
+
             if (needsName && selector is not null)
             {
                 SpritePresentation presented = selector.Negotiate(
                     entry.Character, seed, generator, usage,
-                    inheritedSpriteId: entry.SpriteId ?? entry.Character.SpriteId,
+                    inheritedSpriteId: inherited,
                     nameTaken: taken.Contains);
                 string name = presented.DisplayName;
                 if (taken.Contains(name))
@@ -105,13 +115,14 @@ public static class BuiltGamePresentation
             }
 
             // Kept name, missing sprite: resolve the sprite around it — the genome's
-            // inherited gene when it still makes sense, else the seeded top candidate;
-            // the register comes from the same shared seed either way.
+            // inherited gene when it still makes sense (and no earlier entry wears it),
+            // else the seeded top candidate; the register comes from the same shared
+            // seed either way.
             IReadOnlyList<SpriteCandidate> candidates =
                 selector!.SelectCandidates(entry.Character, seed, out string register, usage);
-            string spriteId = entry.Character.SpriteId is { } gene
-                && selector.Library.Contains(gene) && !selector.NeedsRepair(entry.Character)
-                    ? gene
+            string spriteId = inherited is not null
+                && selector.Library.Contains(inherited) && !selector.NeedsRepair(entry.Character)
+                    ? inherited
                     : candidates[0].Sprite.Id;
             Count(usage, spriteId);
             game.Characters[i] = entry with { SpriteId = spriteId, Register = register };

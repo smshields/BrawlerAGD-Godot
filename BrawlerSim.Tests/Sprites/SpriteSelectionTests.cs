@@ -412,6 +412,23 @@ public class SpriteSelectionTests
     }
 
     [Fact]
+    public void RosterEntriesSharingAnInheritedGeneDiverge()
+    {
+        // The MENAGERIE lesson (2026-08-23): two different fighters can EVOLVE the
+        // same sprite gene; on one roster the later one must lose the candidate-#1
+        // privilege and select fresh — "duplicate fighters diverge" is roster-level.
+        BuiltGame game = NewBuiltGame(800, sprites: true);
+        string shared = game.Characters[0].Character.SpriteId!;
+        game.Characters[3] = game.Characters[3] with
+        {
+            Character = game.Characters[3].Character.WithSpriteId(shared),
+        };
+        BuiltGamePresentation.EnsurePresented(game, NG.NameGenerator.CreateDefault(), NewSelector());
+        Assert.Equal(shared, game.Characters[0].SpriteId); // first wearer keeps it
+        Assert.NotEqual(shared, game.Characters[3].SpriteId);
+    }
+
+    [Fact]
     public void PresentationKeepsManualNamesButStillAssignsSprites()
     {
         BuiltGame game = NewBuiltGame(600);
