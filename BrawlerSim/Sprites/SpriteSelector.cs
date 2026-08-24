@@ -439,7 +439,8 @@ public sealed class SpriteSelector
     /// (mean over the class's candidates).</summary>
     public double ScoreMoveClass(string attackClass, IReadOnlyList<MoveSpriteDef> members,
         Dictionary<string, double> traits, double horizontal, double vertical,
-        SpriteDef characterSprite, string register)
+        SpriteDef characterSprite, string register,
+        IReadOnlyDictionary<string, int>? gameUsage = null)
     {
         MoveSelectionConfig tuning = Config.Moves;
         int position = -1;
@@ -471,11 +472,20 @@ public sealed class SpriteSelector
             score += tuning.SweepBonus * vertical;
         }
         double meanTraits = 0;
+        double meanUsage = 0;
         foreach (MoveSpriteDef member in members)
         {
             meanTraits += MoveTraitScore(member, traits, horizontal: 0, vertical: 0);
+            if (gameUsage is not null && gameUsage.TryGetValue(member.Id, out int uses))
+            {
+                meanUsage += uses;
+            }
         }
-        return score + tuning.ClassTraitWeight * (meanTraits / members.Count);
+        // Cross-character duplication bites at the class stage too — a one-sprite
+        // class (whip = the lone bullwhip) would otherwise dodge the sprite-stage
+        // penalty entirely and land on half the roster.
+        return score + tuning.ClassTraitWeight * (meanTraits / members.Count)
+            - tuning.CrossDuplicatePenalty * (meanUsage / members.Count);
     }
 
     /// <summary>Select one attack sprite, TWO-STAGE (see MoveSelectionConfig): the
@@ -528,7 +538,7 @@ public sealed class SpriteSelector
         for (int i = 0; i < classes.Count; i++)
         {
             classScores[i] = ScoreMoveClass(classes[i].Name, classes[i].Members,
-                traits, horizontal, vertical, characterSprite, register);
+                traits, horizontal, vertical, characterSprite, register, gameUsage);
         }
         double[] classProbs = Softmax(classScores, Config.Moves.SoftmaxTemperature);
         for (int i = 0; i < classes.Count; i++)

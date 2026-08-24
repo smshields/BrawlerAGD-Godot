@@ -257,6 +257,39 @@ public class AttackSpriteSelectionTests
     }
 
     [Fact]
+    public void HeavyRosterUsageSteersAwayFromASingleSpriteClass()
+    {
+        // Cross-roster duplication is a soft penalty (the brief), applied at BOTH
+        // stages — a one-sprite class (whip = the lone bullwhip) must stop winning
+        // once the roster has worn it out, even for whip-first characters.
+        SpriteSelector selector = NewSelector();
+        var usage = new Dictionary<string, int> { ["mv_bullwhip"] = 5 };
+        int bullwhips = 0;
+        int sampled = 0;
+        for (ulong seed = 1; seed <= 300 && sampled < 60; seed++)
+        {
+            CharacterGenome c = Game(seed + 7000, sprites: false).Characters[0];
+            ulong s = SpriteSelector.SpriteSeed(c);
+            string body = selector.ResolveSpriteId(c, s);
+            SpriteDef entry = LibraryLazy.Value.ById(body)!;
+            if (!entry.Wields.Take(2).Contains("whip"))
+            {
+                continue;
+            }
+            sampled++;
+            string id = selector.SelectMoveSpriteId(c.Moves[0], entry,
+                selector.PickRegister(s), SpriteSelector.MoveSpriteSeed(c, 0), null, usage);
+            if (id == "mv_bullwhip")
+            {
+                bullwhips++;
+            }
+        }
+        Assert.True(sampled >= 20, $"only {sampled} whip-leaning characters found");
+        Assert.True(bullwhips <= sampled / 10,
+            $"bullwhip still picked {bullwhips}/{sampled} times under 5 prior uses");
+    }
+
+    [Fact]
     public void EvolutionDoesNotRatchetObjectsPastTheBudget()
     {
         // The banana ratchet (2026-08-23): converged populations collide move sprites

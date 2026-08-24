@@ -131,7 +131,7 @@ public sealed record MoveSelectionConfig
 
     /// <summary>Penalty per use of the sprite by OTHER characters in the same game
     /// (within one character, duplication is a HARD exclusion, not a penalty).</summary>
-    public float CrossDuplicatePenalty { get; init; } = 0.3f;
+    public float CrossDuplicatePenalty { get; init; } = 0.6f;
 
     /// <summary>Sweep-shape bonus weight: wide hitboxes favor horizontal classes
     /// (blade/polearm/whip), tall ones favor slam classes (blunt/impact).</summary>

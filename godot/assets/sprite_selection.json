@@ -22,7 +22,7 @@
     "registerBonus": 0.2,
     "paletteBonus": 0.1,
     "neutralPalettes": ["grey", "bone", "black"],
-    "crossDuplicatePenalty": 0.3,
+    "crossDuplicatePenalty": 0.6,
     "sweepBonus": 0.15,
     "repairFloor": 0.05,
     "registerAffinities": {
