@@ -97,22 +97,29 @@ public sealed record MoveSelectionConfig
     /// moves.png hearts-and-dice lineage; designer: goofy stays decently likely).</summary>
     public float ObjectBudget { get; init; } = 0.10f;
 
-    /// <summary>Class-size prior normalization: each sprite's shaped probability is
-    /// divided by (members of its attackClass in the pool)^exponent, so CLASSES
-    /// compete on score rather than on membership — blades (35% of the library, DCSS
-    /// corpus reality) stop winning by headcount, and two-sprite classes like
-    /// "natural" can actually carry a beast's first wields entry. 1 = full
-    /// normalization; 0 = raw member-count prior.</summary>
-    public float ClassPriorExponent { get; init; } = 1.0f;
-
     public float SoftmaxTemperature { get; init; } = 0.35f;
 
-    /// <summary>Score bonus when the sprite's class is the character's FIRST wields
-    /// entry / elsewhere in wields / absent from wields (a penalty — possible but
-    /// discouraged; the object budget can still surface it).</summary>
+    /// <summary>Selection is TWO-STAGE (2026-08-23, the cloud-saturation lesson): the
+    /// wields list picks the attack CLASS, the move's params pick the sprite WITHIN
+    /// it. Single-stage scoring let evolved moves' extreme trait vectors out-vote the
+    /// wields signal on every repair re-pick, and burst — in every wields list —
+    /// absorbed 82% of an evolved population. Class stage: wields bonus (first entry
+    /// full, later entries decaying) + class register affinity + sweep shape + a
+    /// muted mean-trait voice; sprite stage: trait dot + element register affinity +
+    /// palette − cross-character duplicates.</summary>
     public float WieldsFirstBonus { get; init; } = 0.6f;
     public float WieldsOtherBonus { get; init; } = 0.35f;
     public float WieldsMissingPenalty { get; init; } = 0.4f;
+
+    /// <summary>Later wields entries decay: bonus = WieldsOtherBonus × decay^(pos−1),
+    /// so the universal fallback classes (burst sits in everyone's list) don't rival
+    /// the character's signature class.</summary>
+    public float WieldsPositionDecay { get; init; } = 0.5f;
+
+    /// <summary>How loudly the move's traits speak in the CLASS stage (mean member
+    /// trait dot × this). Full volume within the class; muted across classes, so a
+    /// brutal move picks the brutal blade, not the blade-shaped cloud.</summary>
+    public float ClassTraitWeight { get; init; } = 0.5f;
 
     /// <summary>Bonus when the sprite fits the shared register per RegisterAffinities.</summary>
     public float RegisterBonus { get; init; } = 0.2f;

@@ -13,11 +13,12 @@
   "partTagWeight": 0.3,
   "moves": {
     "objectBudget": 0.10,
-    "classPriorExponent": 1.0,
     "softmaxTemperature": 0.35,
     "wieldsFirstBonus": 0.6,
     "wieldsOtherBonus": 0.35,
     "wieldsMissingPenalty": 0.4,
+    "wieldsPositionDecay": 0.5,
+    "classTraitWeight": 0.5,
     "registerBonus": 0.2,
     "paletteBonus": 0.1,
     "neutralPalettes": ["grey", "bone", "black"],

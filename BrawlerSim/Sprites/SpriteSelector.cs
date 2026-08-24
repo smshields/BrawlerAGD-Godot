@@ -407,8 +407,8 @@ public sealed class SpriteSelector
         return score;
     }
 
-    /// <summary>Full score (attack-sprite-selection.md step 3): traitDot + wieldsBonus
-    /// + registerBonus + paletteBonus − cross-character duplicate penalty. Same-character
+    /// <summary>Sprite-stage score (within one class): trait dot + element register
+    /// affinity + palette − cross-character duplicate penalty. Same-character
     /// duplication is a HARD exclusion upstream, never a penalty here.</summary>
     public double ScoreMoveSprite(MoveSpriteDef sprite, Dictionary<string, double> traits,
         double horizontal, double vertical, SpriteDef characterSprite, string register,
@@ -416,26 +416,8 @@ public sealed class SpriteSelector
     {
         MoveSelectionConfig tuning = Config.Moves;
         double score = MoveTraitScore(sprite, traits, horizontal, vertical);
-
-        int wieldsIndex = -1;
-        for (int i = 0; i < characterSprite.Wields.Count; i++)
-        {
-            if (characterSprite.Wields[i] == sprite.AttackClass)
-            {
-                wieldsIndex = i;
-                break;
-            }
-        }
-        score += wieldsIndex switch
-        {
-            0 => tuning.WieldsFirstBonus,
-            > 0 => tuning.WieldsOtherBonus,
-            _ => -tuning.WieldsMissingPenalty,
-        };
-
         if (tuning.RegisterAffinities.TryGetValue(register, out RegisterAffinityDef? affinity)
-            && ((sprite.Element is { } element && affinity.Elements.Contains(element))
-                || affinity.Classes.Contains(sprite.AttackClass)))
+            && sprite.Element is { } element && affinity.Elements.Contains(element))
         {
             score += tuning.RegisterBonus;
         }
@@ -451,12 +433,61 @@ public sealed class SpriteSelector
         return score;
     }
 
-    /// <summary>Select one attack sprite: compatiblePlans hard filter, same-character
-    /// ids hard-excluded, scored per step 3, object goof budget pinned EXACTLY, blade
-    /// mass capped, seeded softmax top-1.</summary>
+    /// <summary>Class-stage score: the character-to-attack link. Wields position
+    /// (first entry full, later entries decaying, absent penalized), the register's
+    /// class affinity, the hitbox sweep shape, and the move's traits at muted volume
+    /// (mean over the class's candidates).</summary>
+    public double ScoreMoveClass(string attackClass, IReadOnlyList<MoveSpriteDef> members,
+        Dictionary<string, double> traits, double horizontal, double vertical,
+        SpriteDef characterSprite, string register)
+    {
+        MoveSelectionConfig tuning = Config.Moves;
+        int position = -1;
+        for (int i = 0; i < characterSprite.Wields.Count; i++)
+        {
+            if (characterSprite.Wields[i] == attackClass)
+            {
+                position = i;
+                break;
+            }
+        }
+        double score = position switch
+        {
+            0 => tuning.WieldsFirstBonus,
+            > 0 => tuning.WieldsOtherBonus * Math.Pow(tuning.WieldsPositionDecay, position - 1),
+            _ => -tuning.WieldsMissingPenalty,
+        };
+        if (tuning.RegisterAffinities.TryGetValue(register, out RegisterAffinityDef? affinity)
+            && affinity.Classes.Contains(attackClass))
+        {
+            score += tuning.RegisterBonus;
+        }
+        if (horizontal > 0 && Array.IndexOf(HorizontalClasses, attackClass) >= 0)
+        {
+            score += tuning.SweepBonus * horizontal;
+        }
+        if (vertical > 0 && Array.IndexOf(VerticalClasses, attackClass) >= 0)
+        {
+            score += tuning.SweepBonus * vertical;
+        }
+        double meanTraits = 0;
+        foreach (MoveSpriteDef member in members)
+        {
+            meanTraits += MoveTraitScore(member, traits, horizontal: 0, vertical: 0);
+        }
+        return score + tuning.ClassTraitWeight * (meanTraits / members.Count);
+    }
+
+    /// <summary>Select one attack sprite, TWO-STAGE (see MoveSelectionConfig): the
+    /// compatiblePlans hard filter and same-character exclusion shape the pool; the
+    /// wields-driven class stage picks the attack CLASS (object goof budget pinned
+    /// EXACTLY on FRESH picks — generation, game-open — and EXCLUDED on repair
+    /// re-picks, or evolution ratchets objects toward certainty via constant
+    /// collision repairs that objects never reverse); the trait-driven sprite stage
+    /// picks within the class.</summary>
     public string SelectMoveSpriteId(Genome.MoveGenome move, SpriteDef characterSprite,
         string register, ulong seed, IReadOnlyCollection<string>? excludeIds = null,
-        IReadOnlyDictionary<string, int>? gameUsage = null)
+        IReadOnlyDictionary<string, int>? gameUsage = null, bool fresh = true)
     {
         if (MoveLibrary is null)
         {
@@ -479,18 +510,71 @@ public sealed class SpriteSelector
         }
 
         (Dictionary<string, double> traits, double horizontal, double vertical) = MoveTraits(move.Params);
-        var scores = new double[pool.Count];
-        for (int i = 0; i < pool.Count; i++)
+
+        // Class stage: deterministic order (first appearance in the library-ordered pool).
+        var classes = new List<(string Name, List<MoveSpriteDef> Members)>();
+        var byClass = new Dictionary<string, List<MoveSpriteDef>>(StringComparer.Ordinal);
+        foreach (MoveSpriteDef sprite in pool)
         {
-            scores[i] = ScoreMoveSprite(pool[i], traits, horizontal, vertical,
-                characterSprite, register, gameUsage);
+            if (!byClass.TryGetValue(sprite.AttackClass, out List<MoveSpriteDef>? members))
+            {
+                members = new List<MoveSpriteDef>();
+                byClass[sprite.AttackClass] = members;
+                classes.Add((sprite.AttackClass, members));
+            }
+            members.Add(sprite);
         }
-        double[] probs = Softmax(scores, Config.Moves.SoftmaxTemperature);
-        NormalizeClassPriors(pool, probs, Config.Moves.ClassPriorExponent);
-        ScaleMoveClass(pool, probs, s => s.AttackClass == "object", Config.Moves.ObjectBudget, exact: true);
+        var classScores = new double[classes.Count];
+        for (int i = 0; i < classes.Count; i++)
+        {
+            classScores[i] = ScoreMoveClass(classes[i].Name, classes[i].Members,
+                traits, horizontal, vertical, characterSprite, register);
+        }
+        double[] classProbs = Softmax(classScores, Config.Moves.SoftmaxTemperature);
+        for (int i = 0; i < classes.Count; i++)
+        {
+            if (classes[i].Name == "object")
+            {
+                ScaleAt(classProbs, i, fresh ? Config.Moves.ObjectBudget : 0f);
+                break;
+            }
+        }
 
         var rng = new NgPcg(seed, MoveSequence);
-        return pool[SampleIndex(probs, rng)].Id;
+        List<MoveSpriteDef> chosen = classes[SampleIndex(classProbs, rng)].Members;
+
+        // Sprite stage: the move's own params speak at full volume within the class.
+        var spriteScores = new double[chosen.Count];
+        for (int i = 0; i < chosen.Count; i++)
+        {
+            spriteScores[i] = ScoreMoveSprite(chosen[i], traits, horizontal, vertical,
+                characterSprite, register, gameUsage);
+        }
+        double[] spriteProbs = Softmax(spriteScores, Config.Moves.SoftmaxTemperature);
+        return chosen[SampleIndex(spriteProbs, rng)].Id;
+    }
+
+    /// <summary>Pin index i of a probability vector to exactly `share`, scaling the
+    /// rest to the remainder (no-op for a single-entry vector).</summary>
+    private static void ScaleAt(double[] probs, int index, float share)
+    {
+        double others = 0;
+        for (int i = 0; i < probs.Length; i++)
+        {
+            if (i != index)
+            {
+                others += probs[i];
+            }
+        }
+        if (others <= 0)
+        {
+            return;
+        }
+        double factor = (1.0 - share) / others;
+        for (int i = 0; i < probs.Length; i++)
+        {
+            probs[i] = i == index ? share : probs[i] * factor;
+        }
     }
 
     /// <summary>Move-gene upkeep for one character (breeding pipeline): every Attack
@@ -507,7 +591,7 @@ public sealed class SpriteSelector
         {
             return character;
         }
-        string register = PickRegister(SpriteSeed(character));
+        string? register = null; // lazy: the seed hashes the full character content
         var used = new HashSet<string>(StringComparer.Ordinal);
         List<Genome.MoveGenome>? rebuilt = null;
         for (int m = 0; m < character.Moves.Count; m++)
@@ -522,8 +606,9 @@ public sealed class SpriteSelector
                 used.Add(move.SpriteId!);
                 continue;
             }
+            register ??= PickRegister(SpriteSeed(character));
             string id = SelectMoveSpriteId(move, entry, register,
-                MoveSpriteSeed(character, m), used, gameUsage);
+                MoveSpriteSeed(character, m), used, gameUsage, fresh: move.SpriteId is null);
             used.Add(id);
             rebuilt ??= character.Moves.ToList();
             rebuilt[m] = move.WithSpriteId(id);
@@ -559,7 +644,7 @@ public sealed class SpriteSelector
                 continue;
             }
             string id = SelectMoveSpriteId(move, presentedSprite, register,
-                MoveSpriteSeed(character, m), used, gameUsage);
+                MoveSpriteSeed(character, m), used, gameUsage, fresh: move.SpriteId is null);
             used.Add(id);
             result.Add(id);
         }
@@ -591,63 +676,6 @@ public sealed class SpriteSelector
         }
         (Dictionary<string, double> traits, double h, double v) = MoveTraits(move.Params);
         return MoveTraitScore(sprite, traits, h, v) < Config.Moves.RepairFloor;
-    }
-
-    /// <summary>Class-size prior normalization (see MoveSelectionConfig): classes
-    /// compete by score, members split their class's mass.</summary>
-    private static void NormalizeClassPriors(List<MoveSpriteDef> pool, double[] probs, float exponent)
-    {
-        if (exponent <= 0)
-        {
-            return;
-        }
-        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (MoveSpriteDef sprite in pool)
-        {
-            counts[sprite.AttackClass] = counts.TryGetValue(sprite.AttackClass, out int n) ? n + 1 : 1;
-        }
-        double total = 0;
-        for (int i = 0; i < pool.Count; i++)
-        {
-            probs[i] /= Math.Pow(counts[pool[i].AttackClass], exponent);
-            total += probs[i];
-        }
-        if (total <= 0)
-        {
-            return;
-        }
-        for (int i = 0; i < probs.Length; i++)
-        {
-            probs[i] /= total;
-        }
-    }
-
-    private static void ScaleMoveClass(List<MoveSpriteDef> pool, double[] probs,
-        Func<MoveSpriteDef, bool> inClass, float share, bool exact)
-    {
-        double classMass = 0;
-        double otherMass = 0;
-        for (int i = 0; i < pool.Count; i++)
-        {
-            if (inClass(pool[i]))
-            {
-                classMass += probs[i];
-            }
-            else
-            {
-                otherMass += probs[i];
-            }
-        }
-        if (classMass <= 0 || otherMass <= 0 || (!exact && classMass <= share))
-        {
-            return;
-        }
-        double classFactor = share / classMass;
-        double otherFactor = (1.0 - share) / otherMass;
-        for (int i = 0; i < pool.Count; i++)
-        {
-            probs[i] *= inClass(pool[i]) ? classFactor : otherFactor;
-        }
     }
 
     private string PickRegister(NgPcg rng)

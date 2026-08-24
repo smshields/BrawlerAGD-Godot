@@ -310,10 +310,21 @@ public sealed class GameGenome
         var moveUsage = new Dictionary<string, int>(StringComparer.Ordinal);
         for (int i = 0; i < characters.Count; i++)
         {
+            string? bodyBefore = characters[i].SpriteId;
             characters[i] = selector.EnsureGene(characters[i], usage);
             if (characters[i].SpriteId is { } id)
             {
                 usage[id] = usage.TryGetValue(id, out int n) ? n + 1 : 1;
+            }
+            // The look owns its weapons (2026-08-23, the compatibility-ratchet fix):
+            // when the BODY re-resolves, the attack kit re-derives FRESH around the
+            // new look instead of dragging the old one's moves along. Without this,
+            // body churn under param drift strands thematic sprites (a blade dies on
+            // any biped→beast transition) while the wield-anywhere burst class
+            // survives every swap — evolved populations converged to 84% clouds.
+            if (bodyBefore is not null && characters[i].SpriteId != bodyBefore)
+            {
+                characters[i] = StripAttackSpriteGenes(characters[i]);
             }
             characters[i] = selector.EnsureMoveGenes(characters[i], moveUsage);
             foreach (MoveGenome move in characters[i].Moves)
@@ -324,6 +335,23 @@ public sealed class GameGenome
                 }
             }
         }
+    }
+
+    private static CharacterGenome StripAttackSpriteGenes(CharacterGenome character)
+    {
+        List<MoveGenome>? moves = null;
+        for (int m = 0; m < character.Moves.Count; m++)
+        {
+            if (character.Moves[m].SpriteId is not null)
+            {
+                moves ??= character.Moves.ToList();
+                moves[m] = character.Moves[m].WithSpriteId(null);
+            }
+        }
+        return moves is null
+            ? character
+            : new CharacterGenome(character.Name, character.Stocks, character.SpriteIndex,
+                character.Params, moves, character.ButtonMoves, character.SpriteId);
     }
 
     /// <summary>Applies the per-character platform fit using the match constants the

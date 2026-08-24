@@ -256,6 +256,42 @@ public class AttackSpriteSelectionTests
         Assert.Contains(LibraryLazy.Value.ById(victim.SpriteId)!.BodyPlan, fixedSprite.CompatiblePlans);
     }
 
+    [Fact]
+    public void EvolutionDoesNotRatchetObjectsPastTheBudget()
+    {
+        // The banana ratchet (2026-08-23): converged populations collide move sprites
+        // in crossover constantly; if every collision repair re-rolled the 10% object
+        // lottery, objects — in every wields list, with no traits to contradict —
+        // would absorb entire lineages (observed: 4/4 sampled evolved fighters carried
+        // one). Repair picks on merit (budget as cap only); chained breeding must stay
+        // near the fresh-pick rate.
+        GenerationConfig config = SpriteConfig();
+        var rng = new Pcg32(777);
+        GameGenome a = Game(501);
+        GameGenome b = Game(502);
+        int objects = 0;
+        int attacks = 0;
+        for (int i = 0; i < 200; i++)
+        {
+            GameGenome child = GameGenomeOps.Breed(a, b, 0.4f, rng, config);
+            foreach (CharacterGenome c in child.Characters)
+            {
+                foreach ((_, MoveSpriteDef sprite) in AttackPicks(c))
+                {
+                    attacks++;
+                    if (sprite.AttackClass == "object")
+                    {
+                        objects++;
+                    }
+                }
+            }
+            a = b;
+            b = child;
+        }
+        Assert.True(objects <= attacks * 0.25,
+            $"objects ratcheted to {objects}/{attacks} ({objects / (double)attacks:0.###})");
+    }
+
     // ── the presentation pass ───────────────────────────────────────────────────
 
     [Fact]

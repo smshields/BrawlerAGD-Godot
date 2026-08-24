@@ -235,6 +235,7 @@ public static class GameGenomeOps
             string? moveSpriteId = moveFromA ? a.Moves[m].SpriteId : b.Moves[m].SpriteId;
             moves.Add(new MoveGenome(moveParams, moveSprite, a.Moves[m].Type, moveSpriteId));
         }
+        DedupeInheritedAttackSprites(moves, a, b);
         if (config.IsComposed)
         {
             // Composed mode: buttons are identity by structural invariant — nothing to
@@ -259,5 +260,43 @@ public static class GameGenomeOps
             buttonMoves[buttonMoves.Length - 1] = dashSlot;
         }
         return new CharacterGenome(a.Name, a.Stocks, spriteIndex, childParams, moves, buttonMoves, spriteId);
+    }
+
+    /// <summary>Crossover can land two attack slots on the same sprite gene once a
+    /// population converges (parents sharing popular sprites across slots). Heredity
+    /// over lottery (2026-08-23, the banana-ratchet fix): the colliding slot takes
+    /// the OTHER parent's same-slot gene when that resolves the clash — RNG-free, no
+    /// draws — and only an unresolvable duplicate falls to the repair pass (which
+    /// re-picks on merit, objects excluded).</summary>
+    private static void DedupeInheritedAttackSprites(
+        List<MoveGenome> moves, CharacterGenome a, CharacterGenome b)
+    {
+        HashSet<string>? seen = null;
+        for (int m = 0; m < moves.Count; m++)
+        {
+            if (moves[m].Type != MoveType.Attack || moves[m].SpriteId is not { } id)
+            {
+                continue;
+            }
+            seen ??= new HashSet<string>(StringComparer.Ordinal);
+            if (seen.Add(id))
+            {
+                continue;
+            }
+            string? replacement = null;
+            if (a.Moves[m].SpriteId is { } fromA && fromA != id && !seen.Contains(fromA))
+            {
+                replacement = fromA;
+            }
+            else if (b.Moves[m].SpriteId is { } fromB && fromB != id && !seen.Contains(fromB))
+            {
+                replacement = fromB;
+            }
+            if (replacement is not null)
+            {
+                moves[m] = moves[m].WithSpriteId(replacement);
+                seen.Add(replacement);
+            }
+        }
     }
 }
