@@ -100,6 +100,12 @@ public sealed class UtilityAgent : IInputSource
     private const float DefenseFastFall = 2.0f;
     private const float DefenseFastFallVulnerable = 2.8f; // favored in warm-up/cool-down/exhausted (spec)
     private const float DefenseCrouch = 2.5f;       // only when the crouched hurtbox clears the arc
+    // Thin platforms (2026-09-01, FEATURES.md: drop-through as an ESCAPE route, only
+    // with a safe landing below — DEVIATIONS #34): a defense-channel option (hold
+    // down, the crouch drop does the rest), plus a grounded drop-pursuit and a
+    // vulnerable drop-disengage on the vertical channel.
+    private const float DefenseDrop = 2.5f;
+    private const float DropPursuit = 2.0f;         // opponent below a thin floor → drop onto them
     // 2026-07-20 reflect genes: knowing the shield/dash SENDS THE BOLT BACK makes it
     // the better answer to a ranged threat (designer: reflect should increase
     // defensive usage of these options).
@@ -158,7 +164,7 @@ public sealed class UtilityAgent : IInputSource
             return InputFrame.Neutral; // out of the match (2026-08-12) — no RNG spent
         }
         SimPlayer opponent = SelectTarget(world, playerIndex);
-        _graph ??= new PlatformGraph(world.Platforms, self, world.Config.Gravity);
+        _graph ??= new PlatformGraph(world.Platforms, self, world.Config.Gravity, world.PlatformThin);
 
         if (self.State == PlayerState.Shield)
         {
@@ -238,7 +244,15 @@ public sealed class UtilityAgent : IInputSource
             _defenseScores[3] = ctx.DashUsable ? DefenseDash * dashBoost : 0f;
             _defenseScores[4] = airborne && ctx.Self.FastFallAcceleration > 0f
                 ? (fastFallVulnState ? DefenseFastFallVulnerable : DefenseFastFall) : 0f;
-            _defenseScores[5] = ctx.CrouchClearsThreat ? DefenseCrouch : 0f;
+            // Ducking on a thin platform without a landing below would turn into a
+            // suicide drop once the delay elapses — gate it (2026-09-01); thin-free
+            // stages see the exact pre-feature condition.
+            _defenseScores[5] = ctx.CrouchClearsThreat
+                && (!ctx.OnThinPlatform || ctx.CanDropSafely) ? DefenseCrouch : 0f;
+            // Drop-through escape (2026-09-01): standing on a thin platform with a
+            // safe landing below, holding down rides the crouch drop out of the arc.
+            _defenseScores[6] = ctx.CanDropSafely
+                && ctx.Self.State is PlayerState.Idle or PlayerState.Crouch ? DefenseDrop : 0f;
             int defense = Select(_defenseScores);
             int away = -ctx.FacingToOpponent;
             switch (defense)
@@ -266,6 +280,12 @@ public sealed class UtilityAgent : IInputSource
                     attackChoice = 0;
                     verticalChoice = 0;
                     moveChoice = 1; // stay planted; the FSM enters Crouch from Idle+down
+                    break;
+                case 6: // drop through the thin platform (2026-09-01)
+                    jumpChoice = 0;
+                    attackChoice = 0;
+                    verticalChoice = 0;
+                    moveChoice = 1; // held down: crouch → sink → delay → drop
                     break;
             }
         }
@@ -334,7 +354,7 @@ public sealed class UtilityAgent : IInputSource
         return 0;
     }
 
-    private readonly float[] _defenseScores = new float[6];
+    private readonly float[] _defenseScores = new float[7]; // slot 6: thin drop (2026-09-01)
     private float _dashIntentH;
     private float _dashIntentV;
 
@@ -711,30 +731,52 @@ public sealed class UtilityAgent : IInputSource
 
         (int flankDirection, bool flankSafe) = ComputeFlank(world, self, opponent);
 
+        // Thin platforms (2026-09-01, DEVIATIONS #34): where the character stands and
+        // whether a crouch drop from here lands somewhere. All false on thin-free
+        // stages — the instrument is untouched there (utility golden unmoved).
+        int myPlatform = graph.PlatformAt(self.Position);
+        bool onThinPlatform = self.IsGrounded && myPlatform >= 0 && graph.IsThin(myPlatform);
+        bool canDropSafely = onThinPlatform && graph.TryDropLanding(myPlatform, self.Position.X, out _);
+
         // Traversal: next hop toward the opponent's platform via the per-match graph.
         bool hasTraversal = false;
         Vec2 traversalLaunch = Vec2.Zero;
         int traversalDirection = 0;
         bool traversalNeedsJump = false;
-        int myPlatform = graph.PlatformAt(self.Position);
+        bool traversalDrop = false;
         int theirPlatform = graph.PlatformAt(opponent.Position);
         if (myPlatform >= 0 && theirPlatform >= 0 && myPlatform != theirPlatform
             && graph.TryRoute(myPlatform, theirPlatform, out int nextPlatform))
         {
             Aabb mine = graph.Platform(myPlatform);
             Aabb next = graph.Platform(nextPlatform);
-            float launchX = next.Center.X >= mine.Center.X ? mine.Right : mine.Left;
             hasTraversal = true;
-            traversalLaunch = new Vec2(launchX, mine.Top);
-            traversalDirection = next.Center.X >= mine.Center.X ? 1 : -1;
-            // Hop only for a real height gain or a real horizontal gap (2026-07-22,
-            // DEVIATIONS #28). The old test (next.Top >= mine.Top − 0.5) jumped between
-            // platforms at the SAME height that were horizontally ADJACENT — common on
-            // large mirrored maps, where the two center halves touch — burning the air
-            // jump to "hop" across ground the agent could simply walk onto. A gap of 0
-            // and no rise means walk; the horizontal move alone carries it across.
-            float gap = MathF.Max(0f, MathF.Max(next.Left - mine.Right, mine.Left - next.Right));
-            traversalNeedsJump = next.Top > mine.Top + 0.5f || gap > 0.5f;
+            // Drop-through route (2026-09-01): standing on a thin platform whose next
+            // hop is BELOW under its span, the route is a crouch drop — walk over the
+            // overlap and hold down, no jump, no edge detour.
+            float overlapLo = MathF.Max(mine.Left, next.Left);
+            float overlapHi = MathF.Min(mine.Right, next.Right);
+            if (onThinPlatform && next.Top < mine.Top - 0.5f && overlapHi - overlapLo >= 0.5f)
+            {
+                traversalDrop = true;
+                traversalLaunch = new Vec2(
+                    DetMath.Clamp(self.Position.X, overlapLo + 0.25f, overlapHi - 0.25f), mine.Top);
+                traversalDirection = 0;
+            }
+            else
+            {
+                float launchX = next.Center.X >= mine.Center.X ? mine.Right : mine.Left;
+                traversalLaunch = new Vec2(launchX, mine.Top);
+                traversalDirection = next.Center.X >= mine.Center.X ? 1 : -1;
+                // Hop only for a real height gain or a real horizontal gap (2026-07-22,
+                // DEVIATIONS #28). The old test (next.Top >= mine.Top − 0.5) jumped between
+                // platforms at the SAME height that were horizontally ADJACENT — common on
+                // large mirrored maps, where the two center halves touch — burning the air
+                // jump to "hop" across ground the agent could simply walk onto. A gap of 0
+                // and no rise means walk; the horizontal move alone carries it across.
+                float gap = MathF.Max(0f, MathF.Max(next.Left - mine.Right, mine.Left - next.Right));
+                traversalNeedsJump = next.Top > mine.Top + 0.5f || gap > 0.5f;
+            }
         }
 
         return new UtilityContext(
@@ -755,7 +797,10 @@ public sealed class UtilityAgent : IInputSource
             recoverAim,
             crouchClearsThreat,
             projectileThreat,
-            RangedThreat: rangedTelegraph || projectileThreat);
+            RangedThreat: rangedTelegraph || projectileThreat,
+            onThinPlatform,
+            canDropSafely,
+            traversalDrop);
     }
 
     /// <summary>
@@ -1097,6 +1142,14 @@ public sealed class UtilityAgent : IInputSource
                 scores.Horizontal[dx > 0f ? 2 : 0] += TraverseMove;
                 return;
             }
+            if (ctx.TraversalDrop)
+            {
+                // Drop route (2026-09-01, thin platforms): over the overlap, stay
+                // planted and hold down — the crouch drop carries the hop.
+                scores.Horizontal[1] += TraverseMove;
+                scores.Vertical[0] += TraverseJump;
+                return;
+            }
             // At the launch edge: commit to the hop.
             scores.Horizontal[ctx.TraversalDirection > 0 ? 2 : 0] += TraverseMove;
             if (ctx.TraversalNeedsJump && (ctx.Self.IsGrounded || !ctx.Self.JumpsExhausted))
@@ -1246,19 +1299,33 @@ public sealed class UtilityAgent : IInputSource
             {
                 scores.Vertical[0] += FastFallPursuit;
             }
+            // A crouch on a thin platform with nothing below turns into a suicide
+            // drop once the delay elapses — the crouch utilities gate on safety
+            // (2026-09-01; thin-free stages see the exact pre-feature conditions).
+            bool crouchSafe = !ctx.OnThinPlatform || ctx.CanDropSafely;
             // Crouch braking: sliding dangerously fast at high damage with a braking gene.
-            if (self.IsGrounded && self.State == PlayerState.Idle
+            if (self.IsGrounded && self.State == PlayerState.Idle && crouchSafe
                 && self.CrouchAcceleration < 0f && self.Damage >= HighDamageThreshold
                 && MathF.Abs(self.Velocity.X) > self.MaxGroundSpeed)
             {
                 scores.Vertical[0] += CrouchBrake;
             }
             // Crouch-slide approach: a speed-boosting gene and a distant opponent.
-            if (self.IsGrounded && self.State == PlayerState.Idle
+            if (self.IsGrounded && self.State == PlayerState.Idle && crouchSafe
                 && self.CrouchAcceleration > 0f && !ctx.TelegraphThreat
                 && ctx.Distance > DashApproachRange)
             {
                 scores.Vertical[0] += CrouchSlideApproach;
+            }
+            // Drop pursuit (2026-09-01, thin platforms): the opponent is below the
+            // thin floor under our feet and roughly under us — drop onto them (the
+            // grounded sibling of the fast-fall pursuit; also the descending-flank
+            // answer: the "blocking" platform is the one we stand on).
+            if (ctx.CanDropSafely && !ctx.Vulnerable
+                && ctx.Opponent.Position.Y < self.Position.Y - 1.5f
+                && MathF.Abs(ctx.Opponent.Position.X - self.Position.X) < 2f)
+            {
+                scores.Vertical[0] += DropPursuit;
             }
             // DI pre-positioning: about to be hit (or being juggled) → hold toward the
             // farthest blast line (stage center) and up.
@@ -1349,6 +1416,12 @@ public sealed class UtilityAgent : IInputSource
                 away = ctx.Self.Position.X >= 0f ? -1 : 1;
             }
             scores.Horizontal[away > 0 ? 2 : 0] += ExhaustedRetreat;
+            // Thin platforms (2026-09-01): dropping through the floor is a second
+            // disengage route — scored, not forced; the vertical channel arbitrates.
+            if (ctx.CanDropSafely)
+            {
+                scores.Vertical[0] += ExhaustedRetreat;
+            }
         }
     }
 
@@ -1399,7 +1472,11 @@ public readonly record struct UtilityContext(
     Vec2 RecoverAim,
     bool CrouchClearsThreat,
     bool ProjectileThreat,
-    bool RangedThreat);
+    bool RangedThreat,
+    // Thin platforms (2026-09-01, DEVIATIONS #34) — all false on thin-free stages.
+    bool OnThinPlatform,
+    bool CanDropSafely,
+    bool TraversalDrop);
 
 /// <summary>
 /// The per-decision score sheet. Horizontal = {left, neutral, right}; Jump = {no, yes};

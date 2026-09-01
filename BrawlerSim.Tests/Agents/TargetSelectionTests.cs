@@ -137,6 +137,13 @@ public class TargetSelectionTests
             sources[i] = new UtilityAgent(new Pcg32(20260812, (ulong)i));
         }
         MatchResult result = MatchRunner.Run(genome, sources);
+        // Re-pinned 2026-09-01 (thin platforms, agent step — FEATURE-FINAL): the
+        // utility agents now read the thin flags (drop-route traversal, safe-drop
+        // escape, gated crouch utilities — DEVIATIONS #34), which changes their
+        // decisions on this thin-carrying fixture. The 2P utility golden (thin-free
+        // fixture) is UNMOVED — the instrument is untouched off thin stages. This
+        // golden now covers generation, sim, and agent thin behavior end to end.
+        // Prior pin: 1116537472962063982.
         // Re-pinned 2026-09-01 (thin platforms, sim step): the fixture stage's thin
         // platforms now COLLIDE thin (top-slice, one-way landing, gated hash
         // suffix), so this golden covers the thin sim end to end. Expect one more
@@ -152,6 +159,6 @@ public class TargetSelectionTests
         // Pinned 2026-08-12 (first pin — the 4P mode is new with this feature):
         // covers N-player spawning, all-pairs contact/hits, elimination, the gated
         // hash suffix, and nearest-enemy targeting end to end.
-        Assert.Equal(1116537472962063982UL, result.FinalHash);
+        Assert.Equal(16047808205587140936UL, result.FinalHash);
     }
 }

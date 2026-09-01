@@ -23,14 +23,23 @@ public sealed class PlatformGraph
     private const float StandTolerance = 0.75f;  // how far above a top "standing on it" reaches
 
     private readonly IReadOnlyList<Aabb> _platforms;
+    private readonly IReadOnlyList<bool>? _thin; // null = all solid (pre-feature callers)
     private readonly int[,] _nextHop; // [from, to] → next platform index, -1 = no route
 
-    public PlatformGraph(IReadOnlyList<Aabb> platforms, SimPlayer character, float gravity)
+    public PlatformGraph(IReadOnlyList<Aabb> platforms, SimPlayer character, float gravity,
+        IReadOnlyList<bool>? thin = null)
     {
         _platforms = platforms;
+        _thin = thin;
         int n = platforms.Count;
         var edges = new bool[n, n];
         float g = MathF.Max(0.01f, gravity * character.GravityScale);
+        // Thin platforms (2026-09-01) add NO edges: a downward hop over overlapping
+        // spans is already hop-feasible (gap 0, negative rise), so the route table is
+        // exactly the pre-feature one. What changes is route EXECUTION — a downward
+        // next-hop under a thin platform is taken by crouch-dropping instead of
+        // walking to the edge (UtilityAgent's TraversalDrop), guided by IsThin and
+        // TryDropLanding below.
         for (int a = 0; a < n; a++)
         {
             for (int b = 0; b < n; b++)
@@ -70,6 +79,36 @@ public sealed class PlatformGraph
     }
 
     public Aabb Platform(int index) => _platforms[index];
+
+    /// <summary>Is this platform drop-through (2026-09-01, thin platforms)?</summary>
+    public bool IsThin(int index) => _thin is not null && index < _thin.Count && _thin[index];
+
+    /// <summary>The platform a crouch drop from <paramref name="from"/> at column
+    /// <paramref name="x"/> would land on: the HIGHEST platform below whose span
+    /// contains x. False = nothing below — the drop would fall out the bottom, so it
+    /// is never a safe escape (FEATURES.md: "only if there is a reachable platform
+    /// below that they can safely land on").</summary>
+    public bool TryDropLanding(int from, float x, out int landing)
+    {
+        landing = -1;
+        if (from < 0)
+        {
+            return false;
+        }
+        float fromTop = _platforms[from].Top;
+        float bestTop = float.NegativeInfinity;
+        for (int i = 0; i < _platforms.Count; i++)
+        {
+            Aabb p = _platforms[i];
+            if (i != from && p.Top < fromTop && p.Top > bestTop
+                && x >= p.Left && x <= p.Right)
+            {
+                landing = i;
+                bestTop = p.Top;
+            }
+        }
+        return landing >= 0;
+    }
 
     /// <summary>The platform this position stands on / falls onto within tolerance:
     /// highest top ≤ y + tolerance whose x-span contains x. −1 = over nothing.</summary>
