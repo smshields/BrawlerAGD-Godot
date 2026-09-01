@@ -130,19 +130,10 @@ public sealed class DecisionTreeAgent : IInputSource
         _pressAttack = false;
     }
 
-    /// <summary>No platform anywhere below the sample point (Unity: infinite raycast down).</summary>
-    private static bool OverPit(SimWorld world, SimPlayer self, float xOffset)
-    {
-        float x = self.Position.X + xOffset;
-        foreach (Aabb platform in world.Platforms)
-        {
-            if (x >= platform.Left && x <= platform.Right && platform.Top <= self.Position.Y)
-            {
-                return false;
-            }
-        }
-        return true;
-    }
+    /// <summary>No platform anywhere below the sample point (Unity: infinite raycast
+    /// down). The body lives in AgentGeometry, shared verbatim with the UtilityAgent.</summary>
+    private static bool OverPit(SimWorld world, SimPlayer self, float xOffset) =>
+        AgentGeometry.OverPit(world, self, xOffset);
 
     private static bool ApproachingEdge(SimWorld world, SimPlayer self)
     {
@@ -157,9 +148,7 @@ public sealed class DecisionTreeAgent : IInputSource
     /// </summary>
     private static Vec2 ClosestSensedPlatformPoint(SimWorld world, SimPlayer self)
     {
-        // 2026-07-21 (Map Size, DEVIATIONS #27): half extents scale with map size —
-        // exactly the Unity 20×15 box on legacy-size maps.
-        var sense = new Aabb(self.Position, world.PlatformSenseHalf);
+        var sense = AgentGeometry.SenseBox(world, self);
 
         Vec2 nearest = Vec2.Zero;
         float best = float.PositiveInfinity;

@@ -21,7 +21,7 @@ namespace BrawlerSim.Agents;
 /// channel, plus one sample draw when the proportional branch is taken); arithmetic is
 /// +,−,×,÷,sqrt — no transcendentals (cross-platform hash safety).
 /// </summary>
-public sealed class UtilityAgent : IInputSource
+public sealed partial class UtilityAgent : IInputSource
 {
     // v1 behavior weights (docs/features/utility-agent.md "Initial utility functions").
     // Constants, not config: the comparison study is the calibration loop for these.
@@ -129,6 +129,15 @@ public sealed class UtilityAgent : IInputSource
     private const float DashRecoverHorizontalGap = 2.5f;
     private const float BreakPunishBonus = 2.0f;
     private const float BreakPunishDamagePreference = 0.2f;
+    // Pursuit-from-above window (fast-fall pursuit and its thin-drop sibling):
+    // opponent clearly below and roughly in our column.
+    private const float PursuitVerticalGap = 1.5f;
+    private const float PursuitColumnWidth = 2f;
+    // Aim the raised shield only while it is small relative to the body — a shield
+    // this many times the larger body half extent (or more) covers everything anyway.
+    private const float SmallShieldAimFactor = 2f;
+    // How far a threat arc/corridor must clear the crouched silhouette to duck it.
+    private const float CrouchClearanceEpsilon = 0.05f;
 
     private readonly Pcg32 _rng;
     private readonly AgentConfig _config;
@@ -145,6 +154,34 @@ public sealed class UtilityAgent : IInputSource
     private bool _couldHit;
     private bool _wasProjectileThreat;
     private bool _wasStunned;
+
+    // Committed dash intent (held from the press, steered through warm-up).
+    private float _dashIntentH;
+    private float _dashIntentV;
+
+    // Raised-shield decision state (ManageRaisedShield).
+    private bool _heldShieldHold = true; // entering Shield implies the raise decision
+    private float _heldAimH;
+    private float _heldAimV;
+
+    // Reused score buffers (never reallocated; contents rewritten before each Select).
+    private readonly float[] _defenseScores = new float[DefenseOptionCount];
+    private readonly float[] _shieldScores = new float[2];
+
+    /// <summary>The defense channel's option slots — indices into _defenseScores
+    /// (slot 6 = the thin drop, 2026-09-01).</summary>
+    private enum DefenseOption
+    {
+        None = 0,
+        Jump = 1,
+        Shield = 2,
+        Dash = 3,
+        FastFall = 4,
+        Crouch = 5,
+        Drop = 6,
+    }
+
+    private const int DefenseOptionCount = 7;
 
     public UtilityAgent(Pcg32 rng, AgentConfig? config = null)
     {
@@ -212,108 +249,127 @@ public sealed class UtilityAgent : IInputSource
             behavior.Contribute(in ctx, scores);
         }
 
-        int moveChoice = Select(scores.Horizontal);          // 0 left, 1 neutral, 2 right
-        int verticalChoice = Select(scores.Vertical);        // 0 down, 1 neutral, 2 up
-        int jumpChoice = Select(scores.Jump);                // 0 no, 1 yes
+        int moveChoice = Select(scores.Horizontal);          // UtilityScores.Left/HNeutral/Right
+        int verticalChoice = Select(scores.Vertical);        // UtilityScores.Down/VNeutral/Up
+        int jumpChoice = Select(scores.Jump);                // UtilityScores.NoJump/DoJump
         int attackChoice = Select(scores.Attack);            // 0 none, else candidate
 
-        // Defense channel (2026-07-13, replaces the pairwise dodge/shield coin): on a
-        // telegraphed swing with no counter-hit available — trade-commit: landing OUR
-        // melee interrupts THEIRS — ONE weighted-random pick among the defense
-        // options. An incoming projectile (2026-07-14) triggers defense REGARDLESS of
-        // counter-hit options: the bolt is committed damage already in flight, and
-        // counter-firing does nothing to stop it (unlike the melee trade).
-        if ((ctx.TelegraphThreat && !ctx.AnyCanHit || ctx.ProjectileThreat)
-            && ctx.Self.State is not (PlayerState.WarmUp or PlayerState.Attack))
-        {
-            bool jumpAvailable = ctx.Self.IsGrounded || !ctx.Self.JumpsExhausted;
-            float shieldMargin = MathF.Max(0f,
-                (ctx.ShieldHealthFraction - ShieldReleaseHealthFraction) / (1f - ShieldReleaseHealthFraction));
-            bool shieldUsable = ctx.Self.State == PlayerState.Idle && shieldMargin > 0f && !ctx.OverPit;
-            bool airborne = !ctx.Self.IsGrounded;
-            bool fastFallVulnState = ctx.Self.State is PlayerState.WarmUp
-                or PlayerState.CoolDown or PlayerState.AirJumpsExhausted;
-            _defenseScores[0] = DefenseNone;
-            _defenseScores[1] = jumpAvailable ? DefenseJump : 0f;
-            // Reflect awareness (2026-07-20): against a RANGED threat, an option that
-            // re-fires the bolt outranks one that merely avoids it.
-            float shieldBoost = ctx.RangedThreat && FirstShieldReflects(ctx.Self) ? ReflectDefenseBoost : 1f;
-            float dashBoost = ctx.RangedThreat && ctx.DashSlot >= 0
-                && ctx.Self.Dashes[ctx.DashSlot] is { Reflect: true } ? ReflectDefenseBoost : 1f;
-            _defenseScores[2] = shieldUsable ? DefenseShield * shieldMargin * shieldBoost : 0f;
-            _defenseScores[3] = ctx.DashUsable ? DefenseDash * dashBoost : 0f;
-            _defenseScores[4] = airborne && ctx.Self.FastFallAcceleration > 0f
-                ? (fastFallVulnState ? DefenseFastFallVulnerable : DefenseFastFall) : 0f;
-            // Ducking on a thin platform without a landing below would turn into a
-            // suicide drop once the delay elapses — gate it (2026-09-01); thin-free
-            // stages see the exact pre-feature condition.
-            _defenseScores[5] = ctx.CrouchClearsThreat
-                && (!ctx.OnThinPlatform || ctx.CanDropSafely) ? DefenseCrouch : 0f;
-            // Drop-through escape (2026-09-01): standing on a thin platform with a
-            // safe landing below, holding down rides the crouch drop out of the arc.
-            _defenseScores[6] = ctx.CanDropSafely
-                && ctx.Self.State is PlayerState.Idle or PlayerState.Crouch ? DefenseDrop : 0f;
-            int defense = Select(_defenseScores);
-            int away = -ctx.FacingToOpponent;
-            switch (defense)
-            {
-                case 1:
-                    jumpChoice = 1;
-                    moveChoice = away > 0 ? 2 : 0;
-                    attackChoice = 0;
-                    break;
-                case 2:
-                    jumpChoice = 0;
-                    attackChoice = ShieldCandidate(scores, ctx.Self);
-                    break;
-                case 3:
-                    jumpChoice = 0;
-                    attackChoice = DashCandidate(scores, ctx.DashSlot);
-                    break;
-                case 4: // fast fall out of the arc
-                    jumpChoice = 0;
-                    attackChoice = 0;
-                    verticalChoice = 0;
-                    break;
-                case 5: // duck under it
-                    jumpChoice = 0;
-                    attackChoice = 0;
-                    verticalChoice = 0;
-                    moveChoice = 1; // stay planted; the FSM enters Crouch from Idle+down
-                    break;
-                case 6: // drop through the thin platform (2026-09-01)
-                    jumpChoice = 0;
-                    attackChoice = 0;
-                    verticalChoice = 0;
-                    moveChoice = 1; // held down: crouch → sink → delay → drop
-                    break;
-            }
-        }
+        ApplyDefenseChannel(in ctx, scores, ref moveChoice, ref verticalChoice,
+            ref jumpChoice, ref attackChoice);
+        bool dashChosen = TryLatchDashIntent(in ctx, scores, attackChoice);
 
-        // A selected dash press locks in its intent direction (held from the press
-        // itself and steered through warm-up): recovery → the landing aim above the
-        // platform; threatened → away; otherwise → the opponent.
-        bool dashChosen = attackChoice > 0
-            && ctx.Self.MoveTypeAt(scores.AttackMoves[attackChoice]) == Genome.MoveType.Dash;
-        if (dashChosen)
-        {
-            Vec2 target = ctx.OverPit && ctx.RecoverTargetValid ? ctx.RecoverAim - ctx.Self.Position
-                : ctx.TelegraphThreat ? new Vec2(-ctx.FacingToOpponent, 0f)
-                : ctx.Opponent.Position - ctx.Self.Position;
-            _dashIntentH = MathF.Sign(target.X);
-            _dashIntentV = MathF.Sign(target.Y);
-            if (ctx.OverPit && _dashIntentV < 0f)
-            {
-                _dashIntentV = 0f; // a recovery dash never points downward (designer)
-            }
-        }
-
+        // Channel slots map to axis values as slot − 1 (Left/Down = −1 … Right/Up = +1).
         _heldHorizontal = dashChosen ? _dashIntentH : moveChoice - 1;
         _heldVertical = dashChosen ? _dashIntentV : verticalChoice - 1;
         byte actions = attackChoice > 0
             ? InputFrame.ActionBit(scores.AttackButtons[attackChoice])
             : (byte)0;
-        return new InputFrame(_heldHorizontal, _heldVertical, jumpChoice == 1, actions);
+        return new InputFrame(_heldHorizontal, _heldVertical, jumpChoice == UtilityScores.DoJump, actions);
+    }
+
+    /// <summary>
+    /// Defense channel (2026-07-13, replaces the pairwise dodge/shield coin): on a
+    /// telegraphed swing with no counter-hit available — trade-commit: landing OUR
+    /// melee interrupts THEIRS — ONE weighted-random pick among the defense options.
+    /// An incoming projectile (2026-07-14) triggers defense REGARDLESS of counter-hit
+    /// options: the bolt is committed damage already in flight, and counter-firing
+    /// does nothing to stop it (unlike the melee trade). Draws RNG (one Select) ONLY
+    /// when the trigger condition holds — the RNG stream is part of the instrument.
+    /// </summary>
+    private void ApplyDefenseChannel(in UtilityContext ctx, UtilityScores scores,
+        ref int moveChoice, ref int verticalChoice, ref int jumpChoice, ref int attackChoice)
+    {
+        bool triggered = (ctx.TelegraphThreat && !ctx.AnyCanHit || ctx.ProjectileThreat)
+            && ctx.Self.State is not (PlayerState.WarmUp or PlayerState.Attack);
+        if (!triggered)
+        {
+            return;
+        }
+        bool jumpAvailable = ctx.Self.IsGrounded || !ctx.Self.JumpsExhausted;
+        float shieldMargin = MathF.Max(0f,
+            (ctx.ShieldHealthFraction - ShieldReleaseHealthFraction) / (1f - ShieldReleaseHealthFraction));
+        bool shieldUsable = ctx.Self.State == PlayerState.Idle && shieldMargin > 0f && !ctx.OverPit;
+        bool airborne = !ctx.Self.IsGrounded;
+        bool fastFallVulnState = ctx.Self.State is PlayerState.WarmUp
+            or PlayerState.CoolDown or PlayerState.AirJumpsExhausted;
+        _defenseScores[(int)DefenseOption.None] = DefenseNone;
+        _defenseScores[(int)DefenseOption.Jump] = jumpAvailable ? DefenseJump : 0f;
+        // Reflect awareness (2026-07-20): against a RANGED threat, an option that
+        // re-fires the bolt outranks one that merely avoids it.
+        float shieldBoost = ctx.RangedThreat && FirstShieldReflects(ctx.Self) ? ReflectDefenseBoost : 1f;
+        float dashBoost = ctx.RangedThreat && ctx.DashSlot >= 0
+            && ctx.Self.Dashes[ctx.DashSlot] is { Reflect: true } ? ReflectDefenseBoost : 1f;
+        _defenseScores[(int)DefenseOption.Shield] = shieldUsable ? DefenseShield * shieldMargin * shieldBoost : 0f;
+        _defenseScores[(int)DefenseOption.Dash] = ctx.DashUsable ? DefenseDash * dashBoost : 0f;
+        _defenseScores[(int)DefenseOption.FastFall] = airborne && ctx.Self.FastFallAcceleration > 0f
+            ? (fastFallVulnState ? DefenseFastFallVulnerable : DefenseFastFall) : 0f;
+        // Ducking on a thin platform without a landing below would turn into a
+        // suicide drop once the delay elapses — gate it (2026-09-01); thin-free
+        // stages see the exact pre-feature condition.
+        _defenseScores[(int)DefenseOption.Crouch] = ctx.CrouchClearsThreat
+            && (!ctx.OnThinPlatform || ctx.CanDropSafely) ? DefenseCrouch : 0f;
+        // Drop-through escape (2026-09-01): standing on a thin platform with a
+        // safe landing below, holding down rides the crouch drop out of the arc.
+        _defenseScores[(int)DefenseOption.Drop] = ctx.CanDropSafely
+            && ctx.Self.State is PlayerState.Idle or PlayerState.Crouch ? DefenseDrop : 0f;
+        var defense = (DefenseOption)Select(_defenseScores);
+        int away = -ctx.FacingToOpponent;
+        switch (defense)
+        {
+            case DefenseOption.Jump:
+                jumpChoice = UtilityScores.DoJump;
+                moveChoice = UtilityScores.Toward(away);
+                attackChoice = 0;
+                break;
+            case DefenseOption.Shield:
+                jumpChoice = UtilityScores.NoJump;
+                attackChoice = ShieldCandidate(scores, ctx.Self);
+                break;
+            case DefenseOption.Dash:
+                jumpChoice = UtilityScores.NoJump;
+                attackChoice = DashCandidate(scores, ctx.DashSlot);
+                break;
+            case DefenseOption.FastFall: // fast fall out of the arc
+                jumpChoice = UtilityScores.NoJump;
+                attackChoice = 0;
+                verticalChoice = UtilityScores.Down;
+                break;
+            case DefenseOption.Crouch: // duck under it
+                jumpChoice = UtilityScores.NoJump;
+                attackChoice = 0;
+                verticalChoice = UtilityScores.Down;
+                moveChoice = UtilityScores.HNeutral; // stay planted; the FSM enters Crouch from Idle+down
+                break;
+            case DefenseOption.Drop: // drop through the thin platform (2026-09-01)
+                jumpChoice = UtilityScores.NoJump;
+                attackChoice = 0;
+                verticalChoice = UtilityScores.Down;
+                moveChoice = UtilityScores.HNeutral; // held down: crouch → sink → delay → drop
+                break;
+        }
+    }
+
+    /// <summary>A selected dash press locks in its intent direction (held from the
+    /// press itself and steered through warm-up): recovery → the landing aim above
+    /// the platform; threatened → away; otherwise → the opponent.</summary>
+    private bool TryLatchDashIntent(in UtilityContext ctx, UtilityScores scores, int attackChoice)
+    {
+        bool dashChosen = attackChoice > 0
+            && ctx.Self.MoveTypeAt(scores.AttackMoves[attackChoice]) == Genome.MoveType.Dash;
+        if (!dashChosen)
+        {
+            return false;
+        }
+        Vec2 target = ctx.OverPit && ctx.RecoverTargetValid ? ctx.RecoverAim - ctx.Self.Position
+            : ctx.TelegraphThreat ? new Vec2(-ctx.FacingToOpponent, 0f)
+            : ctx.Opponent.Position - ctx.Self.Position;
+        _dashIntentH = MathF.Sign(target.X);
+        _dashIntentV = MathF.Sign(target.Y);
+        if (ctx.OverPit && _dashIntentV < 0f)
+        {
+            _dashIntentV = 0f; // a recovery dash never points downward (designer)
+        }
+        return true;
     }
 
     /// <summary>Does the shield the defense channel would raise (the first shield
@@ -354,10 +410,6 @@ public sealed class UtilityAgent : IInputSource
         return 0;
     }
 
-    private readonly float[] _defenseScores = new float[7]; // slot 6: thin drop (2026-09-01)
-    private float _dashIntentH;
-    private float _dashIntentV;
-
     /// <summary>
     /// Shield management (2026-07-12 humanization, designer-directed): hold/release
     /// and aim go through the SAME imperfection machinery as everything else — the
@@ -395,7 +447,7 @@ public sealed class UtilityAgent : IInputSource
 
             _heldAimH = 0f;
             _heldAimV = 0f;
-            if (_heldShieldHold && self.ShieldRadius < MathF.Max(self.BodyHalf.X, self.BodyHalf.Y) * 2f)
+            if (_heldShieldHold && self.ShieldRadius < MathF.Max(self.BodyHalf.X, self.BodyHalf.Y) * SmallShieldAimFactor)
             {
                 _heldAimH = MathF.Sign(opponent.Position.X - self.Position.X);
                 _heldAimV = MathF.Sign(opponent.Position.Y - self.Position.Y);
@@ -407,11 +459,6 @@ public sealed class UtilityAgent : IInputSource
             : (byte)0;
         return new InputFrame(_heldAimH, _heldAimV, false, actions);
     }
-
-    private readonly float[] _shieldScores = new float[2];
-    private bool _heldShieldHold = true; // entering Shield implies the raise decision
-    private float _heldAimH;
-    private float _heldAimV;
 
     private static float ShieldHealthFractionOf(SimPlayer self)
     {
@@ -521,22 +568,9 @@ public sealed class UtilityAgent : IInputSource
     {
         // Dash availability first — recovery reachability must credit a usable dash
         // (2026-07-13 playtest fix: with jumps spent, the dash IS the way back up).
-        int dashSlot = -1;
-        for (int m = 0; m < self.Dashes.Count; m++)
-        {
-            if (self.Dashes[m] is not null && self.ButtonForMove(m) >= 0)
-            {
-                dashSlot = m;
-                break;
-            }
-        }
-        bool dashUsable = dashSlot >= 0 && self.CanDash
-            && self.State is PlayerState.Idle or PlayerState.Air or PlayerState.AirJumpsExhausted;
-        float dashRange = dashUsable
-            ? self.Dashes[dashSlot]!.Speed * self.Dashes[dashSlot]!.DurationTicks * world.Config.Dt
-            : 0f;
+        (int dashSlot, bool dashUsable, float dashRange) = ResolveDashCapability(world, self);
 
-        bool overPit = OverPit(world, self, 0f);
+        bool overPit = AgentGeometry.OverPit(world, self, 0f);
         Vec2 recoverTarget = Vec2.Zero;
         Aabb recoverPlatform = default;
         bool targetSensed = false, reachable = false;
@@ -558,163 +592,16 @@ public sealed class UtilityAgent : IInputSource
         // a ghost. Gated on the SPAWN immunity only (not the 0.1 s post-hit
         // invincibility), so legacy matches leave the instrument untouched.
         bool opponentImmune = opponent.SpawnDamageImmune;
-        Vec2 attackTarget = opponent.Position;
-        float bestTravel = float.PositiveInfinity;
-        for (int m = 0; m < self.Moves.Count; m++)
-        {
-            if (self.ButtonForMove(m) < 0 || self.Moves[m] is not SimMove move)
-            {
-                continue; // shield slots have no hitbox to reach with
-            }
-            // Reach test with facing toward the opponent — turning is a same-tick input.
-            Vec2 offset = new(move.Offset.X * facingToOpponent, move.Offset.Y);
-            var hitbox = new Aabb(
-                self.Position + offset,
-                new Vec2(move.BaseHalf.X * self.WidthScalar, move.BaseHalf.Y * self.HeightScalar));
-            canHit[m] = !opponentImmune && hitbox.Overlaps(opponent.Body);
-            anyCanHit |= canHit[m];
+        Vec2 attackTarget = ComputeMeleeReach(self, opponent, facingToOpponent,
+            opponentImmune, canHit, ref anyCanHit);
+        ComputeProjectileReach(world, self, opponent, opponentImmune, canHit, ref anyCanHit);
 
-            // The position to fight FROM: stand where this move's hitbox lands on the
-            // opponent (the DT's relMove×1.2 chase, generalized per move). A downward
-            // move makes the agent seek height above the opponent — the hop-over
-            // corridor dance the paper observed emerges from the genome, not the code.
-            Vec2 candidate = opponent.Position - offset * 1.2f;
-            float travel = (candidate - self.Position).Length();
-            if (travel < bestTravel)
-            {
-                bestTravel = travel;
-                attackTarget = candidate;
-            }
-        }
+        (bool telegraphThreat, bool rangedTelegraph, bool crouchClearsThreat) =
+            ScanTelegraphThreats(world, self);
 
-        // Projectile reach (2026-07-14): a LOOSE corridor prediction per the spec —
-        // horizontal distance within the closed-form range, vertical offset within the
-        // path's lateral envelope (+slack), and outside the close-range gate. The
-        // candidate then scores on the attack channel via ProjectileBehavior.
-        for (int m = 0; m < self.Moves.Count; m++)
-        {
-            if (self.ButtonForMove(m) < 0 || self.ProjectileMoves[m] is not SimProjectileMove ranged)
-            {
-                continue;
-            }
-            canHit[m] = !opponentImmune && ProjectileCorridorHit(ranged, self, opponent, world.Config);
-            anyCanHit |= canHit[m];
-        }
+        bool projectileThreat = ScanIncomingProjectiles(world, self, ref crouchClearsThreat);
 
-        // Telegraph: an enemy is WINDING UP an attack whose arc (+margin) covers us —
-        // the readable moment defensive options respond to. ALL present enemies are
-        // scanned in index order (2026-08-12, designer: dodge whoever is winding up on
-        // you, not just the target) — with a single enemy this is exactly the old
-        // single-opponent test. A winding-up PROJECTILE telegraphs exactly like melee
-        // (2026-07-20, designer: warm-up phases signal defensive counterplay across
-        // the board): the "arc" is the shot's predicted corridor at our column — the
-        // same loose test the shooter aimed with, seen from the receiving end. That is
-        // what makes shields viable against zoners (warm-up + flight time to react);
-        // trade-commit still applies (interrupting the shooter cancels the shot).
-        // Ducking helps only if EVERY threatening source passes above the crouched
-        // silhouette (grounded, from Idle, feet planted).
-        bool telegraphThreat = false;
-        bool rangedTelegraph = false;
-        bool crouchClearsAllTelegraphs = true;
-        foreach (SimPlayer enemy in world.Players)
-        {
-            if (enemy == self || enemy.IsAbsent || enemy.State != PlayerState.WarmUp)
-            {
-                continue;
-            }
-            float feetY = self.Position.Y - self.BodyHalf.Y;
-            float crouchedTop = feetY + 2f * self.BodyHalf.Y * self.CrouchHeightRatio;
-            bool canDuck = self.IsGrounded && self.State == PlayerState.Idle;
-            if (enemy.Moves[enemy.CurrentMoveIndex] is SimMove windingUp)
-            {
-                var arc = new Aabb(
-                    enemy.Position + new Vec2(windingUp.Offset.X * enemy.Facing, windingUp.Offset.Y),
-                    new Vec2(
-                        windingUp.BaseHalf.X * enemy.WidthScalar + TelegraphDodgeMargin,
-                        windingUp.BaseHalf.Y * enemy.HeightScalar + TelegraphDodgeMargin));
-                if (arc.Overlaps(self.Body))
-                {
-                    telegraphThreat = true;
-                    crouchClearsAllTelegraphs &= canDuck && arc.Bottom > crouchedTop + 0.05f;
-                }
-            }
-            else if (enemy.ProjectileMoves[enemy.CurrentMoveIndex] is SimProjectileMove windingShot
-                && ProjectileCorridorHit(windingShot, enemy, self, world.Config))
-            {
-                telegraphThreat = true;
-                rangedTelegraph = true;
-                float corridorBottom = ProjectileCorridorCenterY(
-                    windingShot, enemy, self, world.Config) - windingShot.HalfExtent;
-                crouchClearsAllTelegraphs &= canDuck && corridorBottom > crouchedTop + 0.05f;
-            }
-        }
-        bool crouchClearsThreat = telegraphThreat && crouchClearsAllTelegraphs;
-
-        // Incoming projectiles (2026-07-14): sample each dangerous projectile's
-        // closed-form path over the lookahead; a predicted overlap with our body
-        // (inflated by its half extent) is a threat the defense channel answers.
-        // Ducking helps only if every threatening sample passes above the crouched
-        // silhouette — same geometry rule as the melee arc.
-        bool projectileThreat = false;
-        if (world.Projectiles.Count > 0)
-        {
-            float minPredictedBottom = float.MaxValue;
-            Aabb body = self.Body;
-            foreach (SimProjectile incoming in world.Projectiles)
-            {
-                bool dangerous = incoming.Owner != self.Index
-                    || (incoming.Move.HitsSelf && incoming.ClearedOwner);
-                if (!dangerous)
-                {
-                    continue;
-                }
-                var threatBox = new Aabb(body.Center,
-                    new Vec2(body.Half.X + incoming.Move.HalfExtent, body.Half.Y + incoming.Move.HalfExtent));
-                for (int k = ProjectileLookaheadStep; k <= ProjectileLookaheadTicks; k += ProjectileLookaheadStep)
-                {
-                    Vec2 predicted = incoming.Move.PositionAt(
-                        incoming.Origin, incoming.Facing, incoming.PathAgeTicks + k, world.Config);
-                    if (predicted.X >= threatBox.Left && predicted.X <= threatBox.Right
-                        && predicted.Y >= threatBox.Bottom && predicted.Y <= threatBox.Top)
-                    {
-                        projectileThreat = true;
-                        minPredictedBottom = MathF.Min(
-                            minPredictedBottom, predicted.Y - incoming.Move.HalfExtent);
-                    }
-                }
-            }
-            if (projectileThreat && self.IsGrounded && self.State == PlayerState.Idle)
-            {
-                float feetY = self.Position.Y - self.BodyHalf.Y;
-                float crouchedTop = feetY + 2f * self.BodyHalf.Y * self.CrouchHeightRatio;
-                crouchClearsThreat |= minPredictedBottom > crouchedTop + 0.05f;
-            }
-        }
-
-        // Threat: can any ENEMY's move reach me right now (their facing toward me)?
-        // Humans see the incoming swing arc and leave it. All present enemies since
-        // 2026-08-12 — the single-enemy scan is the old one exactly.
-        bool underThreat = false;
-        foreach (SimPlayer enemy in world.Players)
-        {
-            if (enemy == self || enemy.IsAbsent || underThreat)
-            {
-                continue;
-            }
-            // Exactly the old -facingToOpponent, including the >= tie-break at equal X.
-            int enemyFacing = enemy.Position.X >= self.Position.X ? -1 : 1;
-            for (int m = 0; m < enemy.Moves.Count && !underThreat; m++)
-            {
-                if (enemy.ButtonForMove(m) < 0 || enemy.Moves[m] is not SimMove move)
-                {
-                    continue;
-                }
-                var theirHitbox = new Aabb(
-                    enemy.Position + new Vec2(move.Offset.X * enemyFacing, move.Offset.Y),
-                    new Vec2(move.BaseHalf.X * enemy.WidthScalar, move.BaseHalf.Y * enemy.HeightScalar));
-                underThreat = theirHitbox.Overlaps(self.Body);
-            }
-        }
+        bool underThreat = ScanEnemyThreatReach(world, self);
 
         // Vulnerable = cannot attack (CoolDown / AirJumpsExhausted). Since the
         // 2026-07-23 exhaustion rule (DEVIATIONS #31) a dash in hand keeps the
@@ -739,68 +626,296 @@ public sealed class UtilityAgent : IInputSource
         bool canDropSafely = onThinPlatform && graph.TryDropLanding(myPlatform, self.Position.X, out _);
 
         // Traversal: next hop toward the opponent's platform via the per-match graph.
-        bool hasTraversal = false;
-        Vec2 traversalLaunch = Vec2.Zero;
-        int traversalDirection = 0;
-        bool traversalNeedsJump = false;
-        bool traversalDrop = false;
-        int theirPlatform = graph.PlatformAt(opponent.Position);
-        if (myPlatform >= 0 && theirPlatform >= 0 && myPlatform != theirPlatform
-            && graph.TryRoute(myPlatform, theirPlatform, out int nextPlatform))
+        (bool hasTraversal, Vec2 traversalLaunch, int traversalDirection,
+            bool traversalNeedsJump, bool traversalDrop) =
+            ComputeTraversal(graph, self, opponent, myPlatform, onThinPlatform);
+
+        // Every argument named: the record has 30+ parameters with same-typed
+        // neighbors, and a silent positional swap here would surface only as a
+        // golden-hash diff.
+        return new UtilityContext(
+            World: world,
+            Self: self,
+            Opponent: opponent,
+            OverPit: overPit,
+            Doomed: overPit && !reachable,
+            RecoverTarget: recoverTarget,
+            RecoverTargetValid: targetSensed && reachable,
+            Distance: (opponent.Position - self.Position).Length(),
+            CanHit: canHit,
+            AnyCanHit: anyCanHit,
+            FacingToOpponent: facingToOpponent,
+            AttackTarget: attackTarget,
+            UnderThreat: underThreat,
+            FlankDirection: flankDirection,
+            FlankSafe: flankSafe,
+            HasTraversal: hasTraversal,
+            TraversalLaunch: traversalLaunch,
+            TraversalDirection: traversalDirection,
+            TraversalNeedsJump: traversalNeedsJump,
+            Vulnerable: vulnerable,
+            ShieldHealthFraction: ShieldHealthFractionOf(self),
+            OpponentBreakStunned: opponent.State == PlayerState.Stun && opponent.StunFromShieldBreak,
+            TelegraphThreat: telegraphThreat,
+            DashUsable: dashUsable,
+            DashSlot: dashSlot,
+            OpponentStunned: opponent.State == PlayerState.Stun,
+            RecoverAim: recoverAim,
+            CrouchClearsThreat: crouchClearsThreat,
+            ProjectileThreat: projectileThreat,
+            RangedThreat: rangedTelegraph || projectileThreat,
+            OnThinPlatform: onThinPlatform,
+            CanDropSafely: canDropSafely,
+            TraversalDrop: traversalDrop);
+    }
+
+    /// <summary>Where the mirrored hitbox of <paramref name="move"/> sits when
+    /// <paramref name="owner"/> faces <paramref name="facing"/> — SimPlayer.Hitbox
+    /// with the facing (and an optional inflation margin) parameterized. One home
+    /// for the reach test, the telegraph arc, and the enemy-threat scan.</summary>
+    private static Aabb MoveHitbox(SimPlayer owner, SimMove move, int facing, float inflate = 0f) =>
+        new(
+            owner.Position + new Vec2(move.Offset.X * facing, move.Offset.Y),
+            new Vec2(
+                move.BaseHalf.X * owner.WidthScalar + inflate,
+                move.BaseHalf.Y * owner.HeightScalar + inflate));
+
+    /// <summary>Top of the crouched silhouette (grounded, feet planted).</summary>
+    private static float CrouchedTopY(SimPlayer self)
+    {
+        float feetY = self.Position.Y - self.BodyHalf.Y;
+        return feetY + 2f * self.BodyHalf.Y * self.CrouchHeightRatio;
+    }
+
+    /// <summary>Sensor: the first button-mapped dash slot, whether it is usable this
+    /// tick, and its straight-line travel range (0 when unusable).</summary>
+    private static (int Slot, bool Usable, float Range) ResolveDashCapability(SimWorld world, SimPlayer self)
+    {
+        int dashSlot = -1;
+        for (int m = 0; m < self.Dashes.Count; m++)
         {
-            Aabb mine = graph.Platform(myPlatform);
-            Aabb next = graph.Platform(nextPlatform);
-            hasTraversal = true;
-            // Drop-through route (2026-09-01): standing on a thin platform whose next
-            // hop is BELOW under its span, the route is a crouch drop — walk over the
-            // overlap and hold down, no jump, no edge detour.
-            float overlapLo = MathF.Max(mine.Left, next.Left);
-            float overlapHi = MathF.Min(mine.Right, next.Right);
-            if (onThinPlatform && next.Top < mine.Top - 0.5f && overlapHi - overlapLo >= 0.5f)
+            if (self.Dashes[m] is not null && self.ButtonForMove(m) >= 0)
             {
-                traversalDrop = true;
-                traversalLaunch = new Vec2(
-                    DetMath.Clamp(self.Position.X, overlapLo + 0.25f, overlapHi - 0.25f), mine.Top);
-                traversalDirection = 0;
-            }
-            else
-            {
-                float launchX = next.Center.X >= mine.Center.X ? mine.Right : mine.Left;
-                traversalLaunch = new Vec2(launchX, mine.Top);
-                traversalDirection = next.Center.X >= mine.Center.X ? 1 : -1;
-                // Hop only for a real height gain or a real horizontal gap (2026-07-22,
-                // DEVIATIONS #28). The old test (next.Top >= mine.Top − 0.5) jumped between
-                // platforms at the SAME height that were horizontally ADJACENT — common on
-                // large mirrored maps, where the two center halves touch — burning the air
-                // jump to "hop" across ground the agent could simply walk onto. A gap of 0
-                // and no rise means walk; the horizontal move alone carries it across.
-                float gap = MathF.Max(0f, MathF.Max(next.Left - mine.Right, mine.Left - next.Right));
-                traversalNeedsJump = next.Top > mine.Top + 0.5f || gap > 0.5f;
+                dashSlot = m;
+                break;
             }
         }
+        bool dashUsable = dashSlot >= 0 && self.CanDash
+            && self.State is PlayerState.Idle or PlayerState.Air or PlayerState.AirJumpsExhausted;
+        float dashRange = dashUsable
+            ? self.Dashes[dashSlot]!.Speed * self.Dashes[dashSlot]!.DurationTicks * world.Config.Dt
+            : 0f;
+        return (dashSlot, dashUsable, dashRange);
+    }
 
-        return new UtilityContext(
-            world, self, opponent, overPit,
-            Doomed: overPit && !reachable,
-            recoverTarget, targetSensed && reachable,
-            Distance: (opponent.Position - self.Position).Length(),
-            canHit, anyCanHit, facingToOpponent, attackTarget, underThreat,
-            flankDirection, flankSafe,
-            hasTraversal, traversalLaunch, traversalDirection, traversalNeedsJump,
-            vulnerable,
-            ShieldHealthFractionOf(self),
-            OpponentBreakStunned: opponent.State == PlayerState.Stun && opponent.StunFromShieldBreak,
-            telegraphThreat,
-            dashUsable,
-            dashSlot,
-            OpponentStunned: opponent.State == PlayerState.Stun,
-            recoverAim,
-            crouchClearsThreat,
-            projectileThreat,
-            RangedThreat: rangedTelegraph || projectileThreat,
-            onThinPlatform,
-            canDropSafely,
-            traversalDrop);
+    /// <summary>Sensor: which melee moves can hit right now (facing toward the
+    /// opponent — turning is a same-tick input), and the position to fight FROM:
+    /// stand where the best move's hitbox lands on the opponent (the DT's
+    /// relMove×1.2 chase, generalized per move). A downward move makes the agent
+    /// seek height above the opponent — the hop-over corridor dance the paper
+    /// observed emerges from the genome, not the code.</summary>
+    private static Vec2 ComputeMeleeReach(SimPlayer self, SimPlayer opponent, int facingToOpponent,
+        bool opponentImmune, bool[] canHit, ref bool anyCanHit)
+    {
+        Vec2 attackTarget = opponent.Position;
+        float bestTravel = float.PositiveInfinity;
+        for (int m = 0; m < self.Moves.Count; m++)
+        {
+            if (self.ButtonForMove(m) < 0 || self.Moves[m] is not SimMove move)
+            {
+                continue; // shield slots have no hitbox to reach with
+            }
+            Vec2 offset = new(move.Offset.X * facingToOpponent, move.Offset.Y);
+            Aabb hitbox = MoveHitbox(self, move, facingToOpponent);
+            canHit[m] = !opponentImmune && hitbox.Overlaps(opponent.Body);
+            anyCanHit |= canHit[m];
+
+            Vec2 candidate = opponent.Position - offset * 1.2f;
+            float travel = (candidate - self.Position).Length();
+            if (travel < bestTravel)
+            {
+                bestTravel = travel;
+                attackTarget = candidate;
+            }
+        }
+        return attackTarget;
+    }
+
+    /// <summary>Sensor: projectile reach (2026-07-14) — a LOOSE corridor prediction
+    /// per the spec: horizontal distance within the closed-form range, vertical
+    /// offset within the path's lateral envelope (+slack), and outside the
+    /// close-range gate. The candidate then scores on the attack channel via
+    /// ProjectileBehavior.</summary>
+    private static void ComputeProjectileReach(SimWorld world, SimPlayer self, SimPlayer opponent,
+        bool opponentImmune, bool[] canHit, ref bool anyCanHit)
+    {
+        for (int m = 0; m < self.Moves.Count; m++)
+        {
+            if (self.ButtonForMove(m) < 0 || self.ProjectileMoves[m] is not SimProjectileMove ranged)
+            {
+                continue;
+            }
+            canHit[m] = !opponentImmune && ProjectileCorridorHit(ranged, self, opponent, world.Config);
+            anyCanHit |= canHit[m];
+        }
+    }
+
+    /// <summary>Sensor: an enemy is WINDING UP an attack whose arc (+margin) covers
+    /// us — the readable moment defensive options respond to. ALL present enemies
+    /// are scanned in index order (2026-08-12, designer: dodge whoever is winding up
+    /// on you, not just the target) — with a single enemy this is exactly the old
+    /// single-opponent test. A winding-up PROJECTILE telegraphs exactly like melee
+    /// (2026-07-20, designer: warm-up phases signal defensive counterplay across
+    /// the board): the "arc" is the shot's predicted corridor at our column — the
+    /// same loose test the shooter aimed with, seen from the receiving end. That is
+    /// what makes shields viable against zoners (warm-up + flight time to react);
+    /// trade-commit still applies (interrupting the shooter cancels the shot).
+    /// CrouchClears is true only if EVERY threatening source passes above the
+    /// crouched silhouette (grounded, from Idle, feet planted).</summary>
+    private static (bool Telegraph, bool Ranged, bool CrouchClears) ScanTelegraphThreats(
+        SimWorld world, SimPlayer self)
+    {
+        bool telegraphThreat = false;
+        bool rangedTelegraph = false;
+        bool crouchClearsAllTelegraphs = true;
+        foreach (SimPlayer enemy in world.Players)
+        {
+            if (enemy == self || enemy.IsAbsent || enemy.State != PlayerState.WarmUp)
+            {
+                continue;
+            }
+            float crouchedTop = CrouchedTopY(self);
+            bool canDuck = self.IsGrounded && self.State == PlayerState.Idle;
+            if (enemy.Moves[enemy.CurrentMoveIndex] is SimMove windingUp)
+            {
+                Aabb arc = MoveHitbox(enemy, windingUp, enemy.Facing, TelegraphDodgeMargin);
+                if (arc.Overlaps(self.Body))
+                {
+                    telegraphThreat = true;
+                    crouchClearsAllTelegraphs &= canDuck
+                        && arc.Bottom > crouchedTop + CrouchClearanceEpsilon;
+                }
+            }
+            else if (enemy.ProjectileMoves[enemy.CurrentMoveIndex] is SimProjectileMove windingShot
+                && ProjectileCorridorHit(windingShot, enemy, self, world.Config))
+            {
+                telegraphThreat = true;
+                rangedTelegraph = true;
+                float corridorBottom = ProjectileCorridorCenterY(
+                    windingShot, enemy, self, world.Config) - windingShot.HalfExtent;
+                crouchClearsAllTelegraphs &= canDuck
+                    && corridorBottom > crouchedTop + CrouchClearanceEpsilon;
+            }
+        }
+        return (telegraphThreat, rangedTelegraph, telegraphThreat && crouchClearsAllTelegraphs);
+    }
+
+    /// <summary>Sensor: incoming projectiles (2026-07-14) — sample each dangerous
+    /// projectile's closed-form path over the lookahead; a predicted overlap with
+    /// our body (inflated by its half extent) is a threat the defense channel
+    /// answers. Ducking helps only if every threatening sample passes above the
+    /// crouched silhouette — same geometry rule as the melee arc — so this may
+    /// also flip <paramref name="crouchClearsThreat"/> on.</summary>
+    private static bool ScanIncomingProjectiles(SimWorld world, SimPlayer self, ref bool crouchClearsThreat)
+    {
+        bool projectileThreat = false;
+        if (world.Projectiles.Count == 0)
+        {
+            return false;
+        }
+        float minPredictedBottom = float.MaxValue;
+        Aabb body = self.Body;
+        foreach (SimProjectile incoming in world.Projectiles)
+        {
+            bool dangerous = incoming.Owner != self.Index
+                || (incoming.Move.HitsSelf && incoming.ClearedOwner);
+            if (!dangerous)
+            {
+                continue;
+            }
+            var threatBox = new Aabb(body.Center,
+                new Vec2(body.Half.X + incoming.Move.HalfExtent, body.Half.Y + incoming.Move.HalfExtent));
+            for (int k = ProjectileLookaheadStep; k <= ProjectileLookaheadTicks; k += ProjectileLookaheadStep)
+            {
+                Vec2 predicted = incoming.Move.PositionAt(
+                    incoming.Origin, incoming.Facing, incoming.PathAgeTicks + k, world.Config);
+                if (threatBox.Contains(predicted))
+                {
+                    projectileThreat = true;
+                    minPredictedBottom = MathF.Min(
+                        minPredictedBottom, predicted.Y - incoming.Move.HalfExtent);
+                }
+            }
+        }
+        if (projectileThreat && self.IsGrounded && self.State == PlayerState.Idle)
+        {
+            crouchClearsThreat |= minPredictedBottom > CrouchedTopY(self) + CrouchClearanceEpsilon;
+        }
+        return projectileThreat;
+    }
+
+    /// <summary>Sensor: can any ENEMY's move reach me right now (their facing toward
+    /// me)? Humans see the incoming swing arc and leave it. All present enemies
+    /// since 2026-08-12 — the single-enemy scan is the old one exactly.</summary>
+    private static bool ScanEnemyThreatReach(SimWorld world, SimPlayer self)
+    {
+        bool underThreat = false;
+        foreach (SimPlayer enemy in world.Players)
+        {
+            if (enemy == self || enemy.IsAbsent || underThreat)
+            {
+                continue;
+            }
+            // Exactly the old -facingToOpponent, including the >= tie-break at equal X.
+            int enemyFacing = enemy.Position.X >= self.Position.X ? -1 : 1;
+            for (int m = 0; m < enemy.Moves.Count && !underThreat; m++)
+            {
+                if (enemy.ButtonForMove(m) < 0 || enemy.Moves[m] is not SimMove move)
+                {
+                    continue;
+                }
+                underThreat = MoveHitbox(enemy, move, enemyFacing).Overlaps(self.Body);
+            }
+        }
+        return underThreat;
+    }
+
+    /// <summary>Sensor: the next hop toward the opponent's platform via the
+    /// per-match graph — walk target, hop direction, whether the hop needs the
+    /// jump, or a crouch-drop route (2026-09-01: standing on a thin platform whose
+    /// next hop is BELOW under its span, the route is a crouch drop — walk over
+    /// the overlap and hold down, no jump, no edge detour).</summary>
+    private static (bool Has, Vec2 Launch, int Direction, bool NeedsJump, bool Drop) ComputeTraversal(
+        PlatformGraph graph, SimPlayer self, SimPlayer opponent, int myPlatform, bool onThinPlatform)
+    {
+        int theirPlatform = graph.PlatformAt(opponent.Position);
+        if (myPlatform < 0 || theirPlatform < 0 || myPlatform == theirPlatform
+            || !graph.TryRoute(myPlatform, theirPlatform, out int nextPlatform))
+        {
+            return (false, Vec2.Zero, 0, false, false);
+        }
+        Aabb mine = graph.Platform(myPlatform);
+        Aabb next = graph.Platform(nextPlatform);
+        float overlapLo = MathF.Max(mine.Left, next.Left);
+        float overlapHi = MathF.Min(mine.Right, next.Right);
+        if (onThinPlatform && next.Top < mine.Top - 0.5f && overlapHi - overlapLo >= 0.5f)
+        {
+            var dropLaunch = new Vec2(
+                DetMath.Clamp(self.Position.X, overlapLo + 0.25f, overlapHi - 0.25f), mine.Top);
+            return (true, dropLaunch, 0, false, true);
+        }
+        float launchX = next.Center.X >= mine.Center.X ? mine.Right : mine.Left;
+        var launch = new Vec2(launchX, mine.Top);
+        int direction = next.Center.X >= mine.Center.X ? 1 : -1;
+        // Hop only for a real height gain or a real horizontal gap (2026-07-22,
+        // DEVIATIONS #28). The old test (next.Top >= mine.Top − 0.5) jumped between
+        // platforms at the SAME height that were horizontally ADJACENT — common on
+        // large mirrored maps, where the two center halves touch — burning the air
+        // jump to "hop" across ground the agent could simply walk onto. A gap of 0
+        // and no rise means walk; the horizontal move alone carries it across.
+        float gap = MathF.Max(0f, MathF.Max(next.Left - mine.Right, mine.Left - next.Right));
+        bool needsJump = next.Top > mine.Top + 0.5f || gap > 0.5f;
+        return (true, launch, direction, needsJump, false);
     }
 
     /// <summary>
@@ -858,6 +973,23 @@ public sealed class UtilityAgent : IInputSource
         return centerY;
     }
 
+    /// <summary>Retreat direction: away from the opponent, flipped toward stage
+    /// center when retreating would walk off the platform. Evade/ThreatDodge probe
+    /// the edge only when GROUNDED; ExhaustedCaution deliberately probes airborne
+    /// too (requireGrounded: false) — a preserved asymmetry from the original
+    /// three copies of this logic.</summary>
+    private static int SafeRetreatDirection(in UtilityContext ctx, bool requireGrounded)
+    {
+        int away = -ctx.FacingToOpponent;
+        bool retreatFallsOff = (!requireGrounded || ctx.Self.IsGrounded)
+            && AgentGeometry.OverPit(ctx.World, ctx.Self, EdgeProbeDistance * away);
+        return retreatFallsOff ? TowardStageCenterX(ctx.Self) : away;
+    }
+
+    /// <summary>Horizontal direction toward the stage center. Generated stages are
+    /// centered on x = 0 (StageGenerator invariant) — this bakes that in.</summary>
+    private static int TowardStageCenterX(SimPlayer self) => self.Position.X >= 0f ? -1 : 1;
+
     /// <summary>
     /// Flank detection (2026-07-10, designer-reported stall): when the opponent is
     /// meaningfully above/below AND a platform's surface lies between the two heights
@@ -887,8 +1019,8 @@ public sealed class UtilityAgent : IInputSource
                 continue;
             }
             // Blocked by this platform. Probe just beyond each edge for ground below.
-            bool leftSafe = !OverPit(world, self, platform.Left - FlankEdgeProbe - self.Position.X);
-            bool rightSafe = !OverPit(world, self, platform.Right + FlankEdgeProbe - self.Position.X);
+            bool leftSafe = !AgentGeometry.OverPit(world, self, platform.Left - FlankEdgeProbe - self.Position.X);
+            bool rightSafe = !AgentGeometry.OverPit(world, self, platform.Right + FlankEdgeProbe - self.Position.X);
             float leftDist = MathF.Abs(self.Position.X - platform.Left);
             float rightDist = MathF.Abs(platform.Right - self.Position.X);
 
@@ -901,20 +1033,6 @@ public sealed class UtilityAgent : IInputSource
         return (0, false);
     }
 
-    /// <summary>No platform anywhere below the sample point (same test as the DT used).</summary>
-    private static bool OverPit(SimWorld world, SimPlayer self, float xOffset)
-    {
-        float x = self.Position.X + xOffset;
-        foreach (Aabb platform in world.Platforms)
-        {
-            if (x >= platform.Left && x <= platform.Right && platform.Top <= self.Position.Y)
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
     /// <summary>Recovery target among sensed platforms: the REACHABLE one whose
     /// closest point is nearest to the opponent (chase-preserving); when none is
     /// reachable, the nearest-to-self sensed point (the Doomed check's subject).</summary>
@@ -922,9 +1040,7 @@ public sealed class UtilityAgent : IInputSource
         SimWorld world, SimPlayer self, SimPlayer opponent, float dashRange,
         out Vec2 target, out Aabb chosenPlatform, out bool reachable)
     {
-        // 2026-07-21 (Map Size, DEVIATIONS #27): half extents scale with map size —
-        // exactly the Unity 20×15 box on legacy-size maps.
-        var sense = new Aabb(self.Position, world.PlatformSenseHalf);
+        var sense = AgentGeometry.SenseBox(world, self);
         target = Vec2.Zero;
         chosenPlatform = default;
         reachable = false;
@@ -1008,507 +1124,5 @@ public sealed class UtilityAgent : IInputSource
             fall += jumpForce / g;
         }
         return dx <= self.MaxAirSpeed * fall;
-    }
-
-    // ── Behaviors (fixed order — extensibility point for shield/dash/projectile) ──
-
-    private static readonly IUtilityBehavior[] Behaviors =
-    {
-        new BaselineBehavior(),
-        new RecoverBehavior(),
-        new DoomedBehavior(),
-        new ApproachBehavior(),
-        new TraverseBehavior(),
-        new FlankBehavior(),
-        new AttackBehavior(),
-        new ProjectileBehavior(),
-        new DashUtilityBehavior(),
-        new VerticalUtilityBehavior(),
-        new EvadeBehavior(),
-        new ThreatDodgeBehavior(),
-        new ExhaustedCautionBehavior(),
-        new SpacingBehavior(),
-    };
-
-    /// <summary>
-    /// One appraisal: reads the context, adds non-negative utility to any channel.
-    /// Behaviors are stateless — all state lives in the sim or the agent shell.
-    /// </summary>
-    public interface IUtilityBehavior
-    {
-        void Contribute(in UtilityContext ctx, UtilityScores scores);
-    }
-
-    /// <summary>Keeps every channel's "do nothing" option live so normalization never
-    /// divides by zero and inaction stays selectable under randomness.</summary>
-    private sealed class BaselineBehavior : IUtilityBehavior
-    {
-        public void Contribute(in UtilityContext ctx, UtilityScores scores)
-        {
-            scores.Horizontal[1] += BaselineNeutral;
-            scores.Vertical[1] += BaselineVerticalNeutral;
-            scores.Jump[0] += BaselineNoJump;
-            scores.Attack[0] += BaselineNoAttack;
-        }
-    }
-
-    /// <summary>Req 1a: over a pit with a reachable platform → move toward it; jump to
-    /// gain or keep height unless the platform is comfortably below.</summary>
-    private sealed class RecoverBehavior : IUtilityBehavior
-    {
-        public void Contribute(in UtilityContext ctx, UtilityScores scores)
-        {
-            if (!ctx.OverPit || !ctx.RecoverTargetValid)
-            {
-                return;
-            }
-            scores.Horizontal[ctx.RecoverTarget.X >= ctx.Self.Position.X ? 2 : 0] += RecoverMove;
-            bool jumpAvailable = ctx.Self.IsGrounded || !ctx.Self.JumpsExhausted;
-            if (jumpAvailable && ctx.RecoverTarget.Y - ctx.Self.Position.Y > -0.5f)
-            {
-                scores.Jump[1] += RecoverJump;
-            }
-        }
-    }
-
-    /// <summary>Req 1b: over a pit with nothing reachable → spend the remaining ticks
-    /// chasing and swinging at the opponent.</summary>
-    private sealed class DoomedBehavior : IUtilityBehavior
-    {
-        public void Contribute(in UtilityContext ctx, UtilityScores scores)
-        {
-            if (!ctx.Doomed)
-            {
-                return;
-            }
-            scores.Horizontal[ctx.FacingToOpponent > 0 ? 2 : 0] += DoomedChase;
-            for (int c = 1; c < scores.Attack.Length; c++)
-            {
-                if (ctx.CanHit[scores.AttackMoves[c]])
-                {
-                    scores.Attack[c] += DoomedAttack;
-                }
-            }
-        }
-    }
-
-    /// <summary>Req 2: close in on the ATTACK position (where the best move's hitbox
-    /// lands on the opponent), not the opponent's body. Jump when that position is
-    /// meaningfully above (RELATIVE — the DT's absolute-y quirk is deliberately not
-    /// carried over) or when running off a grounded edge mid-chase.</summary>
-    private sealed class ApproachBehavior : IUtilityBehavior
-    {
-        public void Contribute(in UtilityContext ctx, UtilityScores scores)
-        {
-            if (ctx.OverPit || ctx.Vulnerable)
-            {
-                return; // recovery/doomed own the off-stage story; vulnerable disengages
-            }
-            float dx = ctx.AttackTarget.X - ctx.Self.Position.X;
-            float urgency = MathF.Min(ctx.Distance / ApproachDistanceScale, 1f);
-            if (MathF.Abs(dx) > 0.1f)
-            {
-                scores.Horizontal[dx > 0f ? 2 : 0] += ApproachMax * MathF.Max(urgency, 0.4f);
-            }
-
-            bool jumpAvailable = ctx.Self.IsGrounded || !ctx.Self.JumpsExhausted;
-            // While a platform blocks the vertical route, jumping at the target just
-            // bonks the underside — the flank behavior owns the route instead.
-            bool targetAbove = ctx.FlankDirection == 0
-                && ctx.AttackTarget.Y - ctx.Self.Position.Y > OpponentAboveThreshold;
-            bool runningOffEdge = ctx.Self.IsGrounded
-                && OverPit(ctx.World, ctx.Self, EdgeProbeDistance * ctx.FacingToOpponent);
-            if (jumpAvailable && (targetAbove || runningOffEdge))
-            {
-                scores.Jump[1] += ApproachJump;
-            }
-        }
-    }
-
-    /// <summary>Different platforms → follow the per-match next-hop route: walk to the
-    /// launch edge, then hop toward the next platform (no jump for drop-downs).
-    /// Designer's platform-graph design, 2026-07-10.</summary>
-    private sealed class TraverseBehavior : IUtilityBehavior
-    {
-        public void Contribute(in UtilityContext ctx, UtilityScores scores)
-        {
-            if (!ctx.HasTraversal || ctx.OverPit || ctx.Vulnerable)
-            {
-                return;
-            }
-            float dx = ctx.TraversalLaunch.X - ctx.Self.Position.X;
-            if (MathF.Abs(dx) > TraverseLaunchSlack)
-            {
-                scores.Horizontal[dx > 0f ? 2 : 0] += TraverseMove;
-                return;
-            }
-            if (ctx.TraversalDrop)
-            {
-                // Drop route (2026-09-01, thin platforms): over the overlap, stay
-                // planted and hold down — the crouch drop carries the hop.
-                scores.Horizontal[1] += TraverseMove;
-                scores.Vertical[0] += TraverseJump;
-                return;
-            }
-            // At the launch edge: commit to the hop.
-            scores.Horizontal[ctx.TraversalDirection > 0 ? 2 : 0] += TraverseMove;
-            if (ctx.TraversalNeedsJump && (ctx.Self.IsGrounded || !ctx.Self.JumpsExhausted))
-            {
-                scores.Jump[1] += TraverseJump;
-            }
-        }
-    }
-
-    /// <summary>Vertical separation blocked by a platform → head for its edge (the
-    /// safe one when only one has ground beyond it) instead of pacing under/over the
-    /// opponent. Designer-reported stall, 2026-07-10.</summary>
-    private sealed class FlankBehavior : IUtilityBehavior
-    {
-        public void Contribute(in UtilityContext ctx, UtilityScores scores)
-        {
-            if (ctx.FlankDirection == 0 || ctx.OverPit || ctx.Vulnerable)
-            {
-                return;
-            }
-            float weight = FlankMove * (ctx.FlankSafe ? 1f : FlankUnsafeScale);
-            scores.Horizontal[ctx.FlankDirection > 0 ? 2 : 0] += weight;
-        }
-    }
-
-    /// <summary>Req 3 + second-move update (2026-07-10): every move whose hitbox
-    /// reaches the opponent scores its button, ranked by DAMAGE — the strongest move
-    /// that can currently hit wins the channel (argmax; ties → lower index). The
-    /// damage bonus stays below the in-range base so "some hit" always beats "none".</summary>
-    private sealed class AttackBehavior : IUtilityBehavior
-    {
-        public void Contribute(in UtilityContext ctx, UtilityScores scores)
-        {
-            if (ctx.Vulnerable)
-            {
-                return; // the FSM ignores attacks here — don't press dead buttons
-            }
-            for (int c = 1; c < scores.Attack.Length; c++)
-            {
-                int move = scores.AttackMoves[c];
-                if (ctx.CanHit[move] && ctx.Self.Moves[move] is SimMove attack)
-                {
-                    // A break-stunned opponent is the punish window: strongly prefer
-                    // the most POWERFUL move (FEATURES.md agent spec).
-                    float damagePreference = ctx.OpponentBreakStunned
-                        ? BreakPunishDamagePreference : AttackDamagePreference;
-                    float bonus = ctx.OpponentBreakStunned ? BreakPunishBonus : 0f;
-                    scores.Attack[c] += AttackInRange + bonus + damagePreference * attack.DamageGiven;
-                }
-            }
-        }
-    }
-
-    /// <summary>Projectile firing (2026-07-14, FEATURES.md §Projectiles agent spec):
-    /// scores any projectile slot whose corridor test says the opponent is plausibly
-    /// hittable — canHit already encodes both the close-range gate and the loose aim,
-    /// so this behavior only prices the candidate. A break-stunned opponent gets the
-    /// half punish bonus (the full one belongs to melee, which actually confirms).</summary>
-    private sealed class ProjectileBehavior : IUtilityBehavior
-    {
-        public void Contribute(in UtilityContext ctx, UtilityScores scores)
-        {
-            if (ctx.Vulnerable)
-            {
-                return;
-            }
-            for (int c = 1; c < scores.Attack.Length; c++)
-            {
-                int move = scores.AttackMoves[c];
-                if (ctx.CanHit[move] && ctx.Self.ProjectileMoves[move] is SimProjectileMove ranged)
-                {
-                    float bonus = ctx.OpponentBreakStunned ? BreakPunishBonus * 0.5f : 0f;
-                    scores.Attack[c] += ProjectileInRange + bonus
-                        + ProjectileDamagePreference * ranged.DamageGiven;
-                }
-            }
-        }
-    }
-
-    /// <summary>Non-defense dash uses (2026-07-13): recovery over a pit (the dash is
-    /// the premier third air action), approach from range, and stun punish — each a
-    /// candidate on the action channel, arbitrated by normal channel selection.</summary>
-    private sealed class DashUtilityBehavior : IUtilityBehavior
-    {
-        public void Contribute(in UtilityContext ctx, UtilityScores scores)
-        {
-            if (!ctx.DashUsable)
-            {
-                return;
-            }
-            float utility = 0f;
-            if (ctx.Vulnerable && !ctx.OverPit)
-            {
-                return; // no chase-dashes while unable to attack; recovery still runs
-            }
-            if (ctx.OverPit && ctx.RecoverTargetValid)
-            {
-                // Playtest fix (2026-07-13): the recovery dash exists to gain HEIGHT
-                // (or cross a large gap) — falling onto the platform from above with a
-                // small gap doesn't spend it.
-                bool needsHeight = ctx.RecoverAim.Y > ctx.Self.Position.Y;
-                bool bigGap = MathF.Abs(ctx.RecoverAim.X - ctx.Self.Position.X) > DashRecoverHorizontalGap;
-                if (needsHeight || bigGap)
-                {
-                    utility = DashRecover;
-                }
-            }
-            else if (ctx.OpponentStunned && ctx.Distance > SpacingDistance)
-            {
-                utility = DashPunish;
-            }
-            else if (!ctx.OverPit && !ctx.TelegraphThreat && ctx.Distance > DashApproachRange
-                && !ctx.HasTraversal)
-            {
-                utility = DashApproach;
-            }
-            if (utility <= 0f)
-            {
-                return;
-            }
-            for (int c = 1; c < scores.Attack.Length; c++)
-            {
-                if (scores.AttackMoves[c] == ctx.DashSlot)
-                {
-                    scores.Attack[c] += utility;
-                    return;
-                }
-            }
-        }
-    }
-
-    /// <summary>2026-07-13 fast fall / crouch / DI, all on the vertical (and DI also
-    /// the horizontal) channel: drop onto an opponent below; crouch-brake a deadly
-    /// ground slide (negative crouch accel); crouch-slide toward a far opponent
-    /// (positive accel); and pre-position the held direction toward safety when a
-    /// hit is coming or landing — DI reads whatever is held at the hit instant, so
-    /// the commitment window supplies exactly the imperfection the spec demands.</summary>
-    private sealed class VerticalUtilityBehavior : IUtilityBehavior
-    {
-        public void Contribute(in UtilityContext ctx, UtilityScores scores)
-        {
-            SimPlayer self = ctx.Self;
-            // Fast-fall pursuit: airborne, opponent clearly below and roughly under us.
-            if (!self.IsGrounded && self.FastFallAcceleration > 0f
-                && ctx.Opponent.Position.Y < self.Position.Y - 1.5f
-                && MathF.Abs(ctx.Opponent.Position.X - self.Position.X) < 2f)
-            {
-                scores.Vertical[0] += FastFallPursuit;
-            }
-            // A crouch on a thin platform with nothing below turns into a suicide
-            // drop once the delay elapses — the crouch utilities gate on safety
-            // (2026-09-01; thin-free stages see the exact pre-feature conditions).
-            bool crouchSafe = !ctx.OnThinPlatform || ctx.CanDropSafely;
-            // Crouch braking: sliding dangerously fast at high damage with a braking gene.
-            if (self.IsGrounded && self.State == PlayerState.Idle && crouchSafe
-                && self.CrouchAcceleration < 0f && self.Damage >= HighDamageThreshold
-                && MathF.Abs(self.Velocity.X) > self.MaxGroundSpeed)
-            {
-                scores.Vertical[0] += CrouchBrake;
-            }
-            // Crouch-slide approach: a speed-boosting gene and a distant opponent.
-            if (self.IsGrounded && self.State == PlayerState.Idle && crouchSafe
-                && self.CrouchAcceleration > 0f && !ctx.TelegraphThreat
-                && ctx.Distance > DashApproachRange)
-            {
-                scores.Vertical[0] += CrouchSlideApproach;
-            }
-            // Drop pursuit (2026-09-01, thin platforms): the opponent is below the
-            // thin floor under our feet and roughly under us — drop onto them (the
-            // grounded sibling of the fast-fall pursuit; also the descending-flank
-            // answer: the "blocking" platform is the one we stand on).
-            if (ctx.CanDropSafely && !ctx.Vulnerable
-                && ctx.Opponent.Position.Y < self.Position.Y - 1.5f
-                && MathF.Abs(ctx.Opponent.Position.X - self.Position.X) < 2f)
-            {
-                scores.Vertical[0] += DropPursuit;
-            }
-            // DI pre-positioning: about to be hit (or being juggled) → hold toward the
-            // farthest blast line (stage center) and up.
-            if (self.DirectionalInfluence > 0f
-                && (ctx.TelegraphThreat || ctx.UnderThreat || self.State == PlayerState.Stun))
-            {
-                scores.Horizontal[self.Position.X >= 0f ? 0 : 2] += DIHold;
-                scores.Vertical[2] += DIHoldVertical;
-            }
-        }
-    }
-
-    /// <summary>Req 4: at high damage, back away — harder the higher the damage (up to
-    /// 2×) — but toward stage center when the retreat direction walks off the platform.
-    /// Attacks stay live via AttackBehavior.</summary>
-    private sealed class EvadeBehavior : IUtilityBehavior
-    {
-        public void Contribute(in UtilityContext ctx, UtilityScores scores)
-        {
-            if (ctx.Self.Damage < HighDamageThreshold || ctx.OverPit)
-            {
-                return;
-            }
-            int away = -ctx.FacingToOpponent;
-            bool retreatFallsOff = ctx.Self.IsGrounded
-                && OverPit(ctx.World, ctx.Self, EdgeProbeDistance * away);
-            if (retreatFallsOff)
-            {
-                away = ctx.Self.Position.X >= 0f ? -1 : 1; // toward stage center
-            }
-            float scale = MathF.Min(ctx.Self.Damage / HighDamageThreshold, 2f);
-            scores.Horizontal[away > 0 ? 2 : 0] += EvadeMove * scale;
-        }
-    }
-
-    /// <summary>Humans don't stand inside the opponent's swing arc — unless they can
-    /// swing back (then they commit to the trade, the hit-trading the paper observed).
-    /// Dodge only when threatened WITHOUT a hit of our own available, and never
-    /// mid-swing (WarmUp/Attack movement stays on target).</summary>
-    private sealed class ThreatDodgeBehavior : IUtilityBehavior
-    {
-        public void Contribute(in UtilityContext ctx, UtilityScores scores)
-        {
-            if (!ctx.UnderThreat || ctx.OverPit || ctx.AnyCanHit
-                || ctx.Self.State is PlayerState.WarmUp or PlayerState.Attack)
-            {
-                return;
-            }
-            int away = -ctx.FacingToOpponent;
-            bool retreatFallsOff = ctx.Self.IsGrounded
-                && OverPit(ctx.World, ctx.Self, EdgeProbeDistance * away);
-            if (retreatFallsOff)
-            {
-                away = ctx.Self.Position.X >= 0f ? -1 : 1;
-            }
-            scores.Horizontal[away > 0 ? 2 : 0] += ThreatDodgeMove;
-            // Hop away only when GROUNDED (2026-07-22, DEVIATIONS #28): a flinch-dodge
-            // is a cheap ground hop. Spending the AIR jump to flinch mid-air was the
-            // large-map oscillation bug — the agent burned its second jump dodging
-            // while airborne (which happens constantly on wide/tall maps), stranding
-            // itself in AirJumpsExhausted where it can neither attack nor jump, so it
-            // drifted, landed, re-approached, and dodged again forever. The air jump is
-            // reserved for recovery and traversal; airborne dodges use lateral drift.
-            if (ctx.Self.IsGrounded)
-            {
-                scores.Jump[1] += ThreatDodgeJump;
-            }
-        }
-    }
-
-    /// <summary>CoolDown and AirJumpsExhausted cannot attack, so proximity is pure
-    /// exposure: drift away from a nearby opponent until capability returns
-    /// (2026-07-10, generalized to both vulnerable states 2026-07-13 per designer
-    /// playtest — a dash in hand does not re-enable the chase). Recovery still
-    /// overrides over pits; Doomed is deliberately exempt (off-stage death, req 1b).</summary>
-    private sealed class ExhaustedCautionBehavior : IUtilityBehavior
-    {
-        public void Contribute(in UtilityContext ctx, UtilityScores scores)
-        {
-            if (!ctx.Vulnerable || ctx.OverPit || ctx.Distance > ExhaustedCautionRange)
-            {
-                return;
-            }
-            int away = -ctx.FacingToOpponent;
-            bool retreatFallsOff = OverPit(ctx.World, ctx.Self, EdgeProbeDistance * away);
-            if (retreatFallsOff)
-            {
-                away = ctx.Self.Position.X >= 0f ? -1 : 1;
-            }
-            scores.Horizontal[away > 0 ? 2 : 0] += ExhaustedRetreat;
-            // Thin platforms (2026-09-01): dropping through the floor is a second
-            // disengage route — scored, not forced; the vertical channel arbitrates.
-            if (ctx.CanDropSafely)
-            {
-                scores.Vertical[0] += ExhaustedRetreat;
-            }
-        }
-    }
-
-    /// <summary>Crowding without a hit available is dead time: back off to re-approach
-    /// from an angle the attack target actually favors (breaks stacked stalemates).</summary>
-    private sealed class SpacingBehavior : IUtilityBehavior
-    {
-        public void Contribute(in UtilityContext ctx, UtilityScores scores)
-        {
-            if (ctx.OverPit || ctx.AnyCanHit || ctx.Distance > SpacingDistance)
-            {
-                return;
-            }
-            scores.Horizontal[ctx.FacingToOpponent > 0 ? 0 : 2] += SpacingMove;
-        }
-    }
-}
-
-/// <summary>Everything a behavior may appraise, computed once per tick. AttackTarget is
-/// the position to fight from — opponent minus the best move's mirrored hitbox offset.</summary>
-public readonly record struct UtilityContext(
-    SimWorld World,
-    SimPlayer Self,
-    SimPlayer Opponent,
-    bool OverPit,
-    bool Doomed,
-    Vec2 RecoverTarget,
-    bool RecoverTargetValid,
-    float Distance,
-    bool[] CanHit,
-    bool AnyCanHit,
-    int FacingToOpponent,
-    Vec2 AttackTarget,
-    bool UnderThreat,
-    int FlankDirection,
-    bool FlankSafe,
-    bool HasTraversal,
-    Vec2 TraversalLaunch,
-    int TraversalDirection,
-    bool TraversalNeedsJump,
-    bool Vulnerable,
-    float ShieldHealthFraction,
-    bool OpponentBreakStunned,
-    bool TelegraphThreat,
-    bool DashUsable,
-    int DashSlot,
-    bool OpponentStunned,
-    Vec2 RecoverAim,
-    bool CrouchClearsThreat,
-    bool ProjectileThreat,
-    bool RangedThreat,
-    // Thin platforms (2026-09-01, DEVIATIONS #34) — all false on thin-free stages.
-    bool OnThinPlatform,
-    bool CanDropSafely,
-    bool TraversalDrop);
-
-/// <summary>
-/// The per-decision score sheet. Horizontal = {left, neutral, right}; Jump = {no, yes};
-/// Attack[0] = none, then one candidate per distinct usable move (lowest mapped button,
-/// feature-1 convention). AttackMoves/AttackButtons map candidates back to moves/buttons.
-/// </summary>
-public sealed class UtilityScores
-{
-    public readonly float[] Horizontal = new float[3];
-    public readonly float[] Vertical = new float[3]; // down, neutral, up (2026-07-13)
-    public readonly float[] Jump = new float[2];
-    public readonly float[] Attack;
-    public readonly int[] AttackMoves;
-    public readonly int[] AttackButtons;
-
-    public UtilityScores(SimPlayer self)
-    {
-        var moves = new List<int>(self.Moves.Count);
-        for (int m = 0; m < self.Moves.Count; m++)
-        {
-            if (self.ButtonForMove(m) >= 0)
-            {
-                moves.Add(m);
-            }
-        }
-        Attack = new float[1 + moves.Count];
-        AttackMoves = new int[1 + moves.Count];
-        AttackButtons = new int[1 + moves.Count];
-        for (int c = 0; c < moves.Count; c++)
-        {
-            AttackMoves[c + 1] = moves[c];
-            AttackButtons[c + 1] = self.ButtonForMove(moves[c]);
-        }
     }
 }

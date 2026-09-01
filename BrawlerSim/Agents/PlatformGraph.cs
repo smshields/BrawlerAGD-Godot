@@ -22,6 +22,14 @@ public sealed class PlatformGraph
     private const float RangeSafety = 0.9f;      // demand 10% slack on hop range
     private const float StandTolerance = 0.75f;  // how far above a top "standing on it" reaches
 
+    /// <summary>Gravity floor: keeps the hop-feasibility math finite for degenerate
+    /// near-zero-gravity genomes (division and sqrt by g below).</summary>
+    private const float MinEffectiveGravity = 0.01f;
+
+    /// <summary>Descent-height floor: a hop to a platform at (or above) the peak
+    /// still gets a nonzero descent leg, keeping the flight-time estimate finite.</summary>
+    private const float MinDescentHeight = 0.1f;
+
     private readonly IReadOnlyList<Aabb> _platforms;
     private readonly IReadOnlyList<bool>? _thin; // null = all solid (pre-feature callers)
     private readonly int[,] _nextHop; // [from, to] → next platform index, -1 = no route
@@ -33,7 +41,7 @@ public sealed class PlatformGraph
         _thin = thin;
         int n = platforms.Count;
         var edges = new bool[n, n];
-        float g = MathF.Max(0.01f, gravity * character.GravityScale);
+        float g = MathF.Max(MinEffectiveGravity, gravity * character.GravityScale);
         // Thin platforms (2026-09-01) add NO edges: a downward hop over overlapping
         // spans is already hop-feasible (gap 0, negative rise), so the route table is
         // exactly the pre-feature one. What changes is route EXECUTION — a downward
@@ -154,7 +162,7 @@ public sealed class PlatformGraph
         // Flight time: full ascent of both jumps, then descent from the peak to the
         // target height. Coarse by design — the graph needs "plausible", not exact.
         float ascent = (v1 + v2) / g;
-        float descent = MathF.Sqrt(2f * MathF.Max(0.1f, maxRise - dy) / g);
+        float descent = MathF.Sqrt(2f * MathF.Max(MinDescentHeight, maxRise - dy) / g);
         return gap <= character.MaxAirSpeed * (ascent + descent) * RangeSafety;
     }
 }
