@@ -43,13 +43,38 @@ public partial class StageView : Node2D
             return;
         }
 
-        foreach (SimAabb platform in _world.Platforms)
+        for (int i = 0; i < _world.Platforms.Count; i++)
         {
-            DrawPlatform(platform);
+            if (_world.PlatformThin[i])
+            {
+                // Thin platform (2026-09-01, FEATURES.md §Thin Platforms): a solid
+                // white PLACEHOLDER slab exactly on the collision slice — the tile
+                // treatment is the next feature ("a different slice of tilesets").
+                DrawThinPlatform(_world.Platforms[i]);
+            }
+            else
+            {
+                DrawPlatform(_world.Platforms[i]);
+            }
         }
         // The blast boundary is deliberately NOT drawn (2026-07-21): pre-camera it sat
         // off-screen by construction; the zooming camera can now reach the KO box on
         // small maps, and hidden off-screen death is an intentional design rule.
+    }
+
+    /// <summary>Placeholder slab for a drop-through platform: the sim's thin top
+    /// slice, flat white with a subtly darker underside (the spawn-pill vocabulary:
+    /// bright top edge = standable surface).</summary>
+    private void DrawThinPlatform(in SimAabb slice)
+    {
+        var rect = new Rect2(
+            slice.Left * _ppu, -slice.Top * _ppu,
+            (slice.Right - slice.Left) * _ppu, (slice.Top - slice.Bottom) * _ppu);
+        DrawRect(rect, new Color(0.9f, 0.9f, 0.94f));
+        float edge = Mathf.Max(1f, rect.Size.Y * 0.25f);
+        DrawRect(new Rect2(rect.Position, new Vector2(rect.Size.X, edge)), Colors.White);
+        DrawRect(new Rect2(rect.Position + new Vector2(0f, rect.Size.Y - edge),
+            new Vector2(rect.Size.X, edge)), new Color(0.62f, 0.62f, 0.7f));
     }
 
     private void DrawPlatform(in SimAabb platform)
