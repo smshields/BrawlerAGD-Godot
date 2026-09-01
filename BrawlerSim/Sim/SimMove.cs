@@ -4,15 +4,6 @@ using BrawlerSim.Params;
 
 namespace BrawlerSim.Sim;
 
-/// <summary>The phase of a move's execution. Hitbox is live only during Execute.</summary>
-public enum MovePhase
-{
-    None,
-    WarmUp,
-    Execute,
-    CoolDown,
-}
-
 /// <summary>
 /// A move genome resolved into tick-domain runtime values. Immutable; per-activation
 /// state (phase, countdown) lives on the owning SimPlayer.

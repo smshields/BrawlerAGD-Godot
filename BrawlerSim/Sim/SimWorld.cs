@@ -152,6 +152,10 @@ public sealed class SimWorld
         }
     }
 
+    /// <summary>One simulation step. The phase ORDER below is the determinism
+    /// contract — each phase is a fixed-order sweep over players (see the phase
+    /// methods for the per-phase rules); reordering any two calls is a gameplay
+    /// change and moves the golden hashes.</summary>
     public void Tick(ReadOnlySpan<InputFrame> inputs)
     {
         if (IsOver)
@@ -159,10 +163,28 @@ public sealed class SimWorld
             return;
         }
 
-        // 0. Spawn lifecycle (2026-07-22): blackout countdown → materialize on the pad;
-        //    spawn-timer countdowns for present players. Absent (blacked-out) players
-        //    take no input/FSM this tick. Whole block is a no-op when the feature is off.
-        // 1. Input + state machines, fixed player order.
+        StepSpawnLifecycleAndInput(inputs); // 0-1. spawn lifecycle, input + FSM
+        StepKinematics();                   // 2.   physics + collision
+        ReleaseClearedDropThroughs();       // 2.4. thin drop-through ignores expire
+        ExpireLeftSpawnPads();              // 2.5. spawn-pad leave detection
+        ResolveBodyContacts();              // 3.   body-vs-body contact...
+        ApplyShieldSpacing();               //      ...then shield expulsion
+        StepProjectiles();                  // 3.5. projectile step/spawn/hits
+        StepInfluenceClock();               // 3.9. KO attribution clock
+        ResolveHits();                      // 4.   melee hit detection
+        ResolveBlastZoneExits();            // 5.   deaths, stocks, match end
+
+        TickCount++;
+        FinalizeTimeout();
+    }
+
+    /// <summary>Phase 0-1. Spawn lifecycle (2026-07-22): blackout countdown →
+    /// materialize on the pad; spawn-timer countdowns for present players. Absent
+    /// (blacked-out) players take no input/FSM this tick; the spawn block is a
+    /// no-op when the feature is off. Then input + state machines, fixed player
+    /// order.</summary>
+    private void StepSpawnLifecycleAndInput(ReadOnlySpan<InputFrame> inputs)
+    {
         for (int i = 0; i < _players.Length; i++)
         {
             SimPlayer player = _players[i];
@@ -204,10 +226,13 @@ public sealed class SimWorld
             }
             player.StepStateMachine(inputs[i]);
         }
+    }
 
-        // 2. Kinematics + collision. The spawn pad is solid to its OWNER only (the
-        //    other players' steps never receive it → they phase through). Absent
-        //    (blacked-out or eliminated) players skip.
+    /// <summary>Phase 2. Kinematics + collision. The spawn pad is solid to its
+    /// OWNER only (the other players' steps never receive it → they phase
+    /// through). Absent (blacked-out or eliminated) players skip.</summary>
+    private void StepKinematics()
+    {
         for (int i = 0; i < _players.Length; i++)
         {
             if (_players[i].IsAbsent)
@@ -220,23 +245,30 @@ public sealed class SimWorld
             SimPhysics.Step(_players[i], _players, plats, Config,
                 _thinFeatureActive ? PlatformThin : null);
         }
+    }
 
-        // 2.4. Thin platforms (2026-09-01): a drop-through ignore ends once the body
-        //      has fully cleared the dropped platform's slice.
-        if (_thinFeatureActive)
+    /// <summary>Phase 2.4. Thin platforms (2026-09-01): a drop-through ignore ends
+    /// once the body has fully cleared the dropped platform's slice.</summary>
+    private void ReleaseClearedDropThroughs()
+    {
+        if (!_thinFeatureActive)
         {
-            foreach (SimPlayer player in _players)
+            return;
+        }
+        foreach (SimPlayer player in _players)
+        {
+            if (player.DropThroughPlatform >= 0
+                && !player.Body.Overlaps(Platforms[player.DropThroughPlatform]))
             {
-                if (player.DropThroughPlatform >= 0
-                    && !player.Body.Overlaps(Platforms[player.DropThroughPlatform]))
-                {
-                    player.DropThroughPlatform = -1;
-                }
+                player.DropThroughPlatform = -1;
             }
         }
+    }
 
-        // 2.5. Spawn-pad leave detection (2026-07-22): once the owner is no longer
-        //      resting on the pad it despawns and intangibility ends immediately.
+    /// <summary>Phase 2.5. Spawn-pad leave detection (2026-07-22): once the owner is
+    /// no longer resting on the pad it despawns and intangibility ends immediately.</summary>
+    private void ExpireLeftSpawnPads()
+    {
         for (int i = 0; i < _players.Length; i++)
         {
             SimPlayer player = _players[i];
@@ -246,12 +278,13 @@ public sealed class SimWorld
                 player.SpawnIntangible = false;
             }
         }
+    }
 
-        // 3. Body-vs-body contact, then shield spacing (2026-07-12: a raised shield
-        //    expels the opponent — fixed player order, positional push capped per tick
-        //    plus a low outward velocity floor; FEATURES.md "never enough to kill").
-        //    All pairs in fixed index order since 2026-08-12 (identical to the old
-        //    two-player block at N=2); pairs with an absent player skip.
+    /// <summary>Phase 3 (first half). Body-vs-body contact — all pairs in fixed
+    /// index order since 2026-08-12 (identical to the old two-player block at N=2);
+    /// pairs with an absent player skip.</summary>
+    private void ResolveBodyContacts()
+    {
         for (int i = 0; i < _players.Length; i++)
         {
             if (_players[i].IsAbsent)
@@ -266,6 +299,13 @@ public sealed class SimWorld
                 }
             }
         }
+    }
+
+    /// <summary>Phase 3 (second half). Shield spacing (2026-07-12: a raised shield
+    /// expels the opponent — fixed player order, positional push capped per tick
+    /// plus a low outward velocity floor; FEATURES.md "never enough to kill").</summary>
+    private void ApplyShieldSpacing()
+    {
         for (int i = 0; i < _players.Length; i++)
         {
             if (_players[i].IsAbsent)
@@ -280,18 +320,14 @@ public sealed class SimWorld
                 }
             }
         }
+    }
 
-        // 3.5. Projectiles (2026-07-14): step lives (closed-form reposition, then the
-        //      despawn checks — TTL, decayed-to-nothing, past the blast boundary,
-        //      platform contact [platforms DESTROY projectiles, designer]), consume
-        //      pending spawns, then projectile-vs-player hits. Fixed list order,
-        //      victims in player order — all part of the tick-order contract.
-        StepProjectiles();
-
-        // 3.9. KO attribution clock (2026-08-12, four-player.md): continuous grounding
-        //      clears enemy influence — "until next landing". Runs BEFORE this tick's
-        //      hits so a fresh hit restarts the clock. Stats-class state only;
-        //      gameplay never reads it.
+    /// <summary>Phase 3.9. KO attribution clock (2026-08-12, four-player.md):
+    /// continuous grounding clears enemy influence — "until next landing". Runs
+    /// BEFORE this tick's hits so a fresh hit restarts the clock. Stats-class
+    /// state only; gameplay never reads it.</summary>
+    private void StepInfluenceClock()
+    {
         foreach (SimPlayer player in _players)
         {
             if (player.IsAbsent)
@@ -310,9 +346,12 @@ public sealed class SimWorld
                 player.GroundedInfluenceTicks = 0;
             }
         }
+    }
 
-        // 4. Hit detection, fixed attacker order (all ordered pairs since 2026-08-12 —
-        //    (0,1),(1,0) at N=2, exactly the old sweep).
+    /// <summary>Phase 4. Melee hit detection, fixed attacker order (all ordered
+    /// pairs since 2026-08-12 — (0,1),(1,0) at N=2, exactly the old sweep).</summary>
+    private void ResolveHits()
+    {
         for (int i = 0; i < _players.Length; i++)
         {
             for (int j = 0; j < _players.Length; j++)
@@ -323,11 +362,14 @@ public sealed class SimWorld
                 }
             }
         }
+    }
 
-        // 5. Blast zone → stock loss / match end. Fixed player order; the first
-        //    match-ending exit stops the sweep (simultaneous KOs resolve to the lower
-        //    player index). Each death first resolves KO attribution (2026-08-12):
-        //    live influence credits the influencer, otherwise it is a self-destruct.
+    /// <summary>Phase 5. Blast zone → stock loss / match end. Fixed player order;
+    /// the first match-ending exit stops the sweep (simultaneous KOs resolve to the
+    /// lower player index). Each death first resolves KO attribution (2026-08-12):
+    /// live influence credits the influencer, otherwise it is a self-destruct.</summary>
+    private void ResolveBlastZoneExits()
+    {
         foreach (SimPlayer player in _players)
         {
             if (IsOver)
@@ -398,32 +440,41 @@ public sealed class SimWorld
                 }
             }
         }
+    }
 
-        TickCount++;
-        if (!IsOver && TickCount >= Config.MaxTicks)
+    /// <summary>Match-end-by-clock check, after TickCount has advanced. TIMED: rank
+    /// by KOs / damage dealt / index — the loser is last place. STOCK with
+    /// eliminations (3-4 players): the first eliminated player is the loser; a
+    /// no-elimination timeout stays a draw (legacy 2P semantics).</summary>
+    private void FinalizeTimeout()
+    {
+        if (IsOver || TickCount < Config.MaxTicks)
         {
-            IsOver = true;
-            // TIMED: rank by KOs / damage dealt / index — the loser is last place.
-            // STOCK with eliminations (3-4 players): the first eliminated player is
-            // the loser; a no-elimination timeout stays a draw (legacy 2P semantics).
-            if (Config.EndRule == MatchEndRule.Timed)
+            return;
+        }
+        IsOver = true;
+        if (Config.EndRule == MatchEndRule.Timed)
+        {
+            int[] placements = ComputePlacements();
+            for (int i = 0; i < placements.Length; i++)
             {
-                int[] placements = ComputePlacements();
-                for (int i = 0; i < placements.Length; i++)
+                if (placements[i] == _players.Length)
                 {
-                    if (placements[i] == _players.Length)
-                    {
-                        LoserIndex = i;
-                    }
+                    LoserIndex = i;
                 }
             }
-            else if (_eliminationOrder.Count > 0)
-            {
-                LoserIndex = _eliminationOrder[0];
-            }
+        }
+        else if (_eliminationOrder.Count > 0)
+        {
+            LoserIndex = _eliminationOrder[0];
         }
     }
 
+    /// <summary>Phase 3.5. Projectiles (2026-07-14): step lives (closed-form
+    /// reposition, then the despawn checks — TTL, decayed-to-nothing, past the
+    /// blast boundary, platform contact [platforms DESTROY projectiles, designer]),
+    /// consume pending spawns, then projectile-vs-player hits. Fixed list order,
+    /// victims in player order — all part of the tick-order contract.</summary>
     private void StepProjectiles()
     {
         for (int i = 0; i < _projectiles.Count; i++)
@@ -500,12 +551,9 @@ public sealed class SimWorld
                     continue;
                 }
             }
-            // Spawn immunity (2026-07-22): an intangible or invulnerable victim takes no
-            // damage/knockback; an absent (blacked-out or eliminated) one isn't on
-            // stage. The bolt passes THROUGH rather than being consumed (nothing was
-            // blocked).
-            if (!overlaps || victim.InvincibleTicksLeft > 0
-                || victim.SpawnDamageImmune || victim.IsAbsent)
+            // Spawn immunity (2026-07-22): shared gate with melee. The bolt passes
+            // THROUGH rather than being consumed (nothing was blocked).
+            if (!overlaps || ImmuneToHits(victim))
             {
                 continue;
             }
@@ -518,10 +566,9 @@ public sealed class SimWorld
                 victim.ProjectilesReflected++;
                 return; // re-seated: resume against it next tick from the new path
             }
-            if (victim.DashInvulnerable)
+            if (TryDashDodge(victim))
             {
-                victim.DashInvulnDodges++;
-                continue;
+                continue; // negated — the bolt passes through and stays live
             }
 
             float scaledDamage = proj.Move.DamageGiven * proj.DamageScale;
@@ -538,72 +585,132 @@ public sealed class SimWorld
                 {
                     proj.ReflectFrom(victim.Index, TickCount);
                     victim.ProjectilesReflected++;
-                    victim.ShieldHealths[victim.CurrentMoveIndex] -= scaledDamage * shield.HitDegradationScalar;
-                    if (victim.ShieldHealths[victim.CurrentMoveIndex] <= victim.ShieldBreakRadius)
-                    {
-                        victim.BreakShield();
-                    }
+                    DegradeShield(victim, shield, scaledDamage);
                     return;
                 }
-                float blockedDamageAfter = victim.Damage + scaledDamage;
-                Vec2 blockedKnockback = ComputeKnockback(
-                    victim.Position, proj.Position, proj.Move.KnockbackDirection,
-                    proj.Facing, proj.Move.KnockbackScalar * proj.DamageScale, blockedDamageAfter);
-                victim.Velocity += blockedKnockback * (1f - shield.KnockbackReduction);
-                victim.BlockedHits++;
-                if (proj.Owner != victim.Index)
-                {
-                    victim.MarkInfluence(proj.Owner); // blocked knockback still shoves
-                }
-                victim.InvincibleTicksLeft = Config.InvincibilityTicks;
-                victim.ShieldHealths[victim.CurrentMoveIndex] -= scaledDamage * shield.HitDegradationScalar;
-                if (victim.ShieldHealths[victim.CurrentMoveIndex] <= victim.ShieldBreakRadius)
-                {
-                    victim.BreakShield();
-                }
+                ApplyBlockedHit(victim, shield, proj.Position, proj.Move.KnockbackDirection,
+                    proj.Facing, proj.Move.KnockbackScalar * proj.DamageScale, scaledDamage,
+                    proj.Owner);
                 proj.Alive = false;
                 return;
             }
 
-            float damageAfterHit = victim.Damage + scaledDamage;
-            Vec2 knockback = ComputeKnockback(
-                victim.Position, proj.Position, proj.Move.KnockbackDirection,
-                proj.Facing, proj.Move.KnockbackScalar * proj.DamageScale, damageAfterHit);
-            knockback = ApplyDirectionalInfluence(victim, knockback);
-            int stunTicks = Config.ToTicks(
-                proj.Move.HitstunDuration * damageAfterHit * victim.HitstunDamageScalar);
-            if (!float.IsPositiveInfinity(Config.MaxStunSeconds))
-            {
-                stunTicks = Math.Min(stunTicks, Config.ToTicks(Config.MaxStunSeconds));
-            }
-            victim.ApplyHit(scaledDamage, knockback, stunTicks);
-            // KO attribution (2026-08-12): a self-hit (hitsSelf gene) influences and
-            // credits nobody — dying to your own bolt is a self-destruct.
-            if (proj.Owner != victim.Index)
-            {
-                victim.MarkInfluence(proj.Owner);
-                _players[proj.Owner].DamageDealt += scaledDamage;
-            }
-            victim.InvincibleTicksLeft = Config.InvincibilityTicks;
+            // KO attribution note (2026-08-12): a self-hit (hitsSelf gene) influences
+            // and credits nobody — dying to your own bolt is a self-destruct
+            // (ApplyCleanHit gates on attackerIndex ≠ victim).
+            ApplyCleanHit(victim, scaledDamage, proj.Position, proj.Move.KnockbackDirection,
+                proj.Facing, proj.Move.KnockbackScalar * proj.DamageScale,
+                proj.Move.HitstunDuration, proj.Owner);
             _players[proj.Owner].ProjectileHits++;
             proj.Alive = false;
         }
     }
 
-    /// <summary>The owner is no longer resting on its spawn pad (2026-07-22): its feet
-    /// left the pad's span or lifted off the pad's top. Tolerance matches the physics
-    /// skin so a settled body reads as still-on.</summary>
-    private static bool LeftPad(SimPlayer player, in Aabb pad)
+    /// <summary>Shared victim gate for melee and projectile hits (2026-07-22,
+    /// 2026-08-12): an intangible/invulnerable victim takes no damage/knockback;
+    /// an absent (blacked-out or eliminated) one isn't on stage.</summary>
+    private static bool ImmuneToHits(SimPlayer victim) =>
+        victim.InvincibleTicksLeft > 0 || victim.SpawnDamageImmune || victim.IsAbsent;
+
+    /// <summary>Dash i-frames (2026-07-13): a hit that WOULD have landed is negated
+    /// and counted — the research data sees evasion value even with fitness blind.
+    /// True = dodged; the caller stops resolving this victim.</summary>
+    private static bool TryDashDodge(SimPlayer victim)
     {
-        const float tol = 0.05f;
-        float feet = player.Body.Bottom;
-        return player.Position.X < pad.Left || player.Position.X > pad.Right
-            || feet > pad.Top + tol || feet < pad.Top - tol;
+        if (!victim.DashInvulnerable)
+        {
+            return false;
+        }
+        victim.DashInvulnDodges++;
+        return true;
     }
 
-    private bool InsideBlastZone(Vec2 p) =>
-        p.X >= _blastZone.Left && p.X <= _blastZone.Right
-        && p.Y >= _blastZone.Bottom && p.Y <= _blastZone.Top;
+    /// <summary>Degrade the victim's active shield by damage × its degradation
+    /// scalar; break applies immediately at/below the break radius. One home for
+    /// what were three verbatim copies (melee block, projectile block, projectile
+    /// shield-reflect).</summary>
+    private static void DegradeShield(SimPlayer victim, SimShield shield, float damage)
+    {
+        victim.ShieldHealths[victim.CurrentMoveIndex] -= damage * shield.HitDegradationScalar;
+        if (victim.ShieldHealths[victim.CurrentMoveIndex] <= victim.ShieldBreakRadius)
+        {
+            victim.BreakShield();
+        }
+    }
+
+    /// <summary>Blocked-hit application, identical for melee and projectiles:
+    /// zero damage/stun, knockback scaled by (1 − reduction), BlockedHits, influence
+    /// (skipped when the attacker IS the victim — a self-hit shoves nobody), post-hit
+    /// invincibility, then shield degradation.</summary>
+    private void ApplyBlockedHit(SimPlayer victim, SimShield shield, Vec2 hitboxCenter,
+        Vec2 knockbackDirection, int facing, float knockbackScalar, float damage,
+        int attackerIndex)
+    {
+        float blockedDamageAfter = victim.Damage + damage;
+        Vec2 blockedKnockback = ComputeKnockback(
+            victim.Position, hitboxCenter, knockbackDirection,
+            facing, knockbackScalar, blockedDamageAfter);
+        victim.Velocity += blockedKnockback * (1f - shield.KnockbackReduction);
+        victim.BlockedHits++;
+        if (attackerIndex != victim.Index)
+        {
+            victim.MarkInfluence(attackerIndex); // blocked knockback still shoves (2026-08-12)
+        }
+        victim.InvincibleTicksLeft = Config.InvincibilityTicks;
+        DegradeShield(victim, shield, damage);
+    }
+
+    /// <summary>Hitstun in ticks: hitstun gene × damage AFTER the hit × the victim's
+    /// hitstun scalar, capped by MaxStunSeconds when finite.</summary>
+    private int ComputeStunTicks(float hitstunDuration, float damageAfterHit, float victimScalar)
+    {
+        int stunTicks = Config.ToTicks(hitstunDuration * damageAfterHit * victimScalar);
+        if (!float.IsPositiveInfinity(Config.MaxStunSeconds))
+        {
+            stunTicks = Math.Min(stunTicks, Config.ToTicks(Config.MaxStunSeconds));
+        }
+        return stunTicks;
+    }
+
+    /// <summary>Clean-hit application, identical for melee and projectiles: damage,
+    /// knockback deflected by DI, capped stun; influence + DamageDealt credit are
+    /// skipped when the attacker IS the victim (KO attribution 2026-08-12 — dying to
+    /// your own bolt is a self-destruct); then post-hit invincibility.</summary>
+    private void ApplyCleanHit(SimPlayer victim, float damage, Vec2 hitboxCenter,
+        Vec2 knockbackDirection, int facing, float knockbackScalar,
+        float hitstunDuration, int attackerIndex)
+    {
+        float damageAfterHit = victim.Damage + damage;
+        Vec2 knockback = ComputeKnockback(
+            victim.Position, hitboxCenter, knockbackDirection,
+            facing, knockbackScalar, damageAfterHit);
+        knockback = ApplyDirectionalInfluence(victim, knockback);
+        int stunTicks = ComputeStunTicks(hitstunDuration, damageAfterHit, victim.HitstunDamageScalar);
+        victim.ApplyHit(damage, knockback, stunTicks);
+        if (attackerIndex != victim.Index)
+        {
+            victim.MarkInfluence(attackerIndex);
+            _players[attackerIndex].DamageDealt += damage;
+        }
+        victim.InvincibleTicksLeft = Config.InvincibilityTicks;
+    }
+
+    /// <summary>Feet-on-pad slack for LeftPad (2026-07-22). NOT the physics skin
+    /// (SimPhysics.Skin = 0.001, 50× smaller): a deliberately looser band, the same
+    /// magnitude as MatchConfig.MaxDepenetrationPerTick, so a body still settling
+    /// by capped depenetration reads as on the pad.</summary>
+    private const float PadRestTolerance = 0.05f;
+
+    /// <summary>The owner is no longer resting on its spawn pad (2026-07-22): its feet
+    /// left the pad's span or lifted off the pad's top.</summary>
+    private static bool LeftPad(SimPlayer player, in Aabb pad)
+    {
+        float feet = player.Body.Bottom;
+        return player.Position.X < pad.Left || player.Position.X > pad.Right
+            || feet > pad.Top + PadRestTolerance || feet < pad.Top - PadRestTolerance;
+    }
+
+    private bool InsideBlastZone(Vec2 p) => _blastZone.Contains(p);
 
     /// <summary>Does this tick's motion put the bolt into a platform? Solid platforms
     /// keep the legacy center-inside test (platforms DESTROY projectiles, designer).
@@ -618,8 +725,7 @@ public sealed class SimWorld
             Aabb platform = Platforms[i];
             if (!PlatformThin[i])
             {
-                if (current.X >= platform.Left && current.X <= platform.Right
-                    && current.Y >= platform.Bottom && current.Y <= platform.Top)
+                if (platform.Contains(current))
                 {
                     return true;
                 }
@@ -627,6 +733,7 @@ public sealed class SimWorld
             }
             if (previous.Y >= platform.Top && current.Y <= platform.Top && current.Y < previous.Y)
             {
+                // Interpolate the X where the segment crosses the platform's top edge.
                 float t = (previous.Y - platform.Top) / (previous.Y - current.Y);
                 float crossX = previous.X + (current.X - previous.X) * t;
                 if (crossX >= platform.Left && crossX <= platform.Right)
@@ -657,7 +764,9 @@ public sealed class SimWorld
         // center (facing fallback for the degenerate concentric case).
         Vec2 direction = opponent.Position - center;
         float length = direction.Length();
-        direction = length > 0.0001f ? direction * (1f / length) : new Vec2(shielder.Facing, 0f);
+        direction = length > DegenerateDirectionEpsilon
+            ? direction * (1f / length)
+            : new Vec2(shielder.Facing, 0f);
 
         // Positional: expel toward the circle edge, capped per tick (no teleports).
         float penetration = radius - toClosest.Length();
@@ -685,11 +794,9 @@ public sealed class SimWorld
     /// </summary>
     private void TryHit(SimPlayer attacker, SimPlayer victim)
     {
-        // Spawn immunity / blackout / elimination (2026-07-22, 2026-08-12): no damage
-        // to an intangible/invulnerable or absent victim; an absent attacker has no
-        // live hitbox.
-        if (!attacker.HitboxActive || victim.InvincibleTicksLeft > 0
-            || victim.SpawnDamageImmune || victim.IsAbsent || attacker.IsAbsent)
+        // Immunity gate (2026-07-22, 2026-08-12): shared with projectiles, plus an
+        // absent attacker has no live hitbox.
+        if (!attacker.HitboxActive || ImmuneToHits(victim) || attacker.IsAbsent)
         {
             return;
         }
@@ -698,12 +805,8 @@ public sealed class SimWorld
         {
             return;
         }
-
-        // Dash i-frames (2026-07-13): a hit that WOULD have landed is negated and
-        // counted — the research data sees evasion value even with fitness blind.
-        if (victim.DashInvulnerable)
+        if (TryDashDodge(victim))
         {
-            victim.DashInvulnDodges++;
             return;
         }
 
@@ -712,47 +815,29 @@ public sealed class SimWorld
             && OverlapFullyInsideShield(hitbox, victim.Body,
                 victim.Position + victim.ShieldOffset, victim.ShieldRadius))
         {
-            float blockedDamageAfter = victim.Damage + attacker.Move.DamageGiven;
-            Vec2 blockedKnockback = ComputeKnockback(
-                victim.Position, hitbox.Center, attacker.Move.KnockbackDirection,
-                attacker.Facing, attacker.Move.KnockbackScalar, blockedDamageAfter);
-            victim.Velocity += blockedKnockback * (1f - shield.KnockbackReduction);
-            victim.BlockedHits++;
-            victim.MarkInfluence(attacker.Index); // blocked knockback still shoves (2026-08-12)
-            victim.InvincibleTicksLeft = Config.InvincibilityTicks;
-            victim.ShieldHealths[victim.CurrentMoveIndex] -=
-                attacker.Move.DamageGiven * shield.HitDegradationScalar;
-            if (victim.ShieldHealths[victim.CurrentMoveIndex] <= victim.ShieldBreakRadius)
-            {
-                victim.BreakShield();
-            }
+            ApplyBlockedHit(victim, shield, hitbox.Center, attacker.Move.KnockbackDirection,
+                attacker.Facing, attacker.Move.KnockbackScalar, attacker.Move.DamageGiven,
+                attacker.Index);
             return;
         }
 
-        float damageAfterHit = victim.Damage + attacker.Move.DamageGiven;
-        Vec2 knockback = ComputeKnockback(
-            victim.Position, hitbox.Center, attacker.Move.KnockbackDirection,
-            attacker.Facing, attacker.Move.KnockbackScalar, damageAfterHit);
-
-        // Directional influence (2026-07-13, FEATURES.md §DI): the victim's held
-        // direction at the hit instant deflects the knockback slightly (≤10% gene)
+        // Directional influence (2026-07-13, FEATURES.md §DI): inside ApplyCleanHit
+        // the victim's held direction deflects the knockback slightly (≤10% gene)
         // and, when held near-opposite (within 45°), trims its magnitude (≤20% gene).
         // SKIPPED while shielding — including pokes through partial cover: a shielder
         // is committed to the shield, not influencing (designer clarification).
-        knockback = ApplyDirectionalInfluence(victim, knockback);
-
-        int stunTicks = Config.ToTicks(
-            attacker.Move.HitstunDuration * damageAfterHit * victim.HitstunDamageScalar);
-        if (!float.IsPositiveInfinity(Config.MaxStunSeconds))
-        {
-            stunTicks = Math.Min(stunTicks, Config.ToTicks(Config.MaxStunSeconds));
-        }
-
-        victim.ApplyHit(attacker.Move.DamageGiven, knockback, stunTicks);
-        victim.MarkInfluence(attacker.Index); // KO attribution (2026-08-12)
-        attacker.DamageDealt += attacker.Move.DamageGiven;
-        victim.InvincibleTicksLeft = Config.InvincibilityTicks;
+        ApplyCleanHit(victim, attacker.Move.DamageGiven, hitbox.Center,
+            attacker.Move.KnockbackDirection, attacker.Facing, attacker.Move.KnockbackScalar,
+            attacker.Move.HitstunDuration, attacker.Index);
     }
+
+    /// <summary>Below this length a push direction is treated as degenerate
+    /// (concentric bodies) and falls back to the shielder's facing.</summary>
+    private const float DegenerateDirectionEpsilon = 0.0001f;
+
+    /// <summary>cos 135° — the "held near-opposite" threshold for DI's
+    /// knockback-magnitude reduction (within 45° of straight-against).</summary>
+    private const float OppositeHoldCosine = -0.70710678f;
 
     private static Vec2 ApplyDirectionalInfluence(SimPlayer victim, Vec2 knockback)
     {
@@ -772,7 +857,7 @@ public sealed class SimWorld
         // Opposite-hold reduction: alignment within 45° of straight-against.
         Vec2 kbUnit = knockback * (1f / magnitude);
         float dot = heldUnit.X * kbUnit.X + heldUnit.Y * kbUnit.Y;
-        if (dot < -0.70710678f)
+        if (dot < OppositeHoldCosine)
         {
             result *= 1f - victim.DiKnockbackReduction;
         }
@@ -785,6 +870,9 @@ public sealed class SimWorld
     /// knockback direction [x mirrored by facing]) · scalar · (victim damage AFTER the
     /// hit · 0.1). Public and static so tests can pin it against hand-computed values.
     /// </summary>
+    /// <summary>The Unity formula's damage-to-knockback conversion factor.</summary>
+    public const float DamagePerKnockbackUnit = 0.1f;
+
     public static Vec2 ComputeKnockback(
         Vec2 victimPosition, Vec2 hitboxCenter, Vec2 knockbackDirection,
         int attackerFacing, float knockbackScalar, float damageAfterHit)
@@ -795,7 +883,7 @@ public sealed class SimWorld
         }
         return (victimPosition - hitboxCenter + knockbackDirection)
             * knockbackScalar
-            * (damageAfterHit * 0.1f);
+            * (damageAfterHit * DamagePerKnockbackUnit);
     }
 
     /// <summary>The rect where the hitbox meets the body, tested against the shield
@@ -998,15 +1086,33 @@ public sealed class SimWorld
 
     public MatchResult BuildResult(Replay.InputTrace? trace = null) =>
         new(
+            // Fully named so a same-typed pair can never swap silently — a wrong-order
+            // stat here would only ever surface as a research-data anomaly.
             _players.Select(p => new PlayerStats(
-                p.TotalDamageTaken, p.TotalHitsReceived, p.Stocks, p.RecoveryTicks,
-                p.CompletedStockDamage.Append(p.Damage).ToArray(),
-                p.MoveUses.ToArray(), p.StunTicks, p.Jumps,
-                p.ShieldActivations, p.BlockedHits, p.ShieldBreaks, p.ShieldTicks,
-                p.DashCount, p.DashInvulnDodges,
-                p.FastFallTicks, p.CrouchTicks, p.DIInfluencedHits,
-                p.ProjectilesFired, p.ProjectileHits, p.ProjectilesReflected,
-                p.KOs, p.DamageDealt, p.SelfDestructs, p.DropThroughs)).ToArray(),
+                TotalDamageTaken: p.TotalDamageTaken,
+                TotalHitsReceived: p.TotalHitsReceived,
+                RemainingStocks: p.Stocks,
+                RecoveryTicks: p.RecoveryTicks,
+                DamagePerStock: p.CompletedStockDamage.Append(p.Damage).ToArray(),
+                MoveUses: p.MoveUses.ToArray(),
+                StunTicks: p.StunTicks,
+                Jumps: p.Jumps,
+                ShieldActivations: p.ShieldActivations,
+                BlockedHits: p.BlockedHits,
+                ShieldBreaks: p.ShieldBreaks,
+                ShieldTicks: p.ShieldTicks,
+                DashCount: p.DashCount,
+                DashInvulnDodges: p.DashInvulnDodges,
+                FastFallTicks: p.FastFallTicks,
+                CrouchTicks: p.CrouchTicks,
+                DIInfluencedHits: p.DIInfluencedHits,
+                ProjectilesFired: p.ProjectilesFired,
+                ProjectileHits: p.ProjectileHits,
+                ProjectilesReflected: p.ProjectilesReflected,
+                KOs: p.KOs,
+                DamageDealt: p.DamageDealt,
+                SelfDestructs: p.SelfDestructs,
+                DropThroughs: p.DropThroughs)).ToArray(),
             LoserIndex,
             TickCount,
             TickCount / (float)Config.TicksPerSecond,

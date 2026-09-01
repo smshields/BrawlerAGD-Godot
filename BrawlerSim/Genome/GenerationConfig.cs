@@ -55,14 +55,6 @@ public sealed record GenerationConfig
     public int JumpHeight { get; init; } = 2;
     public int JumpLength { get; init; } = 2;
 
-    /// <summary>Legacy Unity MapGenerator inputs (pre-mirror count 3, max size 6).
-    /// Superseded 2026-07-21 by the stage schema's platformCount/maxPlatformSize
-    /// GENES (docs/features/map-size.md); kept as the documented legacy reference
-    /// (StageRules.LegacyPlatformCount/LegacyMaxPlatformSize hold the gene-space
-    /// equivalents) — no longer consumed by the generator.</summary>
-    public int PlatformCount { get; init; } = 3;
-    public int MaxPlatformSize { get; init; } = 6;
-
     /// <summary>Per-button composition (2026-07-14). Null (default) = the PINNED legacy
     /// layout above — that path must stay byte-identical (fingerprint golden). Non-null:
     /// exactly one move per button, buttonMoves = identity, slot i's type from spec i

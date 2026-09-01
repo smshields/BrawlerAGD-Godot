@@ -18,11 +18,6 @@ public static class SimPhysics
 {
     private const float Skin = 0.001f; // resolution slack to keep resting contacts stable
 
-    /// <summary>Two-player convenience overload (tests and pre-2026-08-12 callers).</summary>
-    public static void Step(SimPlayer player, SimPlayer opponent, IReadOnlyList<Aabb> platforms, MatchConfig config,
-        IReadOnlyList<bool>? thin = null)
-        => Step(player, new[] { player, opponent }, platforms, config, thin);
-
     /// <summary>N-player step (2026-08-12, four-player.md): every OTHER present player
     /// is a solid collider, checked in array order. For two players this is
     /// bit-identical to the pairwise step (the self entry is skipped).
