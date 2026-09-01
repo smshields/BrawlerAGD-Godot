@@ -314,6 +314,15 @@ public partial class EvolveView : Control
         root.AddThemeConstantOverride("separation", 24);
         AddChild(root);
 
+        BuildConfigColumn(root);
+        BuildChartColumn(root);
+
+        _previewPanel = BuildPreviewPanel();
+        root.AddChild(_previewPanel);
+    }
+
+    private void BuildConfigColumn(HBoxContainer root)
+    {
         var left = new VBoxContainer { CustomMinimumSize = new Vector2(360f, 0f) };
         left.AddThemeConstantOverride("separation", 8);
         root.AddChild(left);
@@ -391,7 +400,10 @@ public partial class EvolveView : Control
         var back = new Button { Text = "BACK" };
         back.Pressed += () => GetTree().ChangeSceneToFile(Scenes.MainMenu);
         left.AddChild(back);
+    }
 
+    private void BuildChartColumn(HBoxContainer root)
+    {
         var right = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         right.AddThemeConstantOverride("separation", 8);
         root.AddChild(right);
@@ -410,9 +422,6 @@ public partial class EvolveView : Control
         };
         _status.AddThemeFontSizeOverride("font_size", 14);
         right.AddChild(_status);
-
-        _previewPanel = BuildPreviewPanel();
-        root.AddChild(_previewPanel);
     }
 
     /// <summary>The Evolution Explorer column (2026-07-27): live match preview of the

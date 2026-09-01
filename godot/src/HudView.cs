@@ -182,6 +182,15 @@ public partial class HudView : CanvasLayer
             };
             hud.AddChild(_root);
 
+            BuildPanel(character, player);
+            BuildDebugStrip();
+            _intangible = new Bar(_debug, "INTG", new Color(1f, 1f, 1f), new Vector2(150f, 8f));
+            _invulnerable = new Bar(_debug, "INVL", new Color(0.75f, 0.85f, 1f), new Vector2(150f, 20f));
+            _keys = BuildControlRow(index, character);
+        }
+
+        private void BuildPanel(CharacterGenome character, SimPlayer player)
+        {
             // Main panel: solid background, outline in the identity color.
             _panel.AddThemeStyleboxOverride("panel", UiWidgets.PanelStyle(
                 UiPalette.PanelBg, border: _color, borderWidth: 2, cornerRadius: 8));
@@ -252,7 +261,10 @@ public partial class HudView : CanvasLayer
             _deathFlash.AnchorBottom = 1f;
             _deathFlash.MouseFilter = Control.MouseFilterEnum.Ignore;
             _panel.AddChild(_deathFlash);
+        }
 
+        private void BuildDebugStrip()
+        {
             // Debug strip (semi-transparent) above the panel.
             _debug.AnchorLeft = 0f;
             _debug.AnchorRight = 1f;
@@ -282,31 +294,39 @@ public partial class HudView : CanvasLayer
             _diArrow.OffsetTop = 2f;
             _diArrow.AddThemeFontSizeOverride("font_size", 16);
             _debug.AddChild(_diArrow);
+        }
 
-            _intangible = new Bar(_debug, "INTG", new Color(1f, 1f, 1f), new Vector2(150f, 8f));
-            _invulnerable = new Bar(_debug, "INVL", new Color(0.75f, 0.85f, 1f), new Vector2(150f, 20f));
-
+        private Keycap[] BuildControlRow(int index, CharacterGenome character)
+        {
             // Control layout: jump + the five action buttons, move names attached,
             // keycaps highlight on press (agent presses included).
             string[] keys = index == 0 ? ControlLabels.Keyboard : ControlLabels.Pad;
             string jumpKey = index == 0 ? ControlLabels.KeyboardJump : ControlLabels.PadJump;
-            _keys = new Keycap[keys.Length + 1];
+            var caps = new Keycap[keys.Length + 1];
             float x = 8f;
-            _keys[0] = new Keycap(_debug, jumpKey, "JUMP", new Vector2(x, DebugHeight - 34f));
+            caps[0] = new Keycap(_debug, jumpKey, "JUMP", new Vector2(x, DebugHeight - 34f));
             x += 52f;
             for (int b = 0; b < keys.Length; b++)
             {
-                _keys[b + 1] = new Keycap(_debug, keys[b],
+                caps[b + 1] = new Keycap(_debug, keys[b],
                     MoveLabels.Abbrev(character, character.ButtonMoves[b]), new Vector2(x, DebugHeight - 34f));
                 x += 52f;
             }
+            return caps;
         }
 
         public void Sync(SimPlayer player, InputFrame input)
         {
             _clock++;
             float dt = 1f / 60f;
+            SyncDamageRoll(player, dt);
+            SyncShake(player);
+            SyncStocks(player);
+            SyncDebugStrip(player, input);
+        }
 
+        private void SyncDamageRoll(SimPlayer player, float dt)
+        {
             // Percent roll (mockup: roll through interim numbers, grow slightly
             // until the final roll, scale with hit magnitude — hit player only).
             if (player.Damage != _rollTarget)
@@ -332,7 +352,10 @@ public partial class HudView : CanvasLayer
                 _damage.Scale = Vector2.One;
             }
             _damage.Text = $"{_shownDamage:F1}%";
+        }
 
+        private void SyncShake(SimPlayer player)
+        {
             // Hit shake (subtle, damage-scaled) and death shake + flash (major).
             // Deaths are read from the per-life ledger (2026-08-12): stock decrements
             // fill it exactly as before, TIMED-mode deaths fill it with stocks
@@ -364,7 +387,10 @@ public partial class HudView : CanvasLayer
             _root.OffsetTop = jolt.Y;
             _root.OffsetBottom = jolt.Y;
             _deathFlash.Color = new Color(1f, 1f, 1f, _flash > 0.03f ? _flash : 0f);
+        }
 
+        private void SyncStocks(SimPlayer player)
+        {
             // Stocks: dots until they no longer fit, then a count. TIMED mode
             // (2026-08-12) has infinite stocks — the score is the KO count.
             _stocks.Text = _timed
@@ -377,7 +403,10 @@ public partial class HudView : CanvasLayer
             // An eliminated player's quarter dims — still readable, clearly done.
             _panel.Modulate = player.Eliminated
                 ? new Color(0.55f, 0.55f, 0.6f) : Colors.White;
+        }
 
+        private void SyncDebugStrip(SimPlayer player, InputFrame input)
+        {
             // Debug strip.
             _debug.Visible = AppSettings.DebugPanelEnabled;
             if (!_debug.Visible)
@@ -412,7 +441,6 @@ public partial class HudView : CanvasLayer
                 _keys[b + 1].Sync(input.ActionPressed(b));
             }
         }
-
     }
 
     /// <summary>A labelled timing bar (intangible/invulnerable) — hidden at zero.

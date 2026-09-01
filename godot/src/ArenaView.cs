@@ -61,6 +61,34 @@ public partial class ArenaView : Node2D
 
         Position = GetViewportRect().Size / 2f;
 
+        BuildViewStack(players);
+
+        _shotDir = AutomationEnv.ShotDir;
+        string ticks = AutomationEnv.ShotTicks;
+        if (_shotDir.Length > 0 && ticks.Length > 0)
+        {
+            foreach (string tick in ticks.Split(','))
+            {
+                _shotTicks.Enqueue(int.Parse(tick));
+            }
+        }
+        string fastForward = AutomationEnv.TicksPerFrame;
+        if (fastForward.Length > 0)
+        {
+            _ticksPerFrame = int.Parse(fastForward);
+        }
+        string pauseAt = AutomationEnv.PauseAt;
+        if (pauseAt.Length > 0)
+        {
+            _pauseAtTick = int.Parse(pauseAt); // automation: verify the pause menu
+        }
+    }
+
+    /// <summary>The rendered view stack over the SimWorld, in draw order: stage,
+    /// players, projectiles, spawn pads, camera, minimap, death flash, HUD, pause
+    /// menu.</summary>
+    private void BuildViewStack(int players)
+    {
         var stage = new StageView();
         AddChild(stage);
         stage.Setup(_world, Ppu);
@@ -117,26 +145,6 @@ public partial class ArenaView : Node2D
         AddChild(_pauseMenu);
         _pauseMenu.ResumeRequested += () => SetPaused(false);
         _pauseMenu.QuitRequested += BackToMenu;
-
-        _shotDir = AutomationEnv.ShotDir;
-        string ticks = AutomationEnv.ShotTicks;
-        if (_shotDir.Length > 0 && ticks.Length > 0)
-        {
-            foreach (string tick in ticks.Split(','))
-            {
-                _shotTicks.Enqueue(int.Parse(tick));
-            }
-        }
-        string fastForward = AutomationEnv.TicksPerFrame;
-        if (fastForward.Length > 0)
-        {
-            _ticksPerFrame = int.Parse(fastForward);
-        }
-        string pauseAt = AutomationEnv.PauseAt;
-        if (pauseAt.Length > 0)
-        {
-            _pauseAtTick = int.Parse(pauseAt); // automation: verify the pause menu
-        }
     }
 
     public override void _PhysicsProcess(double delta)

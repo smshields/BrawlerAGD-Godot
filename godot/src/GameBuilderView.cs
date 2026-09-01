@@ -474,7 +474,26 @@ public partial class GameBuilderView : Control
         root.AddThemeConstantOverride("separation", 24);
         AddChild(root);
 
-        // LEFT — the games library.
+        BuildLibraryColumn(root);
+        BuildRosterColumn(root);
+        BuildSourceColumn(root);
+
+        _confirmDelete = new ConfirmationDialog
+        {
+            DialogText = "Delete this game? The compiled document is removed from disk.",
+        };
+        _confirmDelete.Confirmed += DeleteOpenGame;
+        AddChild(_confirmDelete);
+
+        _sourceDialog = GameLibraryUi.JsonBrowser(OpenSource, filter: "*.json ; evolved game");
+        AddChild(_sourceDialog);
+
+        RefreshSourceList();
+    }
+
+    // LEFT — the games library.
+    private void BuildLibraryColumn(HBoxContainer root)
+    {
         var left = new VBoxContainer { CustomMinimumSize = new Vector2(280f, 0f) };
         left.AddThemeConstantOverride("separation", 8);
         root.AddChild(left);
@@ -494,8 +513,11 @@ public partial class GameBuilderView : Control
         var back = new Button { Text = "BACK" };
         back.Pressed += () => GetTree().ChangeSceneToFile(Scenes.MainMenu);
         left.AddChild(back);
+    }
 
-        // MIDDLE — the open game's roster.
+    // MIDDLE — the open game's roster.
+    private void BuildRosterColumn(HBoxContainer root)
+    {
         var mid = new VBoxContainer { CustomMinimumSize = new Vector2(400f, 0f) };
         mid.AddThemeConstantOverride("separation", 8);
         root.AddChild(mid);
@@ -525,8 +547,11 @@ public partial class GameBuilderView : Control
         ScrollContainer stageScroll = UiWidgets.ScrollList(out _rosterStages, separation: 6);
         stageScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
         mid.AddChild(stageScroll);
+    }
 
-        // RIGHT — sources.
+    // RIGHT — sources.
+    private void BuildSourceColumn(HBoxContainer root)
+    {
         var right = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         right.AddThemeConstantOverride("separation", 8);
         root.AddChild(right);
@@ -545,18 +570,6 @@ public partial class GameBuilderView : Control
         _status = new Label { Modulate = new Color(1f, 0.9f, 0.6f) };
         _status.AddThemeFontSizeOverride("font_size", 13);
         right.AddChild(_status);
-
-        _confirmDelete = new ConfirmationDialog
-        {
-            DialogText = "Delete this game? The compiled document is removed from disk.",
-        };
-        _confirmDelete.Confirmed += DeleteOpenGame;
-        AddChild(_confirmDelete);
-
-        _sourceDialog = GameLibraryUi.JsonBrowser(OpenSource, filter: "*.json ; evolved game");
-        AddChild(_sourceDialog);
-
-        RefreshSourceList();
     }
 
     private static Label Heading(string text)
