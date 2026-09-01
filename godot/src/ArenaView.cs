@@ -41,6 +41,10 @@ public partial class ArenaView : Node2D
     // given sim ticks, plus at match end, then quit.
     private string _shotDir = "";
     private System.Collections.Generic.Queue<int> _shotTicks = new();
+    private int _pauseAtTick = -1;
+
+    /// <summary>Automation fast-forward: sim ticks per rendered frame (default 1 = real time).</summary>
+    private int _ticksPerFrame = 1;
 
     public override void _Ready()
     {
@@ -134,11 +138,6 @@ public partial class ArenaView : Node2D
             _pauseAtTick = int.Parse(pauseAt); // automation: verify the pause menu
         }
     }
-
-    private int _pauseAtTick = -1;
-
-    /// <summary>Automation fast-forward: sim ticks per rendered frame (default 1 = real time).</summary>
-    private int _ticksPerFrame = 1;
 
     public override void _PhysicsProcess(double delta)
     {

@@ -16,6 +16,7 @@ public partial class MainMenu : Control
     private Label _hint = null!;
     private Button _twoPlayerButton = null!;
     private PadPresence _padWatch = null!;
+    private Control? _picker;
 
     public override void _Ready()
     {
@@ -100,8 +101,6 @@ public partial class MainMenu : Control
     {
         _padWatch.Detach();
     }
-
-    private Control? _picker;
 
     /// <summary>The game picker (Evolution Explorer, 2026-07-27, designer): a simple
     /// list — FAVORITES (the ADD TO GAMES basket) first, then the curated DEMO games —

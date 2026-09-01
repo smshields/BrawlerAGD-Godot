@@ -23,7 +23,6 @@ namespace BrawlerGodot;
 public partial class CharacterSelectView : Control
 {
     private const int PaneCount = 4;
-    private const float CursorSpeed = 640f; // px/s at design resolution
 
     private enum PaneMode
     {
@@ -45,17 +44,7 @@ public partial class CharacterSelectView : Control
         public Control Body = null!;
     }
 
-    /// <summary>An interactive region: pads hit-test these; the mouse clicks them
-    /// through the same handler (one interaction path for every device).</summary>
-    private sealed record Hotspot(Control Area, System.Action<int> Activate, System.Func<bool>? Enabled = null)
-    {
-        public bool IsEnabled => Enabled?.Invoke() ?? true;
-    }
-
-    private readonly List<Hotspot> _hotspots = new();
     private readonly Pane[] _panes = new Pane[PaneCount];
-    private readonly Dictionary<int, int> _padPane = new();   // pad device -> pane index
-    private readonly Dictionary<int, Vector2> _padCursor = new(); // pad device -> position
     private readonly Dictionary<int, int> _retarget = new();  // actor pane -> pane picking for
 
     private BuiltGame _game = null!;
@@ -73,7 +62,6 @@ public partial class CharacterSelectView : Control
     private Label _stagePreviewName = null!;
     private readonly List<PanelContainer> _stageCards = new();
     private readonly List<PanelContainer> _gridCells = new();
-    private CursorLayer _cursors = null!;
 
     public override void _Ready()
     {
@@ -139,48 +127,6 @@ public partial class CharacterSelectView : Control
         if (button == JoyButton.B && _padPane.TryGetValue(device, out int owner))
         {
             CancelFor(owner);
-        }
-    }
-
-    public override void _Process(double delta)
-    {
-        // Pad cursors: left stick / dpad, polled per frame.
-        foreach ((int device, int _) in _padPane)
-        {
-            var move = new Vector2(
-                Input.GetJoyAxis(device, JoyAxis.LeftX), Input.GetJoyAxis(device, JoyAxis.LeftY));
-            if (Input.IsJoyButtonPressed(device, JoyButton.DpadLeft)) move.X -= 1f;
-            if (Input.IsJoyButtonPressed(device, JoyButton.DpadRight)) move.X += 1f;
-            if (Input.IsJoyButtonPressed(device, JoyButton.DpadUp)) move.Y -= 1f;
-            if (Input.IsJoyButtonPressed(device, JoyButton.DpadDown)) move.Y += 1f;
-            if (move.LengthSquared() < 0.04f)
-            {
-                continue;
-            }
-            Vector2 next = _padCursor[device] + move.LimitLength(1f) * CursorSpeed * (float)delta;
-            _padCursor[device] = next.Clamp(Vector2.Zero, GetViewportRect().Size);
-        }
-        _cursors.QueueRedraw();
-    }
-
-    private void ActivateAt(Vector2 position, int actor)
-    {
-        // Later registrations sit visually on top (keyboards, overlays) — scan last-first.
-        for (int i = _hotspots.Count - 1; i >= 0; i--)
-        {
-            Hotspot spot = _hotspots[i];
-            if (!IsInstanceValid(spot.Area) || !spot.Area.IsVisibleInTree())
-            {
-                continue;
-            }
-            if (spot.Area.GetGlobalRect().HasPoint(position))
-            {
-                if (spot.IsEnabled)
-                {
-                    spot.Activate(actor);
-                }
-                return;
-            }
         }
     }
 
@@ -628,8 +574,17 @@ public partial class CharacterSelectView : Control
     private static Button HeaderButton(string text)
         => new Button { Text = text, CustomMinimumSize = new Vector2(0f, 40f) };
 
-    private void Register(Control area, System.Action<int> activate, System.Func<bool>? enabled = null)
-        => _hotspots.Add(new Hotspot(area, activate, enabled));
+    /// <summary>The mouse+pad dual-wiring ritual: a Button whose Pressed path calls
+    /// the handler with the mouse-actor convention (-1) and whose hotspot path passes
+    /// the pad actor through Register. Sites with different actor conventions (JOIN,
+    /// PICK CHARACTER, START's enabled gate) stay hand-wired.</summary>
+    private Button HotspotButton(string text, System.Action<int> activate)
+    {
+        var button = new Button { Text = text };
+        button.Pressed += () => activate(-1);
+        Register(button, activate);
+        return button;
+    }
 
     private void Step(int direction)
     {
@@ -736,30 +691,22 @@ public partial class CharacterSelectView : Control
         string playerName = p.NameOverride.Trim().Length > 0
             ? p.NameOverride
             : $"PLAYER {index + 1}";
-        var nameButton = new Button
-        {
-            Text = p.Renaming ? playerName + "_" : playerName + " ✎",
-            Alignment = HorizontalAlignment.Left,
-            SizeFlagsHorizontal = SizeFlags.ExpandFill,
-        };
-        nameButton.AddThemeColorOverride("font_color", color);
         void OpenRename(int _)
         {
             p.Renaming = !p.Renaming;
             RefreshAll();
         }
-        nameButton.Pressed += () => OpenRename(-1);
-        Register(nameButton, OpenRename);
+        Button nameButton = HotspotButton(
+            p.Renaming ? playerName + "_" : playerName + " ✎", OpenRename);
+        nameButton.Alignment = HorizontalAlignment.Left;
+        nameButton.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        nameButton.AddThemeColorOverride("font_color", color);
         title.AddChild(nameButton);
 
-        var icon = new Button
-        {
-            Text = p.Mode == PaneMode.Human ? "◉ P" + p.PlayerNumber : "▣ CPU",
-            TooltipText = "cycle: HUMAN → CPU → OFF",
-        };
-        void Cycle(int _) => CycleMode(index);
-        icon.Pressed += () => Cycle(-1);
-        Register(icon, Cycle);
+        Button icon = HotspotButton(
+            p.Mode == PaneMode.Human ? "◉ P" + p.PlayerNumber : "▣ CPU",
+            _ => CycleMode(index));
+        icon.TooltipText = "cycle: HUMAN → CPU → OFF";
         title.AddChild(icon);
 
         if (p.Renaming)
@@ -818,15 +765,12 @@ public partial class CharacterSelectView : Control
             row.AddThemeConstantOverride("separation", 6);
             p.Body.AddChild(row);
 
-            Button down = new() { Text = "◀" };
             void LevelDown(int _)
             {
                 p.CpuLevel = Mathf.Clamp(p.CpuLevel - 1, CpuLevels.Min, CpuLevels.Max);
                 RefreshAll();
             }
-            down.Pressed += () => LevelDown(-1);
-            Register(down, LevelDown);
-            row.AddChild(down);
+            row.AddChild(HotspotButton("◀", LevelDown));
 
             var level = new Label
             {
@@ -838,15 +782,12 @@ public partial class CharacterSelectView : Control
             level.AddThemeFontSizeOverride("font_size", 13);
             row.AddChild(level);
 
-            Button up = new() { Text = "▶" };
             void LevelUp(int _)
             {
                 p.CpuLevel = Mathf.Clamp(p.CpuLevel + 1, CpuLevels.Min, CpuLevels.Max);
                 RefreshAll();
             }
-            up.Pressed += () => LevelUp(-1);
-            Register(up, LevelUp);
-            row.AddChild(up);
+            row.AddChild(HotspotButton("▶", LevelUp));
 
             var pick = new Button { Text = "PICK CHARACTER" };
             void Retarget(int actor)
@@ -861,195 +802,4 @@ public partial class CharacterSelectView : Control
         }
     }
 
-    /// <summary>The in-pane rename keyboard (sketch: digit row + letter rows).</summary>
-    private void BuildRenameKeyboard(Pane p)
-    {
-        var grid = new GridContainer { Columns = 10, SizeFlagsVertical = SizeFlags.ExpandFill };
-        grid.AddThemeConstantOverride("h_separation", 3);
-        grid.AddThemeConstantOverride("v_separation", 3);
-        p.Body.AddChild(grid);
-        foreach (char ch in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-        {
-            char c = ch;
-            var key = new Button { Text = c.ToString(), CustomMinimumSize = new Vector2(24f, 24f) };
-            UiTheme.CompactKey(key);
-            void Type(int _)
-            {
-                if (p.NameOverride.Length < 14)
-                {
-                    p.NameOverride += c;
-                }
-                RefreshAll();
-            }
-            key.Pressed += () => Type(-1);
-            Register(key, Type);
-            grid.AddChild(key);
-        }
-        var row = new HBoxContainer();
-        row.AddThemeConstantOverride("separation", 4);
-        p.Body.AddChild(row);
-        var space = new Button { Text = "SPACE", SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        void TypeSpace(int _)
-        {
-            if (p.NameOverride.Length < 14)
-            {
-                p.NameOverride += " ";
-            }
-            RefreshAll();
-        }
-        space.Pressed += () => TypeSpace(-1);
-        Register(space, TypeSpace);
-        row.AddChild(space);
-        var del = new Button { Text = "DEL", SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        void Delete(int _)
-        {
-            if (p.NameOverride.Length > 0)
-            {
-                p.NameOverride = p.NameOverride[..^1];
-            }
-            RefreshAll();
-        }
-        del.Pressed += () => Delete(-1);
-        Register(del, Delete);
-        row.AddChild(del);
-        var ok = new Button { Text = "OK", SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        void Done(int _)
-        {
-            p.Renaming = false;
-            RefreshAll();
-        }
-        ok.Pressed += () => Done(-1);
-        Register(ok, Done);
-        row.AddChild(ok);
-    }
-
-    // ── Pad cursors ────────────────────────────────────────────────────────────
-
-    /// <summary>Draws each joined pad's cursor arrow in its pane color, topmost.</summary>
-    private sealed partial class CursorLayer : Control
-    {
-        private readonly CharacterSelectView _view;
-
-        public CursorLayer(CharacterSelectView view)
-        {
-            _view = view;
-            AnchorRight = 1f;
-            AnchorBottom = 1f;
-            MouseFilter = MouseFilterEnum.Ignore;
-        }
-
-        public override void _Draw()
-        {
-            foreach ((int device, Vector2 pos) in _view._padCursor)
-            {
-                Color color = PlayerPalette.Of(_view._padPane[device]);
-                var points = new[]
-                {
-                    pos, pos + new Vector2(18f, 7f), pos + new Vector2(11f, 11f),
-                    pos + new Vector2(7f, 18f),
-                };
-                DrawColoredPolygon(points, color);
-                DrawPolyline(points.Append(pos).ToArray(), Colors.White, 1.5f);
-            }
-        }
-    }
-
-    // ── Automation ─────────────────────────────────────────────────────────────
-
-    private void ApplyAutoSelect(string spec)
-    {
-        foreach (string pair in spec.Split(';'))
-        {
-            string[] kv = pair.Split('=');
-            if (kv.Length != 2)
-            {
-                continue;
-            }
-            switch (kv[0])
-            {
-                case "p1": // join the mouse/keyboard human and pick a character
-                    JoinPane(-1);
-                    _panes[_mousePane].CharacterIndex = int.Parse(kv[1]);
-                    break;
-                case var s when s.StartsWith("cpu", System.StringComparison.Ordinal)
-                    && !s.EndsWith("level", System.StringComparison.Ordinal):
-                {
-                    int pane = int.Parse(s[3..]) - 1;
-                    _panes[pane].Mode = PaneMode.Cpu;
-                    _panes[pane].CharacterIndex = int.Parse(kv[1]);
-                    break;
-                }
-                case var s when s.EndsWith("level", System.StringComparison.Ordinal):
-                    _panes[int.Parse(s[3..^5]) - 1].CpuLevel = int.Parse(kv[1]);
-                    break;
-                case "stage":
-                    _stageIndex = int.Parse(kv[1]);
-                    break;
-                case "mode":
-                    _mode = kv[1] == "timed" ? MatchEndRule.Timed : MatchEndRule.Stock;
-                    break;
-                case "rename1":
-                    _panes[0].Renaming = kv[1] == "1";
-                    break;
-                case "start":
-                    CallDeferred(nameof(StartMatch));
-                    break;
-                case "click": // "pane0" / "grid3" / "stage2" — REAL mouse clicks
-                    _autoClicks.Add(kv[1]);
-                    break;
-            }
-        }
-        RefreshAll();
-        if (_autoClicks.Count > 0)
-        {
-            ScheduleAutoClicks();
-        }
-    }
-
-    // Unlike the direct tokens above, click= targets go through Input.ParseInputEvent —
-    // the full input pipeline including GUI consumption — so they verify what a real
-    // mouse does (2026-08-17: the direct tokens masked a root MouseFilter bug).
-    private readonly List<string> _autoClicks = new();
-
-    private void ScheduleAutoClicks()
-    {
-        double at = 0.2; // after first-frame layout; all clicks land before the 1 s shot
-        foreach (string target in _autoClicks)
-        {
-            string t = target;
-            GetTree().CreateTimer(at).Timeout += () => InjectClick(t);
-            at += 0.2;
-        }
-    }
-
-    private void InjectClick(string target)
-    {
-        Control? area = target switch
-        {
-            _ when target.StartsWith("grid", System.StringComparison.Ordinal)
-                => _gridCells[int.Parse(target[4..])],
-            _ when target.StartsWith("stage", System.StringComparison.Ordinal)
-                => _stageCards[int.Parse(target[5..])],
-            _ when target.StartsWith("pane", System.StringComparison.Ordinal)
-                => _panes[int.Parse(target[4..])].Root,
-            _ => null,
-        };
-        if (area is null)
-        {
-            return;
-        }
-        // PushInput(local) delivers in canvas coords through the viewport's full
-        // pipeline (GUI consumption first, unhandled after) — ParseInputEvent would
-        // treat Position as SCREEN coords and land the click in the wrong control.
-        Vector2 pos = area.GetGlobalRect().GetCenter();
-        GetViewport().PushInput(new InputEventMouseButton
-        {
-            Position = pos, GlobalPosition = pos, ButtonIndex = MouseButton.Left, Pressed = true,
-        }, inLocalCoords: true);
-        GetViewport().PushInput(new InputEventMouseButton
-        {
-            Position = pos, GlobalPosition = pos, ButtonIndex = MouseButton.Left, Pressed = false,
-        }, inLocalCoords: true);
-        GD.Print($"autoclick: {target} @ {pos}");
-    }
 }

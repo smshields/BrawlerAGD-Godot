@@ -27,6 +27,7 @@ public partial class MovesetPreview : SubViewportContainer
     private ScriptedCycle? _script;
     private Node2D _root = null!;
     private PlayerView _performer = null!;
+    private ProjectileLayer? _projectiles;
     private SubViewport _viewport = null!;
     private Label[] _legend = System.Array.Empty<Label>();
 
@@ -79,8 +80,6 @@ public partial class MovesetPreview : SubViewportContainer
 
         BuildLegend(character, jumpCap, actionCaps);
     }
-
-    private ProjectileLayer? _projectiles;
 
     /// <summary>The key→move legend (2026-08-17): JUMP + the five action buttons,
     /// keycap (when the pane has a device) + the move's debug-strip name; the row

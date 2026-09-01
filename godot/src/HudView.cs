@@ -149,6 +149,7 @@ public partial class HudView : CanvasLayer
         // Animation state (view-only).
         private float _shownDamage;
         private float _rollFrom;
+        private float _rollTarget;
         private float _rollClock = RollSeconds; // idle
         private float _rollMagnitude;
         private float _shake;
@@ -412,7 +413,6 @@ public partial class HudView : CanvasLayer
             }
         }
 
-        private float _rollTarget;
     }
 
     /// <summary>A labelled timing bar (intangible/invulnerable) — hidden at zero.

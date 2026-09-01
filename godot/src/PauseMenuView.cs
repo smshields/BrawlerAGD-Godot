@@ -17,6 +17,7 @@ public partial class PauseMenuView : CanvasLayer
 
     private Control _root = null!;
     private Button _debugButton = null!;
+    private Button? _firstButton;
 
     public override void _Ready()
     {
@@ -80,8 +81,6 @@ public partial class PauseMenuView : CanvasLayer
     {
         _root.Visible = false;
     }
-
-    private Button? _firstButton;
 
     private Button AddButton(VBoxContainer box, string text, System.Action onPressed)
     {
