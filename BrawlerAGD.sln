@@ -11,6 +11,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BrawlerRunner", "BrawlerRun
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BrawlerGodot", "godot\BrawlerGodot.csproj", "{EAD8A9B5-DBB0-47A1-8BAC-5294F69ECC38}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "namegen", "namegen", "{4E9471B2-20E5-4E02-BF50-C6510B080090}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{D522C11F-CB60-488B-BDF9-A1742055459A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NameGen", "namegen\src\NameGen\NameGen.csproj", "{B54963E5-8D89-4C19-81C1-2DF77519CB51}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -36,5 +42,13 @@ Global
 		{EAD8A9B5-DBB0-47A1-8BAC-5294F69ECC38}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EAD8A9B5-DBB0-47A1-8BAC-5294F69ECC38}.Release|Any CPU.ActiveCfg = Debug|Any CPU
 		{EAD8A9B5-DBB0-47A1-8BAC-5294F69ECC38}.Release|Any CPU.Build.0 = Debug|Any CPU
+		{B54963E5-8D89-4C19-81C1-2DF77519CB51}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B54963E5-8D89-4C19-81C1-2DF77519CB51}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B54963E5-8D89-4C19-81C1-2DF77519CB51}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B54963E5-8D89-4C19-81C1-2DF77519CB51}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{D522C11F-CB60-488B-BDF9-A1742055459A} = {4E9471B2-20E5-4E02-BF50-C6510B080090}
+		{B54963E5-8D89-4C19-81C1-2DF77519CB51} = {D522C11F-CB60-488B-BDF9-A1742055459A}
 	EndGlobalSection
 EndGlobal

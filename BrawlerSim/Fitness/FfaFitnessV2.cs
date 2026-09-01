@@ -10,7 +10,7 @@ namespace BrawlerSim.Fitness;
 /// ffa-v2 at N = 2 scores identically to standard-v5 (regression-tested). The default
 /// fitness for NEW 3/4-player runs; ffa-v1 remains frozen and selectable.
 /// </summary>
-public sealed class FfaFitnessV2 : IFitnessFunction
+public sealed class FfaFitnessV2 : IFitnessFunction, IFitnessBreakdown
 {
     private readonly FfaFitnessV1 _v1;
     private readonly float _dropReward;

@@ -22,7 +22,7 @@ namespace BrawlerSim.Fitness;
 ///
 /// v2 remains frozen and selectable; run manifests record which version scored a run.
 /// </summary>
-public sealed class StandardFitnessV3 : IFitnessFunction
+public sealed class StandardFitnessV3 : IFitnessFunction, IFitnessBreakdown
 {
     public const float OvertimePenalty = -35f;
     public const float DefaultPunishStartDamage = 300f;

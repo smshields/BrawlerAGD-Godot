@@ -238,25 +238,10 @@ internal static class Commands
                 $"ff-crouch-di {Per(p => $"{p.FastFallTicks}-{p.CrouchTicks}-{p.DIInfluencedHits}")}  " +
                 $"drops {Per(p => p.DropThroughs.ToString())}  " +
                 $"proj(fired-hit-refl) {Per(p => $"{p.ProjectilesFired}-{p.ProjectileHits}-{p.ProjectilesReflected}")}");
-            if (breakdown && fitness is ComposedFitness composed)
+            if (breakdown && fitness is IFitnessBreakdown itemized)
             {
                 Console.WriteLine("           " + string.Join("  ",
-                    composed.Breakdown(result).Select(t => $"{t.Name} {t.Value:F1}")));
-            }
-            else if (breakdown && fitness is StandardFitnessV3 v3)
-            {
-                Console.WriteLine("           " + string.Join("  ",
-                    v3.Breakdown(result).Select(t => $"{t.Name} {t.Value:F1}")));
-            }
-            else if (breakdown && fitness is StandardFitnessV4 v4)
-            {
-                Console.WriteLine("           " + string.Join("  ",
-                    v4.Breakdown(result).Select(t => $"{t.Name} {t.Value:F1}")));
-            }
-            else if (breakdown && fitness is FfaFitnessV1 ffa)
-            {
-                Console.WriteLine("           " + string.Join("  ",
-                    ffa.Breakdown(result).Select(t => $"{t.Name} {t.Value:F1}")));
+                    itemized.Breakdown(result).Select(t => $"{t.Name} {t.Value:F1}")));
             }
         }
         scores.Sort();

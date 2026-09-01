@@ -18,7 +18,7 @@ namespace BrawlerSim.Fitness;
 /// identically to standard-v4 (regression-tested) — but N-player scores are NOT
 /// comparable to any 2P run (different game, different instrument dynamics).
 /// </summary>
-public sealed class FfaFitnessV1 : IFitnessFunction
+public sealed class FfaFitnessV1 : IFitnessFunction, IFitnessBreakdown
 {
     private readonly ComposedFitness _composed;
 

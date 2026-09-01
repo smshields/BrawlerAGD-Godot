@@ -9,7 +9,7 @@ namespace BrawlerSim.Fitness;
 /// sessions can see WHY a match scored what it did. Versioned functions
 /// (StandardFitnessV3, future persona fitness) are thin constructors over this.
 /// </summary>
-public sealed class ComposedFitness : IFitnessFunction
+public sealed class ComposedFitness : IFitnessFunction, IFitnessBreakdown
 {
     public sealed record Term(string Name, Func<MatchResult, float> Value);
 

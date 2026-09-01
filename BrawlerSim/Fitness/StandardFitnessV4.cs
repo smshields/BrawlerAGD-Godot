@@ -13,7 +13,7 @@ namespace BrawlerSim.Fitness;
 /// v3 remains frozen and selectable; v4 is the default for NEW two-player runs.
 /// Scores differ from v3 only on matches containing self-destructs.
 /// </summary>
-public sealed class StandardFitnessV4 : IFitnessFunction
+public sealed class StandardFitnessV4 : IFitnessFunction, IFitnessBreakdown
 {
     public const float DefaultSelfDestructPenalty = 1f;
     public const float DefaultSelfDestructCap = 4f;

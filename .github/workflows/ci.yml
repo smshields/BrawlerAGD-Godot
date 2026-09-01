@@ -27,3 +27,9 @@ jobs:
 
       - name: Test
         run: dotnet test BrawlerAGD.sln --configuration Release --no-build --verbosity normal
+
+      # The namegen suite is a self-runner (an Exe with its own main) — plain
+      # `dotnet test` on it silently no-ops, so it gets an explicit run step.
+      # It was invisible to CI entirely until 2026-09-01.
+      - name: NameGen tests
+        run: dotnet run --project namegen/tests/NameGen.Tests --configuration Release

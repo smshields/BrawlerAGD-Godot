@@ -13,7 +13,7 @@ namespace BrawlerSim.Fitness;
 ///
 /// v4 remains frozen and selectable; v5 is the default for NEW two-player runs.
 /// </summary>
-public sealed class StandardFitnessV5 : IFitnessFunction
+public sealed class StandardFitnessV5 : IFitnessFunction, IFitnessBreakdown
 {
     public const float DefaultDropThroughReward = 0.25f;
     public const float DefaultDropThroughCap = 1f;
