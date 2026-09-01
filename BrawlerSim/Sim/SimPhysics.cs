@@ -19,13 +19,17 @@ public static class SimPhysics
     private const float Skin = 0.001f; // resolution slack to keep resting contacts stable
 
     /// <summary>Two-player convenience overload (tests and pre-2026-08-12 callers).</summary>
-    public static void Step(SimPlayer player, SimPlayer opponent, IReadOnlyList<Aabb> platforms, MatchConfig config)
-        => Step(player, new[] { player, opponent }, platforms, config);
+    public static void Step(SimPlayer player, SimPlayer opponent, IReadOnlyList<Aabb> platforms, MatchConfig config,
+        IReadOnlyList<bool>? thin = null)
+        => Step(player, new[] { player, opponent }, platforms, config, thin);
 
     /// <summary>N-player step (2026-08-12, four-player.md): every OTHER present player
     /// is a solid collider, checked in array order. For two players this is
-    /// bit-identical to the pairwise step (the self entry is skipped).</summary>
-    public static void Step(SimPlayer player, SimPlayer[] all, IReadOnlyList<Aabb> platforms, MatchConfig config)
+    /// bit-identical to the pairwise step (the self entry is skipped).
+    /// <paramref name="thin"/> (2026-09-01, thin platforms) flags drop-through
+    /// platforms by index; null (or an index past its end — the spawn pad) = solid.</summary>
+    public static void Step(SimPlayer player, SimPlayer[] all, IReadOnlyList<Aabb> platforms, MatchConfig config,
+        IReadOnlyList<bool>? thin = null)
     {
         float dt = config.Dt;
 
@@ -52,11 +56,11 @@ public static class SimPhysics
 
         for (int i = 0; i < substeps; i++)
         {
-            MoveAxis(player, all, platforms, config, step.X, horizontal: true);
-            MoveAxis(player, all, platforms, config, step.Y, horizontal: false);
+            MoveAxis(player, all, platforms, config, step.X, horizontal: true, thin);
+            MoveAxis(player, all, platforms, config, step.Y, horizontal: false, thin);
         }
 
-        player.OnGroundedChanged(IsGrounded(player, platforms));
+        player.OnGroundedChanged(IsGrounded(player, platforms, player.DropThroughPlatform));
     }
 
     /// <summary>
@@ -65,12 +69,17 @@ public static class SimPhysics
     /// Pre-existing overlap is left for the capped resolver, so residual contact never
     /// snaps positions.
     /// </summary>
-    private static void MoveAxis(SimPlayer player, SimPlayer[] all, IReadOnlyList<Aabb> platforms, MatchConfig config, float delta, bool horizontal)
+    private static void MoveAxis(SimPlayer player, SimPlayer[] all, IReadOnlyList<Aabb> platforms, MatchConfig config, float delta, bool horizontal,
+        IReadOnlyList<bool>? thin = null)
     {
         if (delta == 0f)
         {
             return;
         }
+        // Feet height BEFORE the move — the thin-platform landing test needs to know
+        // the body came from at/above the surface (invariant under the crouch squish:
+        // the bottom edge is always Position.Y − BodyHalf.Y).
+        float bottomBefore = player.Position.Y - player.BodyHalf.Y;
         // Pre-move overlap per other body — recorded BEFORE the position update.
         Span<bool> overlappedBefore = stackalloc bool[all.Length];
         for (int o = 0; o < all.Length; o++)
@@ -122,8 +131,29 @@ public static class SimPhysics
         }
 
         Aabb body = player.Body;
-        foreach (Aabb platform in platforms)
+        for (int k = 0; k < platforms.Count; k++)
         {
+            Aabb platform = platforms[k];
+            if (thin is not null && k < thin.Count && thin[k])
+            {
+                // Thin platform (2026-09-01, FEATURES.md §Thin Platforms): solid ONLY
+                // to a body landing from above — horizontal and upward motion pass
+                // through, and a body mid drop-through ignores it until clear. A
+                // surface-CROSSING test (not overlap) does the landing, so a fast
+                // fall cannot tunnel the thin slice within one substep.
+                if (horizontal || delta > 0f || k == player.DropThroughPlatform)
+                {
+                    continue;
+                }
+                if (bottomBefore >= platform.Top - Skin && body.Bottom <= platform.Top
+                    && body.Left < platform.Right && body.Right > platform.Left)
+                {
+                    player.Position = player.Position with { Y = platform.Top + player.BodyHalf.Y + Skin };
+                    player.Velocity = player.Velocity with { Y = 0f };
+                    body = player.Body;
+                }
+                continue;
+            }
             if (!body.Overlaps(platform))
             {
                 continue;
@@ -148,24 +178,33 @@ public static class SimPhysics
         }
     }
 
-    /// <summary>Grounded = a platform top directly under the feet, and not moving upward.</summary>
-    public static bool IsGrounded(SimPlayer player, IReadOnlyList<Aabb> platforms)
+    /// <summary>Grounded = a platform top directly under the feet, and not moving
+    /// upward. ignorePlatform (2026-09-01, thin platforms): the platform being
+    /// dropped through must not re-ground its dropper.</summary>
+    public static bool IsGrounded(SimPlayer player, IReadOnlyList<Aabb> platforms, int ignorePlatform = -1) =>
+        SupportPlatformIndex(player, platforms, ignorePlatform) >= 0;
+
+    /// <summary>Index of the platform under the feet — IsGrounded's exact test, first
+    /// match in list order — or -1. The thin-platform crouch drop reads this to know
+    /// WHICH platform supports the body (2026-09-01).</summary>
+    public static int SupportPlatformIndex(SimPlayer player, IReadOnlyList<Aabb> platforms, int ignorePlatform = -1)
     {
         if (player.Velocity.Y > 0.01f)
         {
-            return false;
+            return -1;
         }
         Aabb feet = new(
             new Vec2(player.Position.X, player.Body.Bottom - Skin),
             new Vec2(player.BodyHalf.X, 2f * Skin));
-        foreach (Aabb platform in platforms)
+        for (int i = 0; i < platforms.Count; i++)
         {
-            if (feet.Overlaps(platform) && player.Body.Bottom >= platform.Top - 4f * Skin)
+            if (i != ignorePlatform && feet.Overlaps(platforms[i])
+                && player.Body.Bottom >= platforms[i].Top - 4f * Skin)
             {
-                return true;
+                return i;
             }
         }
-        return false;
+        return -1;
     }
 
     /// <summary>

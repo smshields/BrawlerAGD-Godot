@@ -112,6 +112,9 @@ public sealed class SimPlayer
     public readonly float CrouchHeightRatio;
     public readonly float DirectionalInfluence;
     public readonly float DiKnockbackReduction;
+    /// <summary>Thin platforms (2026-09-01): held-crouch ticks on a thin platform
+    /// before the drop fires. 0 (the pre-v12 loader default) = the first Held tick.</summary>
+    public readonly int DropThroughDelayTicks;
     public readonly Vec2 BodyHalf;
     public readonly Vec2 SpawnPosition;
 
@@ -167,6 +170,21 @@ public sealed class SimPlayer
     /// -1 none, -2 jump, ≥0 a move slot.</summary>
     public int QueuedCrouchAction = -1;
 
+    // Thin platforms (2026-09-01, FEATURES.md §Thin Platforms — both hashed in the
+    // gated thin suffix; 0/-1 on thin-free stages = pre-feature sim byte-for-byte).
+    /// <summary>Platform index this body is dropping through (physics and grounding
+    /// ignore it until the body clears its slice), or -1. Positional state — a hit
+    /// mid-drop does not restore the collision.</summary>
+    public int DropThroughPlatform = -1;
+    /// <summary>Held-crouch ticks left before the drop fires. Re-armed on every
+    /// Sink→Held transition, so releasing crouch resets the timer (designer rule);
+    /// counts down only while the support platform is thin.</summary>
+    public int DropDelayTicksLeft;
+    /// <summary>Index of the THIN platform currently under the feet, or -1. Derived
+    /// from position by SimWorld before each FSM step (thin stages only) — never
+    /// hashed, always recomputed.</summary>
+    public int ThinSupport = -1;
+
     private readonly MatchConfig _config;
 
     // Stats accumulated for fitness/research.
@@ -201,6 +219,10 @@ public sealed class SimPlayer
     public int FastFallTicks;
     public int CrouchTicks;
     public int DIInfluencedHits;
+
+    /// <summary>Crouch drops through thin platforms (2026-09-01). Research stat;
+    /// standard-v5/ffa-v2 read it as a minor never-negative tiebreaker.</summary>
+    public int DropThroughs;
 
     // Projectile stats (2026-07-14, research-only).
     public int ProjectilesFired;
@@ -284,6 +306,7 @@ public sealed class SimPlayer
         CrouchHeightRatio = p.Get(CharacterParams.CrouchHeightRatio);
         DirectionalInfluence = p.Get(CharacterParams.DirectionalInfluence);
         DiKnockbackReduction = p.Get(CharacterParams.DiKnockbackReduction);
+        DropThroughDelayTicks = Math.Max(0, config.ToTicks(p.Get(CharacterParams.DropThroughDelay)));
         BodyHalf = new Vec2(
             config.PlayerBaseWidth * WidthScalar / 2f,
             config.PlayerBaseHeight * HeightScalar / 2f);
@@ -593,6 +616,7 @@ public sealed class SimPlayer
         State = PlayerState.Idle;
         PhaseTicksLeft = 0;
         JumpsExhausted = false;
+        DropThroughPlatform = -1; // a teleport ends any drop-through (2026-09-01)
         LastInfluencer = -1; // a new life owes nobody a KO (2026-08-12)
         GroundedInfluenceTicks = 0;
     }
@@ -611,6 +635,7 @@ public sealed class SimPlayer
         State = PlayerState.Idle;
         PhaseTicksLeft = 0;
         JumpsExhausted = false;
+        DropThroughPlatform = -1; // a teleport ends any drop-through (2026-09-01)
         RespawnBlackoutLeft = blackoutTicks;
         SpawnPadActive = false;
         SpawnIntangible = false;
@@ -629,6 +654,7 @@ public sealed class SimPlayer
         State = PlayerState.Idle;
         PhaseTicksLeft = 0;
         JumpsExhausted = false;
+        DropThroughPlatform = -1; // a teleport ends any drop-through (2026-09-01)
         RespawnBlackoutLeft = 0;
         SpawnPadActive = platformTicks > 0;
         SpawnPadTicksLeft = platformTicks;
@@ -673,6 +699,9 @@ public sealed class SimPlayer
                 {
                     CrouchPhase = CrouchStage.Held;
                     PhaseTicksLeft = 0;
+                    // Thin platforms (2026-09-01): the drop countdown arms on every
+                    // Held entry — releasing crouch therefore resets it (designer).
+                    DropDelayTicksLeft = DropThroughDelayTicks;
                 }
                 return;
 
@@ -707,6 +736,28 @@ public sealed class SimPlayer
                 else if (input.Vertical >= 0f)
                 {
                     BeginCrouchRise(queued: -1);
+                }
+                else if (ThinSupport >= 0)
+                {
+                    // Thin platforms (2026-09-01): a crouch HELD on a thin platform
+                    // drops through once the delay gene elapses. The countdown runs
+                    // only while the support is thin (crouch-sliding onto solid
+                    // ground pauses it); no rise — the body exits at full size
+                    // straight into the fall, keeping its air budget.
+                    if (DropDelayTicksLeft > 0)
+                    {
+                        DropDelayTicksLeft--;
+                    }
+                    else
+                    {
+                        DropThroughPlatform = ThinSupport;
+                        DropThroughs++;
+                        CrouchPhase = CrouchStage.None;
+                        QueuedCrouchAction = -1;
+                        State = PlayerState.Air;
+                        PhaseTicksLeft = 0;
+                        IsGrounded = false; // physics re-evaluates (ignoring the dropped platform)
+                    }
                 }
                 return;
 

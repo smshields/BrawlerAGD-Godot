@@ -14,6 +14,14 @@ public sealed class SimWorld
     public MatchConfig Config { get; }
     public IReadOnlyList<SimPlayer> Players => _players;
     public IReadOnlyList<Aabb> Platforms { get; }
+
+    /// <summary>Thin platforms (2026-09-01, FEATURES.md §Thin Platforms): per-index
+    /// drop-through flags, parallel to Platforms. A thin platform's Aabb is the top
+    /// slice of its gene cell (MatchConfig.ThinPlatformThickness) — same top edge,
+    /// higher underside.</summary>
+    public IReadOnlyList<bool> PlatformThin { get; }
+    private readonly bool _thinFeatureActive; // any thin platform on this stage
+
     public int TickCount { get; private set; }
     public bool IsOver { get; private set; }
 
@@ -68,9 +76,23 @@ public sealed class SimWorld
     public SimWorld(GameGenome genome, MatchConfig? config = null)
     {
         Config = config ?? MatchConfig.Default;
-        Platforms = genome.Stage.Platforms
-            .Select(p => Aabb.FromRect(p.X, p.Y, p.XSize, p.YSize))
-            .ToArray();
+        IReadOnlyList<PlatformGene> genes = genome.Stage.Platforms;
+        var boxes = new Aabb[genes.Count];
+        var thinFlags = new bool[genes.Count];
+        for (int i = 0; i < genes.Count; i++)
+        {
+            PlatformGene p = genes[i];
+            thinFlags[i] = p.Thin;
+            _thinFeatureActive |= p.Thin;
+            // A thin platform collides (and renders) as a slice at the TOP of its
+            // gene cell — the surface the reachability models key on is unchanged.
+            boxes[i] = p.Thin
+                ? Aabb.FromRect(p.X, p.Y + p.YSize - Config.ThinPlatformThickness,
+                    p.XSize, Config.ThinPlatformThickness)
+                : Aabb.FromRect(p.X, p.Y, p.XSize, p.YSize);
+        }
+        Platforms = boxes;
+        PlatformThin = thinFlags;
 
         Params.ParamSet stage = genome.Stage.Params;
         VisibleHalf = new Vec2(
@@ -148,6 +170,16 @@ public sealed class SimWorld
             {
                 continue; // out of the match for good (2026-08-12)
             }
+            if (_thinFeatureActive)
+            {
+                // Thin platforms (2026-09-01): resolve the thin support under the
+                // feet (from LAST tick's settled position) before the FSM step —
+                // the crouch drop reads it. Derived state, recomputed every tick.
+                int support = player.IsGrounded
+                    ? SimPhysics.SupportPlatformIndex(player, Platforms, player.DropThroughPlatform)
+                    : -1;
+                player.ThinSupport = support >= 0 && PlatformThin[support] ? support : -1;
+            }
             if (player.RespawnBlackoutLeft > 0)
             {
                 if (--player.RespawnBlackoutLeft == 0)
@@ -183,7 +215,24 @@ public sealed class SimWorld
                 continue;
             }
             IReadOnlyList<Aabb> plats = _players[i].SpawnPadActive ? _platformsWithPad[i] : Platforms;
-            SimPhysics.Step(_players[i], _players, plats, Config);
+            // Thin flags are indexed like Platforms; the pad appended past their end
+            // reads as solid (SimPhysics guards the index), so no parallel pad set.
+            SimPhysics.Step(_players[i], _players, plats, Config,
+                _thinFeatureActive ? PlatformThin : null);
+        }
+
+        // 2.4. Thin platforms (2026-09-01): a drop-through ignore ends once the body
+        //      has fully cleared the dropped platform's slice.
+        if (_thinFeatureActive)
+        {
+            foreach (SimPlayer player in _players)
+            {
+                if (player.DropThroughPlatform >= 0
+                    && !player.Body.Overlaps(Platforms[player.DropThroughPlatform]))
+                {
+                    player.DropThroughPlatform = -1;
+                }
+            }
         }
 
         // 2.5. Spawn-pad leave detection (2026-07-22): once the owner is no longer
@@ -380,6 +429,7 @@ public sealed class SimWorld
         for (int i = 0; i < _projectiles.Count; i++)
         {
             SimProjectile proj = _projectiles[i];
+            Vec2 previous = proj.Position; // thin-platform surface crossing (2026-09-01)
             proj.AgeTicks++;      // lifetime clock: TTL + damage decay (survives reflection)
             proj.PathAgeTicks++;  // path clock: resets when a reflect re-fires the bolt
             proj.Position = proj.Move.PositionAt(proj.Origin, proj.Facing, proj.PathAgeTicks, Config);
@@ -388,7 +438,7 @@ public sealed class SimWorld
             if (proj.AgeTicks >= proj.Move.TtlTicks
                 || proj.DamageScale <= 0f
                 || !InsideBlastZone(proj.Position)
-                || CenterInsidePlatform(proj.Position))
+                || HitsPlatform(previous, proj.Position))
             {
                 proj.Alive = false;
             }
@@ -555,14 +605,34 @@ public sealed class SimWorld
         p.X >= _blastZone.Left && p.X <= _blastZone.Right
         && p.Y >= _blastZone.Bottom && p.Y <= _blastZone.Top;
 
-    private bool CenterInsidePlatform(Vec2 p)
+    /// <summary>Does this tick's motion put the bolt into a platform? Solid platforms
+    /// keep the legacy center-inside test (platforms DESTROY projectiles, designer).
+    /// Thin platforms (2026-09-01, designer) destroy from the TOP only: a downward
+    /// crossing of the surface within the span consumes the bolt; entry from below
+    /// or the side passes through. The crossing test (not containment) means a fast
+    /// bolt cannot tunnel the thin slice.</summary>
+    private bool HitsPlatform(Vec2 previous, Vec2 current)
     {
-        foreach (Aabb platform in Platforms)
+        for (int i = 0; i < Platforms.Count; i++)
         {
-            if (p.X >= platform.Left && p.X <= platform.Right
-                && p.Y >= platform.Bottom && p.Y <= platform.Top)
+            Aabb platform = Platforms[i];
+            if (!PlatformThin[i])
             {
-                return true;
+                if (current.X >= platform.Left && current.X <= platform.Right
+                    && current.Y >= platform.Bottom && current.Y <= platform.Top)
+                {
+                    return true;
+                }
+                continue;
+            }
+            if (previous.Y >= platform.Top && current.Y <= platform.Top && current.Y < previous.Y)
+            {
+                float t = (previous.Y - platform.Top) / (previous.Y - current.Y);
+                float crossX = previous.X + (current.X - previous.X) * t;
+                if (crossX >= platform.Left && crossX <= platform.Right)
+                {
+                    return true;
+                }
             }
         }
         return false;
@@ -830,6 +900,19 @@ public sealed class SimWorld
                 hash = Fnv1a.Add(hash, p.SpawnInvulnTicksLeft);
             }
         }
+        // 2026-09-01 thin platforms: gated suffix, appended ONLY when the stage has a
+        // thin platform — all-solid matches (every pre-v12 game, all the golden pins)
+        // hash exactly as before. DropThroughPlatform/DropDelayTicksLeft are the
+        // feature's only new mutable gameplay state (ThinSupport is derived and
+        // recomputed each tick; DropThroughs is a stat counter).
+        if (_thinFeatureActive)
+        {
+            foreach (SimPlayer p in _players)
+            {
+                hash = Fnv1a.Add(hash, p.DropThroughPlatform);
+                hash = Fnv1a.Add(hash, p.DropDelayTicksLeft);
+            }
+        }
         // 2026-08-12 four player / timed mode: gated suffix, active only for 3-4
         // player or TIMED matches — every legacy 2P STOCK golden hashes exactly as
         // before. Eliminated is gameplay state; KOs/SelfDestructs and the attribution
@@ -923,7 +1006,7 @@ public sealed class SimWorld
                 p.DashCount, p.DashInvulnDodges,
                 p.FastFallTicks, p.CrouchTicks, p.DIInfluencedHits,
                 p.ProjectilesFired, p.ProjectileHits, p.ProjectilesReflected,
-                p.KOs, p.DamageDealt, p.SelfDestructs)).ToArray(),
+                p.KOs, p.DamageDealt, p.SelfDestructs, p.DropThroughs)).ToArray(),
             LoserIndex,
             TickCount,
             TickCount / (float)Config.TicksPerSecond,

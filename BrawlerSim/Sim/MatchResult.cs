@@ -33,7 +33,8 @@ public sealed record PlayerStats(
     int ProjectilesReflected = 0,
     int KOs = 0,
     float DamageDealt = 0f,
-    int SelfDestructs = 0);
+    int SelfDestructs = 0,
+    int DropThroughs = 0); // thin-platform crouch drops (2026-09-01)
 
 /// <summary>
 /// Outcome of one simulated match. LoserIndex is -1 for a 2P timeout draw (under

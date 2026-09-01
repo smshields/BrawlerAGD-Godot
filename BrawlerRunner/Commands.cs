@@ -231,6 +231,7 @@ internal static class Commands
                 $"shield(act-blk-brk) {Per(p => $"{p.ShieldActivations}-{p.BlockedHits}-{p.ShieldBreaks}")}  " +
                 $"dash(n-dodge) {Per(p => $"{p.DashCount}-{p.DashInvulnDodges}")}  " +
                 $"ff-crouch-di {Per(p => $"{p.FastFallTicks}-{p.CrouchTicks}-{p.DIInfluencedHits}")}  " +
+                $"drops {Per(p => p.DropThroughs.ToString())}  " +
                 $"proj(fired-hit-refl) {Per(p => $"{p.ProjectilesFired}-{p.ProjectileHits}-{p.ProjectilesReflected}")}");
             if (breakdown && fitness is ComposedFitness composed)
             {

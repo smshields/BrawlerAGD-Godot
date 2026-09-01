@@ -137,6 +137,11 @@ public class TargetSelectionTests
             sources[i] = new UtilityAgent(new Pcg32(20260812, (ulong)i));
         }
         MatchResult result = MatchRunner.Run(genome, sources);
+        // Re-pinned 2026-09-01 (thin platforms, sim step): the fixture stage's thin
+        // platforms now COLLIDE thin (top-slice, one-way landing, gated hash
+        // suffix), so this golden covers the thin sim end to end. Expect one more
+        // dated re-pin when the agent learns to drop through. Prior pin:
+        // 3704857203681543172.
         // Re-pinned 2026-09-01 (thin platforms, genome step): the thin-fraction/coin
         // generation draws changed this GENERATED fixture genome. Thin platforms do
         // not behave differently yet at this pin — expect further dated re-pins as
@@ -147,6 +152,6 @@ public class TargetSelectionTests
         // Pinned 2026-08-12 (first pin — the 4P mode is new with this feature):
         // covers N-player spawning, all-pairs contact/hits, elimination, the gated
         // hash suffix, and nearest-enemy targeting end to end.
-        Assert.Equal(3704857203681543172UL, result.FinalHash);
+        Assert.Equal(1116537472962063982UL, result.FinalHash);
     }
 }

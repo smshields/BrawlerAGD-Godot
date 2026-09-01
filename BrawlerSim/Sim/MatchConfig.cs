@@ -81,6 +81,14 @@ public sealed record MatchConfig
     public float SpawnPadHalfWidth { get; init; } = 1.0f;
     public float SpawnPadHalfHeight { get; init; } = 0.15f;
 
+    /// <summary>Thin platforms (2026-09-01, FEATURES.md §Thin Platforms — designer:
+    /// "rendered using a thinner hitbox than standard platforms"). The collision box
+    /// of a thin platform is a slice this tall at the TOP of its gene cell — the
+    /// surface (top edge) every reachability model keys on is unchanged; only the
+    /// underside moves up. Landing uses a per-substep surface-crossing test, so the
+    /// slice being thinner than MaxStepDistance cannot tunnel.</summary>
+    public float ThinPlatformThickness { get; init; } = 0.2f;
+
     /// <summary>Projectile path constants (2026-07-14, docs/features/projectiles.md).
     /// One scalar gene per spec ("frequency for waves, scalars for quadratics"), so
     /// the sine amplitude and the quadratic unit scale are fixed here.</summary>
