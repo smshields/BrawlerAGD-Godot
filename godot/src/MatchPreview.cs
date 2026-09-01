@@ -63,11 +63,7 @@ public partial class MatchPreview : Node2D
         _world = new SimWorld(_record.Genome);
         int players = _world.Players.Count; // 2-4 since 2026-08-12
         _inputs = new InputFrame[players];
-        _sources = new IInputSource[players];
-        for (int i = 0; i < players; i++)
-        {
-            _sources[i] = AgentConfig.Default.CreateSource(new Pcg32(_seed, (ulong)i));
-        }
+        _sources = AgentConfig.Default.CreateSources(_seed, players);
         _restartCountdown = RestartDelayFrames;
 
         Position = GetViewportRect().Size / 2f;

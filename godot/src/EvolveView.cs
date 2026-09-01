@@ -154,7 +154,7 @@ public partial class EvolveView : Control
         _status.Text = (cancelled ? "stopped" : "done") +
             $" — {generations} generations in {elapsed:F1}s — saved to {_runDir}";
         _start.Disabled = false;
-        _watchBest.Disabled = !System.IO.File.Exists(System.IO.Path.Combine(_runDir, "best.json"));
+        _watchBest.Disabled = !System.IO.File.Exists(System.IO.Path.Combine(_runDir, RunStore.BestGameFileName));
 
         // Convenience: focus the final generation's best game so the preview is live
         // the moment a run ends (also what automation screenshots capture).
@@ -237,9 +237,9 @@ public partial class EvolveView : Control
 
     private void WatchBest()
     {
-        MatchSession.Game = GameGenomeJson.Load(System.IO.Path.Combine(_runDir, "best.json"));
+        MatchSession.Game = GameGenomeJson.Load(System.IO.Path.Combine(_runDir, RunStore.BestGameFileName));
         MatchSession.Mode = MatchMode.Replay;
-        MatchSession.Trace = BrawlerSim.Replay.InputTraceJson.Load(System.IO.Path.Combine(_runDir, "best.trace.json"));
+        MatchSession.Trace = BrawlerSim.Replay.InputTraceJson.Load(System.IO.Path.Combine(_runDir, RunStore.BestTraceFileName));
         GetTree().ChangeSceneToFile(Scenes.Arena);
     }
 

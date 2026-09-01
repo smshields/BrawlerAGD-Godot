@@ -1,6 +1,7 @@
 using Godot;
 using System.Linq;
 using System.Text.Json;
+using BrawlerSim.Evolution;
 using BrawlerSim.Serialization;
 
 namespace BrawlerGodot;
@@ -37,15 +38,15 @@ public partial class ManageView : Control
 
         foreach (string dir in System.IO.Directory.GetDirectories(root).OrderBy(d => d))
         {
-            string manifest = System.IO.Path.Combine(dir, "run.json");
-            string best = System.IO.Path.Combine(dir, "best.json");
+            string manifest = System.IO.Path.Combine(dir, RunStore.ManifestFileName);
+            string best = System.IO.Path.Combine(dir, RunStore.BestGameFileName);
             if (!System.IO.File.Exists(manifest) || !System.IO.File.Exists(best))
             {
                 continue;
             }
             string name = System.IO.Path.GetFileName(dir);
             string summary = RunSummary(manifest);
-            string? trace = System.IO.Path.Combine(dir, "best.trace.json") is string t && System.IO.File.Exists(t) ? t : null;
+            string? trace = System.IO.Path.Combine(dir, RunStore.BestTraceFileName) is string t && System.IO.File.Exists(t) ? t : null;
             Add(new Entry($"run  {name}   {summary}", best, trace, dir, DeleteIsDirectory: true));
         }
 
