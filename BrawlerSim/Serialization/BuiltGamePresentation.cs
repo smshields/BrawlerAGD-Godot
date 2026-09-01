@@ -49,7 +49,7 @@ public static class BuiltGamePresentation
         {
             if (c.SpriteId is { } id)
             {
-                usage[id] = usage.TryGetValue(id, out int n) ? n + 1 : 1;
+                Count(usage, id);
             }
         }
 
@@ -62,7 +62,7 @@ public static class BuiltGamePresentation
             {
                 if (id is not null)
                 {
-                    moveUsage[id] = moveUsage.TryGetValue(id, out int n) ? n + 1 : 1;
+                    Count(moveUsage, id);
                 }
             }
         }
@@ -157,7 +157,7 @@ public static class BuiltGamePresentation
         {
             if (s.ThemeId is { } id)
             {
-                themeUsage[id] = themeUsage.TryGetValue(id, out int n) ? n + 1 : 1;
+                Count(themeUsage, id);
             }
         }
 
@@ -202,8 +202,7 @@ public static class BuiltGamePresentation
                     }
                     taken.Add(stageName);
                 }
-                themeUsage[presented.ThemeId] =
-                    themeUsage.TryGetValue(presented.ThemeId, out int n) ? n + 1 : 1;
+                Count(themeUsage, presented.ThemeId);
                 game.Stages[i] = entry with
                 {
                     DisplayName = stageName,
@@ -216,7 +215,7 @@ public static class BuiltGamePresentation
 
             // No theme library: the pre-feature stage naming pass, byte-for-byte.
             string name = session.GenerateStageName(
-                new NG.StageGenome(entry.Stage.Params.ToDictionary()),
+                StageThemeSelector.Map(entry.Stage),
                 new NG.NameOptions { Seed = seed }).Display;
             game.Stages[i] = entry with { DisplayName = name };
             changed++;

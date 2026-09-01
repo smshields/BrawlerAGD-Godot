@@ -37,9 +37,7 @@ public sealed class EvolutionEngine
     public EvolutionEngine(EvolutionConfig config, IFitnessFunction? fitness = null)
     {
         _config = config;
-        _fitness = fitness ?? FitnessRegistry.Create(
-            config.FitnessName, config.TargetGameLengthSeconds, config.Match.MaxMatchSeconds,
-            config.FitnessCollisionScalar, config.Generation.CharacterCount);
+        _fitness = ResolveFitness(config, fitness);
         _rng = new Pcg32(config.Seed);
         _population = new GameGenome[config.PopulationSize];
         _lastFitness = new float[config.PopulationSize];
@@ -63,14 +61,19 @@ public sealed class EvolutionEngine
                 $"Checkpoint population size {population.Count} does not match config {config.PopulationSize}.");
         }
         _config = config;
-        _fitness = fitness ?? FitnessRegistry.Create(
-            config.FitnessName, config.TargetGameLengthSeconds, config.Match.MaxMatchSeconds,
-            config.FitnessCollisionScalar, config.Generation.CharacterCount);
+        _fitness = ResolveFitness(config, fitness);
         _rng = Pcg32.Resume(rngState.State, rngState.Inc);
         _population = population.ToArray();
         _lastFitness = new float[config.PopulationSize];
         GenerationsCompleted = generationsCompleted;
     }
+
+    /// <summary>The one fitness-resolution rule shared by both constructors: an
+    /// injected instance wins, otherwise the config names the registry version.</summary>
+    private static IFitnessFunction ResolveFitness(EvolutionConfig config, IFitnessFunction? fitness) =>
+        fitness ?? FitnessRegistry.Create(
+            config.FitnessName, config.TargetGameLengthSeconds, config.Match.MaxMatchSeconds,
+            config.FitnessCollisionScalar, config.Generation.CharacterCount);
 
     public (ulong State, ulong Inc) RngSnapshot => _rng.Snapshot();
 

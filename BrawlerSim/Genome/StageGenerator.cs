@@ -63,10 +63,9 @@ public sealed class StageGenerator
         float thinFractionGene = Draw(rng, StageParams.ThinPlatformFraction);
 
         bool mirrored = mirroredGene >= 0.5f;
-        int count = StageRules.IntGene(countGene, 2, 16);
-        int maxSize = StageRules.IntGene(maxSizeGene, 3, 14);
-        int gridW = Math.Max(3, (int)MathF.Floor(visWidthGene));
-        int gridH = Math.Max(2, (int)MathF.Floor(visHeightGene));
+        int count = StageRules.IntGene(countGene, StageRules.PlatformCountMin, StageRules.PlatformCountMax);
+        int maxSize = StageRules.IntGene(maxSizeGene, StageRules.MaxPlatformSizeMin, StageRules.MaxPlatformSizeMax);
+        (int gridW, int gridH) = StageRules.GridExtents(visWidthGene, visHeightGene);
         // The playable box (2026-08-13, designer: Smash-style readable stages) —
         // platforms fully inside the kill box, floor clear of the HUD band.
         (Vec2 playMin, Vec2 playMax) = StageRules.PlayableBoxFrom(
@@ -109,8 +108,7 @@ public sealed class StageGenerator
         int maxSize = StageRules.MaxPlatformSizeOf(stageParams);
         float visW = stageParams.Get(StageParams.VisibleHalfWidth);
         float visH = stageParams.Get(StageParams.VisibleHalfHeight);
-        int gridW = Math.Max(3, (int)MathF.Floor(visW));
-        int gridH = Math.Max(2, (int)MathF.Floor(visH));
+        (int gridW, int gridH) = StageRules.GridExtents(visW, visH);
         (Vec2 playMin, Vec2 playMax) = StageRules.PlayableBox(stageParams);
 
         (List<PlatformGene> platforms, Vec2 spawn1, Vec2 spawn2, Vec2 spawn3, Vec2 spawn4) =

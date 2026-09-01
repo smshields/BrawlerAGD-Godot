@@ -16,12 +16,7 @@ namespace BrawlerSim.Evolution;
 /// </summary>
 public static class RunStore
 {
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
+    private static readonly JsonSerializerOptions Options = JsonOptions.Document;
 
     public static void SaveCheckpoint(string runDir, EvolutionEngine engine, EvolutionConfig config, List<GenerationStats> history)
     {

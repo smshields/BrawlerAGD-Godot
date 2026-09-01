@@ -109,10 +109,7 @@ public sealed class SpriteLibrary
 
     public static SpriteLibrary LoadFile(string path) => Parse(File.ReadAllText(path));
 
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
+    private static readonly JsonSerializerOptions Options = Serialization.JsonOptions.Library;
 
     // DTOs mirror the v2 slices contract; unknown fields (source, license, interim,
     // tags — a convenience duplicate of traitAffinity's keys) are ignored on load.

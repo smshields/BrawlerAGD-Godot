@@ -623,10 +623,7 @@ public sealed class SpriteSelector
             rebuilt ??= character.Moves.ToList();
             rebuilt[m] = move.WithSpriteId(id);
         }
-        return rebuilt is null
-            ? character
-            : new Genome.CharacterGenome(character.Name, character.Stocks, character.SpriteIndex,
-                character.Params, rebuilt, character.ButtonMoves, character.SpriteId);
+        return rebuilt is null ? character : character.WithMoves(rebuilt);
     }
 
     /// <summary>Presentation-side resolution (built-game pass): per-move attack

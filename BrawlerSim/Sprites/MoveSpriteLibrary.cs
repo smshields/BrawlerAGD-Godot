@@ -83,10 +83,7 @@ public sealed class MoveSpriteLibrary
 
     public static MoveSpriteLibrary LoadFile(string path) => Parse(File.ReadAllText(path));
 
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
+    private static readonly JsonSerializerOptions Options = Serialization.JsonOptions.Library;
 
     private sealed class LibraryDoc
     {

@@ -7,7 +7,8 @@ using BrawlerSim.Params;
 namespace BrawlerSim.Serialization;
 
 /// <summary>
-/// Reads and writes the single-file game.json format (formatVersion 4). Params are
+/// Reads and writes the single-file game.json format (current version:
+/// CurrentFormatVersion below — the history list is the authority). Params are
 /// serialized by name in schema order, so files stay human-readable and diff-able and
 /// survive schema extension (unknown keys in a file are ignored; missing keys throw).
 ///
@@ -65,12 +66,7 @@ public static class GameGenomeJson
     public const int CurrentFormatVersion = 13; // 2026-09-01 stage tile themes (see header)
     private const int MinSupportedFormatVersion = 1;
 
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
+    private static readonly JsonSerializerOptions Options = JsonOptions.Document;
 
     public static string Serialize(GameRecord record)
     {

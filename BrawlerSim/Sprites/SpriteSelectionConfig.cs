@@ -72,11 +72,7 @@ public sealed record SpriteSelectionConfig
 
     public static SpriteSelectionConfig LoadFile(string path) => Parse(File.ReadAllText(path));
 
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        ReadCommentHandling = JsonCommentHandling.Skip,
-    };
+    private static readonly JsonSerializerOptions Options = Serialization.JsonOptions.Tuning;
 }
 
 /// <summary>Register → melee flavor mapping row (attack-sprite-selection.md step 3):

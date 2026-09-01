@@ -150,6 +150,13 @@ public sealed class CharacterGenome
             ? this
             : new CharacterGenome(Name, Stocks, SpriteIndex, Params, Moves, ButtonMoves, spriteId);
 
+    /// <summary>Copy with a different move list (attack-sprite selection/repair).
+    /// The ONE construction path for "same character, new moves" — a future field
+    /// added to the constructor is then threaded here once instead of at every
+    /// copy site (the field-drop hazard behind the M4b "look owns its weapons" fix).</summary>
+    public CharacterGenome WithMoves(IReadOnlyList<MoveGenome> moves) =>
+        new(Name, Stocks, SpriteIndex, Params, moves, ButtonMoves, SpriteId);
+
     public static CharacterGenome Generate(string name, GenerationConfig config, Pcg32 rng)
     {
         ParamSet @params = GenomeOps.Generate(config.CharacterSchema, rng);
@@ -356,10 +363,7 @@ public sealed class GameGenome
                 moves[m] = character.Moves[m].WithSpriteId(null);
             }
         }
-        return moves is null
-            ? character
-            : new CharacterGenome(character.Name, character.Stocks, character.SpriteIndex,
-                character.Params, moves, character.ButtonMoves, character.SpriteId);
+        return moves is null ? character : character.WithMoves(moves);
     }
 
     /// <summary>Applies the per-character platform fit using the match constants the

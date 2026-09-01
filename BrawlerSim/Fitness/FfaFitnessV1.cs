@@ -3,6 +3,8 @@ using BrawlerSim.Sim;
 
 namespace BrawlerSim.Fitness;
 
+using static FitnessTerms;
+
 /// <summary>
 /// ffa-v1 (2026-08-12, designer-specified; docs/features/four-player.md): standard-v3's
 /// terms generalized to N players — the default fitness for 3/4-player evolution runs.
@@ -94,54 +96,6 @@ public sealed class FfaFitnessV1 : IFitnessFunction, IFitnessBreakdown
         return max - min;
     }
 
-    // The per-player pieces below are v3-verbatim (kept private there — duplicated
-    // rather than shared so the frozen class stays untouchable).
-
-    private static float CountedDamage(PlayerStats player, float cap)
-    {
-        if (player.DamagePerStock is null)
-        {
-            return player.TotalDamageTaken;
-        }
-        float sum = 0f;
-        foreach (float d in player.DamagePerStock)
-        {
-            sum += MathF.Min(d, cap);
-        }
-        return sum;
-    }
-
-    private static float MoveEvenness(PlayerStats player)
-    {
-        if (player.MoveUses is null || player.MoveUses.Count == 0)
-        {
-            return 0f;
-        }
-        int total = 0, min = int.MaxValue;
-        foreach (int uses in player.MoveUses)
-        {
-            total += uses;
-            min = Math.Min(min, uses);
-        }
-        return total == 0 ? 0f : player.MoveUses.Count * min / (float)total;
-    }
-
-    private static float StunExcess(PlayerStats player, int ticks) =>
-        ticks == 0
-            ? 0f
-            : MathF.Max(0f, player.StunTicks / (float)ticks - StandardFitnessV3.DefaultStunShareTolerance);
-
-    private static float Excess(PlayerStats player, float start, float cap)
-    {
-        if (player.DamagePerStock is null)
-        {
-            return MathF.Max(0f, MathF.Min(player.TotalDamageTaken, cap) - start);
-        }
-        float sum = 0f;
-        foreach (float d in player.DamagePerStock)
-        {
-            sum += MathF.Max(0f, MathF.Min(d, cap) - start);
-        }
-        return sum;
-    }
+    // The per-player term pieces (CountedDamage/MoveEvenness/StunExcess/Excess)
+    // are shared with StandardFitnessV3 via FitnessTerms (2026-09-01 dedupe).
 }

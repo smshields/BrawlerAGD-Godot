@@ -132,10 +132,7 @@ public sealed class StageThemeLibrary
             ? new TileRect(r[0], r[1], r[2], r[3])
             : throw new JsonException($"theme '{theme}' has a malformed rect.");
 
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
+    private static readonly JsonSerializerOptions Options = Serialization.JsonOptions.Library;
 
     // DTOs mirror the v2.1 contract; unknown fields (source, license, styleFamily,
     // kind, contract, textureSize) are ignored on load.

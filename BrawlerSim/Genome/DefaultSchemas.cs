@@ -250,18 +250,6 @@ public static class DefaultSchemas
     });
 
     /// <summary>
-    /// Projectile move type (2026-07-14, FEATURES.md §Projectiles;
-    /// docs/features/projectiles.md — designer sketch is authoritative for path
-    /// shapes). Bools ride as floats (active ≥ 0.5); the two SHAPE selectors are
-    /// ints-as-floats (floor of the value, generated in [0, 3)). Knockback and
-    /// damage genes mirror the melee move's semantics and ranges ("knockback
-    /// calculation should match a melee attack"); FSM timings mirror the melee
-    /// ranges. HitboxSize is a full extent in world units, capped below
-    /// PlayerBaseWidth (0.74) per "never larger than the shooting character".
-    /// Launch offsets are half-body fractions, clamped at resolve time so the
-    /// spawn overlaps the player (the sketch's EXIT point).
-    /// </summary>
-    /// <summary>
     /// Stage schema (2026-07-21, FEATURES.md §Map Size; docs/features/map-size.md).
     /// Size genes span 0.5×–5× the legacy dimensions (designer bounds), width and
     /// height independent. The legacy visibleHalfWidth reference is 11·(16/9)/2 —
@@ -280,8 +268,10 @@ public static class DefaultSchemas
         new ParamSpec(StageParams.VisibleHalfHeight,
             StageRules.LegacyVisibleHalfHeight * 0.5f, StageRules.LegacyVisibleHalfHeight * 5f),
         new ParamSpec(StageParams.KoMarginFraction, 0.05f, 0.25f),
-        new ParamSpec(StageParams.PlatformCount, 2f, 16f),
-        new ParamSpec(StageParams.MaxPlatformSize, 3f, 14f),
+        new ParamSpec(StageParams.PlatformCount,
+            StageRules.PlatformCountMin, StageRules.PlatformCountMax),
+        new ParamSpec(StageParams.MaxPlatformSize,
+            StageRules.MaxPlatformSizeMin, StageRules.MaxPlatformSizeMax),
         new ParamSpec(StageParams.Mirrored, 0f, 1f),
         new ParamSpec(StageParams.MirrorSide, 0f, 1f),
         new ParamSpec(StageParams.Spawn1X, -49f, 49f),
@@ -305,6 +295,18 @@ public static class DefaultSchemas
         new ParamSpec(StageParams.ThinPlatformFraction, 0f, 1f),
     });
 
+    /// <summary>
+    /// Projectile move type (2026-07-14, FEATURES.md §Projectiles;
+    /// docs/features/projectiles.md — designer sketch is authoritative for path
+    /// shapes). Bools ride as floats (active ≥ 0.5); the two SHAPE selectors are
+    /// ints-as-floats (floor of the value, generated in [0, 3)). Knockback and
+    /// damage genes mirror the melee move's semantics and ranges ("knockback
+    /// calculation should match a melee attack"); FSM timings mirror the melee
+    /// ranges. HitboxSize is a full extent in world units, capped below
+    /// PlayerBaseWidth (0.74) per "never larger than the shooting character".
+    /// Launch offsets are half-body fractions, clamped at resolve time so the
+    /// spawn overlaps the player (the sketch's EXIT point).
+    /// </summary>
     public static readonly ParamSchema Projectile = new("projectile", new[]
     {
         new ParamSpec(ProjectileParams.PathShape, 0f, 3f),      // floor → 0 linear, 1 sine, 2 quadratic

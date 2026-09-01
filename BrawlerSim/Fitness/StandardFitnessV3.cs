@@ -3,6 +3,8 @@ using BrawlerSim.Sim;
 
 namespace BrawlerSim.Fitness;
 
+using static FitnessTerms;
+
 /// <summary>
 /// standard-v3 (2026-07-10, designer-specified): replaces v2's match-level damage cap
 /// with PER-STOCK damage shaping. Rationale: knockback grows with damage, so past
@@ -130,57 +132,6 @@ public sealed class StandardFitnessV3 : IFitnessFunction, IFitnessBreakdown
     public IReadOnlyList<(string Name, float Value)> Breakdown(MatchResult result) =>
         _composed.Breakdown(result);
 
-    /// <summary>Σ per-stock damage, each stock clipped at the cap. Falls back to the
-    /// uncapped total for legacy fixtures without per-stock data.</summary>
-    private static float CountedDamage(PlayerStats player, float cap)
-    {
-        if (player.DamagePerStock is null)
-        {
-            return player.TotalDamageTaken;
-        }
-        float sum = 0f;
-        foreach (float d in player.DamagePerStock)
-        {
-            sum += MathF.Min(d, cap);
-        }
-        return sum;
-    }
-
-    /// <summary>moveCount × minUse / totalUses ∈ [0,1]: 1 = perfectly even usage of
-    /// every available move, 0 = some move never used (or no attacks at all). Legacy
-    /// fixtures without MoveUses score 0 — the term is inert for them.</summary>
-    private static float MoveEvenness(PlayerStats player)
-    {
-        if (player.MoveUses is null || player.MoveUses.Count == 0)
-        {
-            return 0f;
-        }
-        int total = 0, min = int.MaxValue;
-        foreach (int uses in player.MoveUses)
-        {
-            total += uses;
-            min = Math.Min(min, uses);
-        }
-        return total == 0 ? 0f : player.MoveUses.Count * min / (float)total;
-    }
-
-    /// <summary>Stun share above the tolerance, 0 for healthy matches.</summary>
-    private static float StunExcess(PlayerStats player, int ticks) =>
-        ticks == 0 ? 0f : MathF.Max(0f, player.StunTicks / (float)ticks - DefaultStunShareTolerance);
-
-    /// <summary>Σ per-stock damage beyond the punishment threshold (each stock's excess
-    /// saturates at cap − start).</summary>
-    private static float Excess(PlayerStats player, float start, float cap)
-    {
-        if (player.DamagePerStock is null)
-        {
-            return MathF.Max(0f, MathF.Min(player.TotalDamageTaken, cap) - start);
-        }
-        float sum = 0f;
-        foreach (float d in player.DamagePerStock)
-        {
-            sum += MathF.Max(0f, MathF.Min(d, cap) - start);
-        }
-        return sum;
-    }
+    // CountedDamage / MoveEvenness / StunExcess / Excess live in FitnessTerms
+    // (2026-09-01 dedupe with FfaFitnessV1 — bodies moved verbatim, formulas frozen).
 }
