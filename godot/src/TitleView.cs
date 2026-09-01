@@ -39,14 +39,10 @@ public partial class TitleView : Control
         title.AddThemeFontSizeOverride("font_size", 52);
         box.AddChild(title);
 
-        var subtitle = new Label
-        {
-            Text = $"{game.Characters.Count} FIGHTERS · {game.Stages.Count} STAGES — "
-                + "A GAME GROWN BY EVOLUTION",
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Modulate = new Color(0.55f, 0.6f, 0.68f),
-        };
-        subtitle.AddThemeFontSizeOverride("font_size", 14);
+        Label subtitle = UiWidgets.Hint(
+            $"{game.Characters.Count} FIGHTERS · {game.Stages.Count} STAGES — "
+            + "A GAME GROWN BY EVOLUTION", 14);
+        subtitle.HorizontalAlignment = HorizontalAlignment.Center;
         box.AddChild(subtitle);
 
         box.AddChild(new Control { CustomMinimumSize = new Vector2(0f, 16f) });
@@ -71,14 +67,14 @@ public partial class TitleView : Control
             dev.Pressed += () =>
             {
                 Standalone.ExitToDevMenu();
-                GetTree().ChangeSceneToFile("res://scenes/main_menu.tscn");
+                GetTree().ChangeSceneToFile(Scenes.MainMenu);
             };
             box.AddChild(dev);
         }
 
         // Automation (screenshot verification): BRAWLER_TITLE="play"|"credits"|"settings"
         // presses that button on load.
-        switch (OS.GetEnvironment("BRAWLER_TITLE"))
+        switch (AutomationEnv.Title)
         {
             case "play": CallDeferred(nameof(Play)); break;
             case "credits": CallDeferred(nameof(ToggleCredits)); break;
@@ -90,7 +86,7 @@ public partial class TitleView : Control
     {
         BuiltGameSession.Game = Standalone.Game;
         BuiltGameSession.Path = null; // embedded: read-only, never re-persisted
-        GetTree().ChangeSceneToFile("res://scenes/character_select.tscn");
+        GetTree().ChangeSceneToFile(Scenes.CharacterSelect);
     }
 
     private static void AddButton(VBoxContainer box, string text, System.Action onPressed)
@@ -134,27 +130,15 @@ public partial class TitleView : Control
         }
         BuiltGame game = Standalone.Game;
         var overlay = new PanelContainer { AnchorRight = 1f, AnchorBottom = 1f };
-        overlay.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-        {
-            BgColor = new Color(0.05f, 0.05f, 0.08f, 0.96f),
-            ContentMarginLeft = 60f, ContentMarginRight = 60f,
-            ContentMarginTop = 30f, ContentMarginBottom = 30f,
-        });
+        overlay.AddThemeStyleboxOverride("panel", UiWidgets.PanelStyle(
+            new Color(0.05f, 0.05f, 0.08f, 0.96f), marginX: 60f, marginY: 30f));
         _credits = overlay;
         AddChild(overlay);
 
-        var scroll = new ScrollContainer { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
+        ScrollContainer scroll = UiWidgets.ScrollList(out VBoxContainer text, separation: 6);
         overlay.AddChild(scroll);
-        var text = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        text.AddThemeConstantOverride("separation", 6);
-        scroll.AddChild(text);
 
-        void Heading(string s)
-        {
-            var label = new Label { Text = s, Modulate = new Color(0.65f, 0.7f, 0.78f) };
-            label.AddThemeFontSizeOverride("font_size", 18);
-            text.AddChild(label);
-        }
+        void Heading(string s) => text.AddChild(UiWidgets.Heading(s, 18));
         void Line(string s, int size = 13)
         {
             var label = new Label { Text = s, AutowrapMode = TextServer.AutowrapMode.WordSmart };

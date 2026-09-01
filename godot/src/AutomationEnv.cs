@@ -1,0 +1,53 @@
+using Godot;
+
+namespace BrawlerGodot;
+
+/// <summary>
+/// THE automation surface: every BRAWLER_* environment variable the app reads for
+/// headless-style development verification, in one place (previously raw
+/// OS.GetEnvironment calls across nine files).
+///
+///   BRAWLER_AUTOPLAY = "ai:&lt;seed&gt;" | "replay" — jump straight into the arena.
+///   BRAWLER_GAME     = path to game.json (defaults to a generated genome).
+///   BRAWLER_TRACE    = path to trace.json (for replay mode).
+///   BRAWLER_RULES    = "timed:&lt;seconds&gt;" — run the automated match under the
+///                      TIMED rule (KO counter + clock verification).
+///   BRAWLER_SHOT     = single screenshot path: with autoplay/autoevolve those flows
+///                      capture it themselves; otherwise Boot saves whatever scene is
+///                      up after a second and quits.
+///   BRAWLER_SHOT_DIR + BRAWLER_SHOT_TICKS = "60,300,..." — ArenaView saves
+///                      screenshots at those sim ticks and quits after the last.
+///   BRAWLER_TICKS_PER_FRAME = sim fast-forward for captures.
+///   BRAWLER_PAUSE_AT = open the pause menu at a sim tick (+ shoot "paused").
+///   BRAWLER_QUIT_AFTER = seconds; fail-safe quit so no stray window survives.
+///   BRAWLER_SCENE    = "evolve" | "manage" | ... — jump to a scene on boot.
+///   BRAWLER_TITLE    = "play" | "credits" | "settings" — title-screen routing
+///                      (also forces standalone routing in the editor).
+///   BRAWLER_PICKER   = "1" — open the game picker on main-menu load.
+///   BRAWLER_AUTOOPEN = "1" — game select opens the first complete game.
+///   BRAWLER_AUTOBUILD = "1" — game builder assembles a sample game on load.
+///   BRAWLER_AUTOSELECT = "p1=0;cpu2=3;..." — arrange a character-select lobby
+///                      (parsed by CharacterSelectView.ApplyAutoSelect).
+///   BRAWLER_AUTOEVOLVE = "name=x;pop=24;..." — start an evolve run on load
+///                      (parsed by EvolveView.ApplyAutoConfig).
+/// </summary>
+public static class AutomationEnv
+{
+    public static string Autoplay => OS.GetEnvironment("BRAWLER_AUTOPLAY");
+    public static string Game => OS.GetEnvironment("BRAWLER_GAME");
+    public static string Trace => OS.GetEnvironment("BRAWLER_TRACE");
+    public static string Rules => OS.GetEnvironment("BRAWLER_RULES");
+    public static string Shot => OS.GetEnvironment("BRAWLER_SHOT");
+    public static string ShotDir => OS.GetEnvironment("BRAWLER_SHOT_DIR");
+    public static string ShotTicks => OS.GetEnvironment("BRAWLER_SHOT_TICKS");
+    public static string TicksPerFrame => OS.GetEnvironment("BRAWLER_TICKS_PER_FRAME");
+    public static string PauseAt => OS.GetEnvironment("BRAWLER_PAUSE_AT");
+    public static string QuitAfter => OS.GetEnvironment("BRAWLER_QUIT_AFTER");
+    public static string Scene => OS.GetEnvironment("BRAWLER_SCENE");
+    public static string Title => OS.GetEnvironment("BRAWLER_TITLE");
+    public static bool Picker => OS.GetEnvironment("BRAWLER_PICKER") == "1";
+    public static bool AutoOpen => OS.GetEnvironment("BRAWLER_AUTOOPEN") == "1";
+    public static bool AutoBuild => OS.GetEnvironment("BRAWLER_AUTOBUILD") == "1";
+    public static string AutoSelect => OS.GetEnvironment("BRAWLER_AUTOSELECT");
+    public static string AutoEvolve => OS.GetEnvironment("BRAWLER_AUTOEVOLVE");
+}

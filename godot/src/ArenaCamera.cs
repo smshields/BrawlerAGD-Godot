@@ -1,5 +1,6 @@
 using Godot;
 using BrawlerSim.Sim;
+using SimAabb = BrawlerSim.Sim.Aabb;
 
 namespace BrawlerGodot;
 
@@ -39,12 +40,12 @@ public partial class ArenaCamera : Camera2D
     private float _halfHeight; // world units (full view half height)
 
     /// <summary>The world-space rect the camera currently shows (for the minimap).</summary>
-    public BrawlerSim.Sim.Aabb ViewWorldRect
+    public SimAabb ViewWorldRect
     {
         get
         {
             float aspect = Aspect();
-            return new BrawlerSim.Sim.Aabb(
+            return new SimAabb(
                 new BrawlerSim.Determinism.Vec2(_center.X, _center.Y),
                 new BrawlerSim.Determinism.Vec2(_halfHeight * aspect, _halfHeight));
         }
@@ -52,13 +53,13 @@ public partial class ArenaCamera : Camera2D
 
     /// <summary>The world-space rect of the USABLE (not HUD-covered) screen region —
     /// what the player can actually see; death flashes anchor to its edges.</summary>
-    public BrawlerSim.Sim.Aabb UsableWorldRect
+    public SimAabb UsableWorldRect
     {
         get
         {
             float aspect = Aspect();
             float f = UsableFraction();
-            return new BrawlerSim.Sim.Aabb(
+            return new SimAabb(
                 new BrawlerSim.Determinism.Vec2(_center.X, _center.Y + _halfHeight * (1f - f)),
                 new BrawlerSim.Determinism.Vec2(_halfHeight * aspect, _halfHeight * f));
         }

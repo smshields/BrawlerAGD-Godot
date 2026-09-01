@@ -20,6 +20,7 @@ public partial class ManageView : Control
     private Label _detail = null!;
     private ConfirmationDialog _confirm = null!;
     private Button _twoPlayerButton = null!;
+    private PadPresence _padWatch = null!;
 
     public override void _Ready()
     {
@@ -112,7 +113,7 @@ public partial class ManageView : Control
         {
             MatchSession.Mode = mode == MatchMode.Replay ? MatchMode.AiVsAi : mode;
         }
-        GetTree().ChangeSceneToFile("res://scenes/arena.tscn");
+        GetTree().ChangeSceneToFile(Scenes.Arena);
     }
 
     private void ConfirmDelete()
@@ -173,29 +174,23 @@ public partial class ManageView : Control
         AddButton(buttons, "WATCH", () => Launch(MatchMode.Replay));
         AddButton(buttons, "DELETE…", ConfirmDelete);
         AddButton(buttons, "REFRESH", Refresh);
-        AddButton(buttons, "BACK", () => GetTree().ChangeSceneToFile("res://scenes/main_menu.tscn"));
+        AddButton(buttons, "BACK", () => GetTree().ChangeSceneToFile(Scenes.MainMenu));
 
         _confirm = new ConfirmationDialog { Title = "Delete" };
         _confirm.Confirmed += DeleteSelected;
         AddChild(_confirm);
 
         // 2-player needs a controller (the keyboard is entirely P1's now).
-        Input.Singleton.JoyConnectionChanged += OnJoyConnectionChanged;
-        UpdateTwoPlayerAvailability();
+        _padWatch = PadPresence.Watch(hasPad =>
+        {
+            _twoPlayerButton.Disabled = !hasPad;
+            _twoPlayerButton.TooltipText = hasPad ? "" : "CONNECT A CONTROLLER";
+        });
     }
 
     public override void _ExitTree()
     {
-        Input.Singleton.JoyConnectionChanged -= OnJoyConnectionChanged;
-    }
-
-    private void OnJoyConnectionChanged(long device, bool connected) => UpdateTwoPlayerAvailability();
-
-    private void UpdateTwoPlayerAvailability()
-    {
-        bool hasPad = Input.GetConnectedJoypads().Count > 0;
-        _twoPlayerButton.Disabled = !hasPad;
-        _twoPlayerButton.TooltipText = hasPad ? "" : "CONNECT A CONTROLLER";
+        _padWatch.Detach();
     }
 
     private static Button AddButton(HBoxContainer box, string text, System.Action onPressed)

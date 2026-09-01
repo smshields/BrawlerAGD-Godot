@@ -15,6 +15,8 @@ public partial class MainMenu : Control
     private OptionButton? _rulesOption; // 2026-08-12 STOCK/TIMED picker row
     private Label _hint = null!;
     private Button _twoPlayerButton = null!;
+    private PadPresence _padWatch = null!;
+    private Control? _picker;
 
     public override void _Ready()
     {
@@ -37,7 +39,7 @@ public partial class MainMenu : Control
         {
             Text = "automated brawler game designer — godot edition",
             HorizontalAlignment = HorizontalAlignment.Center,
-            Modulate = new Color(0.65f, 0.7f, 0.78f),
+            Modulate = UiPalette.Heading,
         };
         subtitle.AddThemeFontSizeOverride("font_size", 15);
         box.AddChild(subtitle);
@@ -47,27 +49,27 @@ public partial class MainMenu : Control
         AddButton(box, "PLAY — VS CPU", () => PickGame(MatchMode.HumanVsCpu));
         AddButton(box, "WATCH AI MATCH", () => PickGame(MatchMode.AiVsAi));
         AddButton(box, "WATCH REPLAY", () => PickGame(MatchMode.Replay));
-        AddButton(box, "PLAY GAME", () => GetTree().ChangeSceneToFile("res://scenes/game_select.tscn"));
-        AddButton(box, "BUILD GAME", () => GetTree().ChangeSceneToFile("res://scenes/game_builder.tscn"));
-        AddButton(box, "EVOLVE", () => GetTree().ChangeSceneToFile("res://scenes/evolve.tscn"));
-        AddButton(box, "MANAGE GAMES", () => GetTree().ChangeSceneToFile("res://scenes/manage.tscn"));
+        AddButton(box, "PLAY GAME", () => GetTree().ChangeSceneToFile(Scenes.GameSelect));
+        AddButton(box, "BUILD GAME", () => GetTree().ChangeSceneToFile(Scenes.GameBuilder));
+        AddButton(box, "EVOLVE", () => GetTree().ChangeSceneToFile(Scenes.Evolve));
+        AddButton(box, "MANAGE GAMES", () => GetTree().ChangeSceneToFile(Scenes.Manage));
         // Standalone testing (2026-08-17, designer): a dev copy of a packaged game
         // (godot/standalone_game.json, gitignored) no longer hijacks boot — this
         // button is the way into the packaged title flow from the dev menu.
         if (Standalone.HasEmbeddedGame)
         {
             AddButton(box, "TEST STANDALONE GAME",
-                () => GetTree().ChangeSceneToFile("res://scenes/title.tscn"));
+                () => GetTree().ChangeSceneToFile(Scenes.Title));
         }
         AddButton(box, "SETTINGS", OpenSettings);
         AddButton(box, "QUIT", () => GetTree().Quit());
 
         _hint = new Label
         {
-            Text = "P1: A/D move · SPACE jump · I/J/K/L attacks        P2: gamepad\n" +
-                   "gamepad: stick/dpad move · Y/B jump · X/A/L1/R1 attacks",
+            Text = "P1: WASD move · SPACE jump · I/J/K/U/L attacks        P2: gamepad\n" +
+                   "gamepad: stick/dpad move · B jump · L1/X/A/Y/R1 attacks",
             HorizontalAlignment = HorizontalAlignment.Center,
-            Modulate = new Color(0.55f, 0.6f, 0.68f),
+            Modulate = UiPalette.Hint,
             AnchorTop = 1f, AnchorBottom = 1f, AnchorRight = 1f,
             OffsetTop = -64f,
         };
@@ -78,11 +80,16 @@ public partial class MainMenu : Control
         _traceDialog = MakeDialog("Choose the matching trace.json", OnTracePicked);
 
         // 2-player needs a controller (the keyboard is entirely P1's now).
-        Input.Singleton.JoyConnectionChanged += OnJoyConnectionChanged;
-        UpdateTwoPlayerAvailability();
+        _padWatch = PadPresence.Watch(hasPad =>
+        {
+            _twoPlayerButton.Disabled = !hasPad;
+            _twoPlayerButton.Text = hasPad
+                ? "PLAY — 2 PLAYERS"
+                : "PLAY — 2 PLAYERS · CONNECT A CONTROLLER";
+        });
 
         // Automation: BRAWLER_PICKER=1 opens the game picker on load (screenshots).
-        if (OS.GetEnvironment("BRAWLER_PICKER") == "1")
+        if (AutomationEnv.Picker)
         {
             CallDeferred(nameof(OpenPickerForAutomation));
         }
@@ -92,21 +99,8 @@ public partial class MainMenu : Control
 
     public override void _ExitTree()
     {
-        Input.Singleton.JoyConnectionChanged -= OnJoyConnectionChanged;
+        _padWatch.Detach();
     }
-
-    private void OnJoyConnectionChanged(long device, bool connected) => UpdateTwoPlayerAvailability();
-
-    private void UpdateTwoPlayerAvailability()
-    {
-        bool hasPad = Input.GetConnectedJoypads().Count > 0;
-        _twoPlayerButton.Disabled = !hasPad;
-        _twoPlayerButton.Text = hasPad
-            ? "PLAY — 2 PLAYERS"
-            : "PLAY — 2 PLAYERS · CONNECT A CONTROLLER";
-    }
-
-    private Control? _picker;
 
     /// <summary>The game picker (Evolution Explorer, 2026-07-27, designer): a simple
     /// list — FAVORITES (the ADD TO GAMES basket) first, then the curated DEMO games —
@@ -123,7 +117,7 @@ public partial class MainMenu : Control
         AddChild(overlay);
         var dim = new ColorRect
         {
-            Color = new Color(0.02f, 0.02f, 0.04f, 0.6f),
+            Color = UiPalette.OverlayDim,
             AnchorRight = 1f,
             AnchorBottom = 1f,
         };
@@ -145,25 +139,14 @@ public partial class MainMenu : Control
         title.AddThemeFontSizeOverride("font_size", 24);
         box.AddChild(title);
 
-        var scroll = new ScrollContainer
-        {
-            CustomMinimumSize = new Vector2(480f, 380f),
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        var list = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        list.AddThemeConstantOverride("separation", 4);
-        scroll.AddChild(list);
+        ScrollContainer scroll = UiWidgets.ScrollList(out VBoxContainer list, separation: 4);
+        scroll.CustomMinimumSize = new Vector2(480f, 380f);
         box.AddChild(scroll);
 
         int favorites = AddGameSection(list, "FAVORITES", AppPaths.FavoritesRoot());
         if (favorites == 0)
         {
-            var empty = new Label
-            {
-                Text = "no favorites yet — ADD TO GAMES from the EVOLVE screen",
-                Modulate = new Color(0.55f, 0.6f, 0.68f),
-            };
-            empty.AddThemeFontSizeOverride("font_size", 13);
+            Label empty = UiWidgets.Hint("no favorites yet — ADD TO GAMES from the EVOLVE screen");
             list.AddChild(empty);
         }
         AddGameSection(list, "DEMO GAMES", AppPaths.DemoRoot());
@@ -205,37 +188,11 @@ public partial class MainMenu : Control
     /// <summary>One picker section: a button per game.json in the directory (name from
     /// the filename — records are only parsed on selection). Returns the entry count.</summary>
     private int AddGameSection(VBoxContainer list, string heading, string dir)
-    {
-        if (!System.IO.Directory.Exists(dir))
+        => GameLibraryUi.AddSection(list, heading, dir, path =>
         {
-            return 0;
-        }
-        string[] files = System.IO.Directory.GetFiles(dir, "*.json");
-        System.Array.Sort(files);
-        if (files.Length == 0)
-        {
-            return 0;
-        }
-        var section = new Label { Text = heading, Modulate = new Color(0.65f, 0.7f, 0.78f) };
-        section.AddThemeFontSizeOverride("font_size", 14);
-        list.AddChild(section);
-        foreach (string file in files)
-        {
-            string path = file;
-            var button = new Button
-            {
-                Text = System.IO.Path.GetFileNameWithoutExtension(file).ToUpperInvariant(),
-                Alignment = HorizontalAlignment.Left,
-            };
-            button.Pressed += () =>
-            {
-                ClosePicker();
-                OnGamePicked(path);
-            };
-            list.AddChild(button);
-        }
-        return files.Length;
-    }
+            ClosePicker();
+            OnGamePicked(path);
+        });
 
     private void OnGamePicked(string path)
     {
@@ -267,67 +224,14 @@ public partial class MainMenu : Control
 
     private void StartMatch()
     {
-        GetTree().ChangeSceneToFile("res://scenes/arena.tscn");
+        GetTree().ChangeSceneToFile(Scenes.Arena);
     }
 
-    /// <summary>SETTINGS popup (2026-07-21, Map Size): the minimap options — enabled,
-    /// corner, size, transparency — persisted via AppSettings (user://settings.cfg).</summary>
-    private void OpenSettings()
-    {
-        var popup = new PopupPanel { Theme = UiTheme.Buttons }; // popups don't inherit the scene theme
-        var box = new VBoxContainer { CustomMinimumSize = new Vector2(380f, 0f) };
-        box.AddThemeConstantOverride("separation", 10);
-        popup.AddChild(box);
-
-        var title = new Label { Text = "SETTINGS", HorizontalAlignment = HorizontalAlignment.Center };
-        title.AddThemeFontSizeOverride("font_size", 24);
-        box.AddChild(title);
-
-        var enabled = new CheckButton { Text = "MINIMAP", ButtonPressed = AppSettings.MinimapEnabled };
-        enabled.Toggled += on => AppSettings.MinimapEnabled = on;
-        box.AddChild(enabled);
-
-        box.AddChild(new Label { Text = "MINIMAP CORNER" });
-        var corner = new OptionButton();
-        foreach (string name in new[] { "UPPER LEFT", "UPPER RIGHT", "LOWER LEFT", "LOWER RIGHT" })
-        {
-            corner.AddItem(name);
-        }
-        corner.Selected = (int)AppSettings.MinimapCorner;
-        corner.ItemSelected += index => AppSettings.MinimapCorner = (AppSettings.Corner)index;
-        box.AddChild(corner);
-
-        box.AddChild(new Label { Text = "MINIMAP SIZE" });
-        var size = new HSlider { MinValue = 0.1, MaxValue = 0.4, Step = 0.01, Value = AppSettings.MinimapSize };
-        size.ValueChanged += value => AppSettings.MinimapSize = (float)value;
-        box.AddChild(size);
-
-        box.AddChild(new Label { Text = "MINIMAP OPACITY" });
-        var opacity = new HSlider { MinValue = 0.1, MaxValue = 1.0, Step = 0.05, Value = AppSettings.MinimapOpacity };
-        opacity.ValueChanged += value => AppSettings.MinimapOpacity = (float)value;
-        box.AddChild(opacity);
-
-        var close = new Button { Text = "CLOSE" };
-        close.Pressed += () => popup.Hide();
-        box.AddChild(close);
-
-        popup.PopupHide += () => popup.QueueFree();
-        AddChild(popup);
-        popup.PopupCentered();
-    }
+    private void OpenSettings() => SettingsPopup.Open(this);
 
     private FileDialog MakeDialog(string title, System.Action<string> onSelected)
     {
-        var dialog = new FileDialog
-        {
-            Title = title,
-            Access = FileDialog.AccessEnum.Filesystem,
-            FileMode = FileDialog.FileModeEnum.OpenFile,
-            Filters = new[] { "*.json" },
-            // Open where evolution runs and imported games live.
-            CurrentDir = AppPaths.RunsRoot(),
-        };
-        dialog.FileSelected += path => onSelected(path);
+        FileDialog dialog = GameLibraryUi.JsonBrowser(onSelected, title);
         AddChild(dialog);
         return dialog;
     }

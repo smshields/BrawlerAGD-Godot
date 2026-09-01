@@ -185,7 +185,7 @@ public partial class PlayerView : Node2D
             : _player.InvincibleTicksLeft > 0 ? 0.4f
             : _player.DashInvulnerable ? (_flashClock % 6 < 3 ? 1f : 0.6f)
             : 1f;
-        _body.Modulate = StateColor(_player.State) with { A = alpha };
+        _body.Modulate = StateVocabulary.Color(_player.State) with { A = alpha };
         UpdateTrail();
 
         _move.Visible = _player.HitboxActive;
@@ -232,7 +232,7 @@ public partial class PlayerView : Node2D
                 DetachTrail();
             }
         }
-        _trail.Insert(0, new TrailSample(arenaPos, _body.Scale, _body.FlipH, StateColor(_player.State)));
+        _trail.Insert(0, new TrailSample(arenaPos, _body.Scale, _body.FlipH, StateVocabulary.Color(_player.State)));
         if (_trail.Count > TrailSamples)
         {
             _trail.RemoveAt(_trail.Count - 1);
@@ -363,21 +363,4 @@ public partial class PlayerView : Node2D
         DrawCircle(center, radius, color with { A = 0.12f });
     }
 
-    /// <summary>Unity SpriteRenderer state tints, verbatim — plus cyan for the Shield
-    /// state (designer tint decision, 2026-07-12). Public: the HUD's human-readable
-    /// state readout matches the body tint (HUD polish, 2026-07-23).</summary>
-    public static Color StateColor(PlayerState state) => state switch
-    {
-        PlayerState.Shield => Colors.Cyan,
-        PlayerState.Dash => Colors.Orange, // 2026-07-13 designer tint decision
-        PlayerState.Crouch => Colors.Purple, // 2026-07-13 designer tint decision
-        PlayerState.Idle => Colors.White,
-        PlayerState.Air => Colors.Green,
-        PlayerState.AirJumpsExhausted => Colors.Gray,
-        PlayerState.WarmUp => Colors.Yellow,
-        PlayerState.Attack => Colors.Red,
-        PlayerState.CoolDown => Colors.Blue,
-        PlayerState.Stun => Colors.Magenta,
-        _ => Colors.White,
-    };
 }

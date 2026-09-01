@@ -4,6 +4,7 @@ using BrawlerSim.Agents;
 using BrawlerSim.Determinism;
 using BrawlerSim.Replay;
 using BrawlerSim.Sim;
+using SimAabb = BrawlerSim.Sim.Aabb;
 
 namespace BrawlerGodot;
 
@@ -41,6 +42,10 @@ public partial class ArenaView : Node2D
     // given sim ticks, plus at match end, then quit.
     private string _shotDir = "";
     private System.Collections.Generic.Queue<int> _shotTicks = new();
+    private int _pauseAtTick = -1;
+
+    /// <summary>Automation fast-forward: sim ticks per rendered frame (default 1 = real time).</summary>
+    private int _ticksPerFrame = 1;
 
     public override void _Ready()
     {
@@ -57,6 +62,34 @@ public partial class ArenaView : Node2D
 
         Position = GetViewportRect().Size / 2f;
 
+        BuildViewStack(players);
+
+        _shotDir = AutomationEnv.ShotDir;
+        string ticks = AutomationEnv.ShotTicks;
+        if (_shotDir.Length > 0 && ticks.Length > 0)
+        {
+            foreach (string tick in ticks.Split(','))
+            {
+                _shotTicks.Enqueue(int.Parse(tick));
+            }
+        }
+        string fastForward = AutomationEnv.TicksPerFrame;
+        if (fastForward.Length > 0)
+        {
+            _ticksPerFrame = int.Parse(fastForward);
+        }
+        string pauseAt = AutomationEnv.PauseAt;
+        if (pauseAt.Length > 0)
+        {
+            _pauseAtTick = int.Parse(pauseAt); // automation: verify the pause menu
+        }
+    }
+
+    /// <summary>The rendered view stack over the SimWorld, in draw order: stage,
+    /// players, projectiles, spawn pads, camera, minimap, death flash, HUD, pause
+    /// menu.</summary>
+    private void BuildViewStack(int players)
+    {
         var stage = new StageView();
         AddChild(stage);
         stage.Setup(_world, Ppu, MatchSession.Game.Genome.Stage); // themed tiles (M4d)
@@ -112,32 +145,7 @@ public partial class ArenaView : Node2D
         AddChild(_pauseMenu);
         _pauseMenu.ResumeRequested += () => SetPaused(false);
         _pauseMenu.QuitRequested += BackToMenu;
-
-        _shotDir = OS.GetEnvironment("BRAWLER_SHOT_DIR");
-        string ticks = OS.GetEnvironment("BRAWLER_SHOT_TICKS");
-        if (_shotDir.Length > 0 && ticks.Length > 0)
-        {
-            foreach (string tick in ticks.Split(','))
-            {
-                _shotTicks.Enqueue(int.Parse(tick));
-            }
-        }
-        string fastForward = OS.GetEnvironment("BRAWLER_TICKS_PER_FRAME");
-        if (fastForward.Length > 0)
-        {
-            _ticksPerFrame = int.Parse(fastForward);
-        }
-        string pauseAt = OS.GetEnvironment("BRAWLER_PAUSE_AT");
-        if (pauseAt.Length > 0)
-        {
-            _pauseAtTick = int.Parse(pauseAt); // automation: verify the pause menu
-        }
     }
-
-    private int _pauseAtTick = -1;
-
-    /// <summary>Automation fast-forward: sim ticks per rendered frame (default 1 = real time).</summary>
-    private int _ticksPerFrame = 1;
 
     public override void _PhysicsProcess(double delta)
     {
@@ -238,7 +246,7 @@ public partial class ArenaView : Node2D
     private void TriggerDeathFlash(
         BrawlerSim.Determinism.Vec2 pos, BrawlerSim.Determinism.Vec2 vel, float dmg, float bodyHalfX)
     {
-        BrawlerSim.Sim.Aabb view = _camera.UsableWorldRect;
+        SimAabb view = _camera.UsableWorldRect;
         float usableFrac = _camera.UsableFraction();
         float fx = view.Right > view.Left
             ? (pos.X - view.Left) / (view.Right - view.Left) : 0.5f;
@@ -343,17 +351,8 @@ public partial class ArenaView : Node2D
         GD.Print($"match trace saved: {path} ({_trace.TickCount} ticks, hash {_world.StateHash()})");
     }
 
-    private async System.Threading.Tasks.Task CaptureAsync(string name, bool quitWhenDone)
-    {
-        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-        string path = System.IO.Path.Combine(_shotDir, $"{name}.png");
-        GetViewport().GetTexture().GetImage().SavePng(path);
-        GD.Print($"shot saved: {path}");
-        if (quitWhenDone)
-        {
-            GetTree().Quit();
-        }
-    }
+    private System.Threading.Tasks.Task CaptureAsync(string name, bool quitWhenDone)
+        => Screenshot.CaptureAsync(this, System.IO.Path.Combine(_shotDir, $"{name}.png"), quitWhenDone);
 
     private void BackToMenu()
     {

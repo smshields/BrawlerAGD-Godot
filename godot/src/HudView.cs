@@ -33,9 +33,6 @@ public partial class HudView : CanvasLayer
     public static float ReservedBottomPixels() =>
         BottomMargin + PanelHeight + (AppSettings.DebugPanelEnabled ? 4f + DebugHeight : 0f);
 
-    private static readonly string[] KeyNamesKeyboard = { "I", "J", "K", "U", "L" };
-    private static readonly string[] KeyNamesPad = { "L1", "X", "A", "Y", "R1" };
-
     private SimWorld _world = null!;
     private Label _banner = null!;
     private Label _timer = null!;
@@ -130,56 +127,6 @@ public partial class HudView : CanvasLayer
         return $"{_world.Players[_world.LoserIndex].Name} HAS LOST THE GAME";
     }
 
-    /// <summary>Human-readable state names (FEATURES.md §HUD #3) — machine enums
-    /// stay in the sim; the player reads verbs.</summary>
-    private static string StateName(SimPlayer player)
-    {
-        if (player.Eliminated)
-        {
-            return "ELIMINATED"; // out for good (2026-08-12, STOCK rule)
-        }
-        if (player.IsRespawning)
-        {
-            return $"RESPAWNING {player.RespawnBlackoutLeft / BrawlerSim.SimInfo.TicksPerSecond:F1}s";
-        }
-        if (player.State == PlayerState.Stun && player.StunFromShieldBreak)
-        {
-            return "SHIELD BROKEN";
-        }
-        return player.State switch
-        {
-            PlayerState.Idle => "READY",
-            PlayerState.Air => "AIRBORNE",
-            PlayerState.AirJumpsExhausted => "EXHAUSTED",
-            PlayerState.WarmUp => "WINDING UP",
-            PlayerState.Attack => "ATTACKING",
-            PlayerState.CoolDown => "RECOVERING",
-            PlayerState.Stun => "STUNNED",
-            PlayerState.Shield => "SHIELDING",
-            PlayerState.Dash => "DASHING",
-            PlayerState.Crouch => "CROUCHING",
-            _ => player.State.ToString().ToUpperInvariant(),
-        };
-    }
-
-    /// <summary>Shared move-name vocabulary (internal since 2026-08-17: the character
-    /// select's key→move view uses the same labels as the debug strip).</summary>
-    internal static string MoveAbbrev(CharacterGenome character, int moveIndex)
-    {
-        MoveType type = character.Moves[moveIndex].Type;
-        if (type == MoveType.Attack)
-        {
-            return $"ATK{moveIndex + 1}";
-        }
-        return type switch
-        {
-            MoveType.Shield => "SHLD",
-            MoveType.Dash => "DASH",
-            MoveType.Projectile => "PROJ",
-            _ => type.ToString().ToUpperInvariant(),
-        };
-    }
-
     /// <summary>One player's quarter: main panel + debug strip + all animations.</summary>
     private sealed class Slot
     {
@@ -202,6 +149,7 @@ public partial class HudView : CanvasLayer
         // Animation state (view-only).
         private float _shownDamage;
         private float _rollFrom;
+        private float _rollTarget;
         private float _rollClock = RollSeconds; // idle
         private float _rollMagnitude;
         private float _shake;
@@ -234,15 +182,18 @@ public partial class HudView : CanvasLayer
             };
             hud.AddChild(_root);
 
+            BuildPanel(character, player);
+            BuildDebugStrip();
+            _intangible = new Bar(_debug, "INTG", new Color(1f, 1f, 1f), new Vector2(150f, 8f));
+            _invulnerable = new Bar(_debug, "INVL", new Color(0.75f, 0.85f, 1f), new Vector2(150f, 20f));
+            _keys = BuildControlRow(index, character);
+        }
+
+        private void BuildPanel(CharacterGenome character, SimPlayer player)
+        {
             // Main panel: solid background, outline in the identity color.
-            _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-            {
-                BgColor = new Color(0.13f, 0.13f, 0.17f),
-                BorderColor = _color,
-                BorderWidthTop = 2, BorderWidthBottom = 2, BorderWidthLeft = 2, BorderWidthRight = 2,
-                CornerRadiusTopLeft = 8, CornerRadiusTopRight = 8,
-                CornerRadiusBottomLeft = 8, CornerRadiusBottomRight = 8,
-            });
+            _panel.AddThemeStyleboxOverride("panel", UiWidgets.PanelStyle(
+                UiPalette.PanelBg, border: _color, borderWidth: 2, cornerRadius: 8));
             _panel.AnchorLeft = 0f;
             _panel.AnchorRight = 1f;
             _panel.AnchorTop = 1f;
@@ -310,7 +261,10 @@ public partial class HudView : CanvasLayer
             _deathFlash.AnchorBottom = 1f;
             _deathFlash.MouseFilter = Control.MouseFilterEnum.Ignore;
             _panel.AddChild(_deathFlash);
+        }
 
+        private void BuildDebugStrip()
+        {
             // Debug strip (semi-transparent) above the panel.
             _debug.AnchorLeft = 0f;
             _debug.AnchorRight = 1f;
@@ -323,12 +277,8 @@ public partial class HudView : CanvasLayer
             _root.AddChild(_debug);
 
             var debugBg = new PanelContainer();
-            debugBg.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-            {
-                BgColor = new Color(0.09f, 0.09f, 0.12f, 0.55f),
-                CornerRadiusTopLeft = 8, CornerRadiusTopRight = 8,
-                CornerRadiusBottomLeft = 8, CornerRadiusBottomRight = 8,
-            });
+            debugBg.AddThemeStyleboxOverride("panel", UiWidgets.PanelStyle(
+                new Color(UiPalette.Background, 0.55f), cornerRadius: 8));
             debugBg.AnchorRight = 1f;
             debugBg.AnchorBottom = 1f;
             _debug.AddChild(debugBg);
@@ -344,31 +294,39 @@ public partial class HudView : CanvasLayer
             _diArrow.OffsetTop = 2f;
             _diArrow.AddThemeFontSizeOverride("font_size", 16);
             _debug.AddChild(_diArrow);
+        }
 
-            _intangible = new Bar(_debug, "INTG", new Color(1f, 1f, 1f), new Vector2(150f, 8f));
-            _invulnerable = new Bar(_debug, "INVL", new Color(0.75f, 0.85f, 1f), new Vector2(150f, 20f));
-
+        private Keycap[] BuildControlRow(int index, CharacterGenome character)
+        {
             // Control layout: jump + the five action buttons, move names attached,
             // keycaps highlight on press (agent presses included).
-            string[] keys = index == 0 ? KeyNamesKeyboard : KeyNamesPad;
-            string jumpKey = index == 0 ? "SPC" : "B";
-            _keys = new Keycap[keys.Length + 1];
+            string[] keys = index == 0 ? ControlLabels.Keyboard : ControlLabels.Pad;
+            string jumpKey = index == 0 ? ControlLabels.KeyboardJump : ControlLabels.PadJump;
+            var caps = new Keycap[keys.Length + 1];
             float x = 8f;
-            _keys[0] = new Keycap(_debug, jumpKey, "JUMP", new Vector2(x, DebugHeight - 34f));
+            caps[0] = new Keycap(_debug, jumpKey, "JUMP", new Vector2(x, DebugHeight - 34f));
             x += 52f;
             for (int b = 0; b < keys.Length; b++)
             {
-                _keys[b + 1] = new Keycap(_debug, keys[b],
-                    MoveAbbrev(character, character.ButtonMoves[b]), new Vector2(x, DebugHeight - 34f));
+                caps[b + 1] = new Keycap(_debug, keys[b],
+                    MoveLabels.Abbrev(character, character.ButtonMoves[b]), new Vector2(x, DebugHeight - 34f));
                 x += 52f;
             }
+            return caps;
         }
 
         public void Sync(SimPlayer player, InputFrame input)
         {
             _clock++;
             float dt = 1f / 60f;
+            SyncDamageRoll(player, dt);
+            SyncShake(player);
+            SyncStocks(player);
+            SyncDebugStrip(player, input);
+        }
 
+        private void SyncDamageRoll(SimPlayer player, float dt)
+        {
             // Percent roll (mockup: roll through interim numbers, grow slightly
             // until the final roll, scale with hit magnitude — hit player only).
             if (player.Damage != _rollTarget)
@@ -394,7 +352,10 @@ public partial class HudView : CanvasLayer
                 _damage.Scale = Vector2.One;
             }
             _damage.Text = $"{_shownDamage:F1}%";
+        }
 
+        private void SyncShake(SimPlayer player)
+        {
             // Hit shake (subtle, damage-scaled) and death shake + flash (major).
             // Deaths are read from the per-life ledger (2026-08-12): stock decrements
             // fill it exactly as before, TIMED-mode deaths fill it with stocks
@@ -426,7 +387,10 @@ public partial class HudView : CanvasLayer
             _root.OffsetTop = jolt.Y;
             _root.OffsetBottom = jolt.Y;
             _deathFlash.Color = new Color(1f, 1f, 1f, _flash > 0.03f ? _flash : 0f);
+        }
 
+        private void SyncStocks(SimPlayer player)
+        {
             // Stocks: dots until they no longer fit, then a count. TIMED mode
             // (2026-08-12) has infinite stocks — the score is the KO count.
             _stocks.Text = _timed
@@ -439,17 +403,20 @@ public partial class HudView : CanvasLayer
             // An eliminated player's quarter dims — still readable, clearly done.
             _panel.Modulate = player.Eliminated
                 ? new Color(0.55f, 0.55f, 0.6f) : Colors.White;
+        }
 
+        private void SyncDebugStrip(SimPlayer player, InputFrame input)
+        {
             // Debug strip.
             _debug.Visible = AppSettings.DebugPanelEnabled;
             if (!_debug.Visible)
             {
                 return;
             }
-            _state.Text = StateName(player);
+            _state.Text = StateVocabulary.Name(player);
             _state.Modulate = player.Eliminated || player.IsRespawning
                 ? new Color(0.8f, 0.8f, 0.85f)
-                : PlayerView.StateColor(player.State);
+                : StateVocabulary.Color(player.State);
 
             float fps = BrawlerSim.SimInfo.TicksPerSecond;
             _intangible.Sync(player.SpawnIntangible && _spawnPadSeconds > 0f
@@ -474,8 +441,6 @@ public partial class HudView : CanvasLayer
                 _keys[b + 1].Sync(input.ActionPressed(b));
             }
         }
-
-        private float _rollTarget;
     }
 
     /// <summary>A labelled timing bar (intangible/invulnerable) — hidden at zero.
@@ -547,7 +512,7 @@ public partial class HudView : CanvasLayer
             _move.Text = move;
             _move.HorizontalAlignment = HorizontalAlignment.Center;
             _move.AddThemeFontSizeOverride("font_size", 10);
-            _move.Modulate = new Color(0.65f, 0.7f, 0.78f);
+            _move.Modulate = UiPalette.Heading;
             _move.Position = position + new Vector2(0f, 19f);
             _move.CustomMinimumSize = new Vector2(40f, 12f);
             parent.AddChild(_move);
@@ -562,7 +527,7 @@ public partial class HudView : CanvasLayer
             _flash = System.Math.Max(0, _flash - 1);
             bool lit = _flash > 0;
             _style.BgColor = lit ? new Color(1f, 1f, 1f, 0.45f) : new Color(1f, 1f, 1f, 0.10f);
-            _key.Modulate = lit ? new Color(0.09f, 0.09f, 0.12f) : new Color(0.9f, 0.92f, 0.98f);
+            _key.Modulate = lit ? UiPalette.Background : new Color(0.9f, 0.92f, 0.98f);
         }
     }
 }

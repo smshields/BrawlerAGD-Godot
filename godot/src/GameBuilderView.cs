@@ -46,7 +46,7 @@ public partial class GameBuilderView : Control
         RefreshRoster();
         RefreshSourceElements();
 
-        if (OS.GetEnvironment("BRAWLER_AUTOBUILD") == "1")
+        if (AutomationEnv.AutoBuild)
         {
             AutoBuildSample();
         }
@@ -56,21 +56,13 @@ public partial class GameBuilderView : Control
 
     private void RefreshLibrary()
     {
-        foreach (Node child in _libraryList.GetChildren())
-        {
-            child.QueueFree();
-        }
+        UiWidgets.ClearChildren(_libraryList);
         string[] files = System.IO.Directory.GetFiles(AppPaths.GamesRoot(), "*.json");
         System.Array.Sort(files);
         if (files.Length == 0)
         {
-            var empty = new Label
-            {
-                Text = "no games yet — NEW GAME to start one",
-                Modulate = new Color(0.55f, 0.6f, 0.68f),
-                AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            };
-            empty.AddThemeFontSizeOverride("font_size", 13);
+            Label empty = UiWidgets.Hint("no games yet — NEW GAME to start one");
+            empty.AutowrapMode = TextServer.AutowrapMode.WordSmart;
             _libraryList.AddChild(empty);
         }
         foreach (string file in files)
@@ -82,10 +74,7 @@ public partial class GameBuilderView : Control
             {
                 BuiltGame game = BuiltGameJson.Load(path);
                 name = game.Name;
-                badge = game.IsComplete
-                    ? "COMPLETE"
-                    : $"{game.Characters.Count}/{BuiltGame.RequiredCharacters} · "
-                      + $"{game.Stages.Count}/{BuiltGame.RequiredStages}";
+                badge = game.IsComplete ? "COMPLETE" : GameLibraryUi.CompletionBadge(game);
             }
             catch (System.Exception e)
             {
@@ -176,14 +165,8 @@ public partial class GameBuilderView : Control
             $"CHARACTERS {_game?.Characters.Count ?? 0}/{BuiltGame.RequiredCharacters}";
         _stageHeading.Text = $"STAGES {_game?.Stages.Count ?? 0}/{BuiltGame.RequiredStages}";
 
-        foreach (Node child in _rosterCharacters.GetChildren())
-        {
-            child.QueueFree();
-        }
-        foreach (Node child in _rosterStages.GetChildren())
-        {
-            child.QueueFree();
-        }
+        UiWidgets.ClearChildren(_rosterCharacters);
+        UiWidgets.ClearChildren(_rosterStages);
         if (_game is null)
         {
             return;
@@ -236,41 +219,24 @@ public partial class GameBuilderView : Control
 
     private void RefreshSourceList()
     {
-        foreach (Node child in _sourceList.GetChildren())
-        {
-            child.QueueFree();
-        }
+        UiWidgets.ClearChildren(_sourceList);
         AddSourceSection("FAVORITES", AppPaths.FavoritesRoot());
         AddSourceSection("DEMO GAMES", AppPaths.DemoRoot());
     }
 
     private void AddSourceSection(string heading, string dir)
-    {
-        if (!System.IO.Directory.Exists(dir))
-        {
-            return;
-        }
-        string[] files = System.IO.Directory.GetFiles(dir, "*.json");
-        System.Array.Sort(files);
-        if (files.Length == 0)
-        {
-            return;
-        }
-        var section = new Label { Text = heading, Modulate = new Color(0.65f, 0.7f, 0.78f) };
-        section.AddThemeFontSizeOverride("font_size", 14);
-        _sourceList.AddChild(section);
-        foreach (string file in files)
-        {
-            string path = file;
-            var button = new Button
-            {
-                Text = System.IO.Path.GetFileNameWithoutExtension(file).ToUpperInvariant(),
-                Alignment = HorizontalAlignment.Left,
-            };
-            button.Pressed += () => OpenSource(path);
-            _sourceList.AddChild(button);
-        }
-    }
+        => GameLibraryUi.AddSection(_sourceList, heading, dir, OpenSource);
+
+    // The source-to-roster naming convention, shared by the source browser and
+    // AutoBuildSample. The origin strings feed provenance/credits — outputs must
+    // stay byte-identical between the two paths.
+
+    private static BuiltCharacter CharacterFrom(GameRecord record, string label, int index)
+        => new($"{label} P{index + 1}", $"{record.Origin ?? label}/char{index}",
+            record.Genome.Characters[index]);
+
+    private static BuiltStage StageFrom(GameRecord record, string label)
+        => new($"{label} STAGE", $"{record.Origin ?? label}/stage", record.Genome.Stage);
 
     private void OpenSource(string path)
     {
@@ -289,19 +255,11 @@ public partial class GameBuilderView : Control
 
     private void RefreshSourceElements()
     {
-        foreach (Node child in _sourceElements.GetChildren())
-        {
-            child.QueueFree();
-        }
+        UiWidgets.ClearChildren(_sourceElements);
         if (_source is null)
         {
-            var hint = new Label
-            {
-                Text = "pick a game above to see its characters and stage",
-                Modulate = new Color(0.55f, 0.6f, 0.68f),
-                AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            };
-            hint.AddThemeFontSizeOverride("font_size", 13);
+            Label hint = UiWidgets.Hint("pick a game above to see its characters and stage");
+            hint.AutowrapMode = TextServer.AutowrapMode.WordSmart;
             _sourceElements.AddChild(hint);
             return;
         }
@@ -312,25 +270,22 @@ public partial class GameBuilderView : Control
 
         for (int i = 0; i < _source.Genome.Characters.Count; i++)
         {
-            CharacterGenome character = _source.Genome.Characters[i];
-            string defaultName = $"{_sourceLabel} P{i + 1}";
-            string origin = $"{_source.Origin ?? _sourceLabel}/char{i}";
+            BuiltCharacter entry = CharacterFrom(_source, _sourceLabel, i);
             bool inGame = _game is not null
                 && _game.Characters.Any(c =>
-                    BuiltGame.ContentKey(c.Character) == BuiltGame.ContentKey(character));
+                    BuiltGame.ContentKey(c.Character) == BuiltGame.ContentKey(entry.Character));
             _sourceElements.AddChild(CharacterCard(
-                character, defaultName, origin, rename: null,
+                entry.Character, entry.DisplayName, entry.Origin, rename: null,
                 action: (_game is null ? "OPEN A GAME" : inGame ? "IN GAME" : "ADD", () =>
                 {
                     if (_game is null)
                     {
                         return;
                     }
-                    if (_game.TryAddCharacter(
-                            new BuiltCharacter(defaultName, origin, character), out string reason))
+                    if (_game.TryAddCharacter(entry, out string reason))
                     {
                         SaveOpenGame();
-                        Status($"added {defaultName}");
+                        Status($"added {entry.DisplayName}");
                         RefreshRoster();
                         RefreshLibrary();
                         RefreshSourceElements();
@@ -343,23 +298,21 @@ public partial class GameBuilderView : Control
                 actionEnabled: _game is not null && !inGame));
         }
 
-        StageGenome stage = _source.Genome.Stage;
-        string stageName = $"{_sourceLabel} STAGE";
-        string stageOrigin = $"{_source.Origin ?? _sourceLabel}/stage";
+        BuiltStage stageEntry = StageFrom(_source, _sourceLabel);
         bool stageInGame = _game is not null
-            && _game.Stages.Any(s => BuiltGame.ContentKey(s.Stage) == BuiltGame.ContentKey(stage));
+            && _game.Stages.Any(s => BuiltGame.ContentKey(s.Stage) == BuiltGame.ContentKey(stageEntry.Stage));
         _sourceElements.AddChild(StageCard(
-            stage, stageName, stageOrigin, rename: null,
+            stageEntry.Stage, stageEntry.DisplayName, stageEntry.Origin, rename: null,
             action: (_game is null ? "OPEN A GAME" : stageInGame ? "IN GAME" : "ADD", () =>
             {
                 if (_game is null)
                 {
                     return;
                 }
-                if (_game.TryAddStage(new BuiltStage(stageName, stageOrigin, stage), out string reason))
+                if (_game.TryAddStage(stageEntry, out string reason))
                 {
                     SaveOpenGame();
-                    Status($"added {stageName}");
+                    Status($"added {stageEntry.DisplayName}");
                     RefreshRoster();
                     RefreshLibrary();
                     RefreshSourceElements();
@@ -416,9 +369,9 @@ public partial class GameBuilderView : Control
                 ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
                 CustomMinimumSize = new Vector2(16f, 16f),
             });
-            var text = new Label { Text = MoveChipText(move) };
+            var text = new Label { Text = MoveLabels.Chip(move) };
             text.AddThemeFontSizeOverride("font_size", 10);
-            text.Modulate = new Color(0.65f, 0.7f, 0.78f);
+            text.Modulate = UiPalette.Heading;
             chip.AddChild(text);
             chips.AddChild(chip);
         }
@@ -454,7 +407,7 @@ public partial class GameBuilderView : Control
                 + $"{stage.Params.Get(StageParams.VisibleHalfHeight) * 2f:F0} UNITS",
         };
         info.AddThemeFontSizeOverride("font_size", 10);
-        info.Modulate = new Color(0.65f, 0.7f, 0.78f);
+        info.Modulate = UiPalette.Heading;
         mid.AddChild(info);
 
         row.AddChild(ActionButton(action, actionEnabled));
@@ -465,30 +418,12 @@ public partial class GameBuilderView : Control
         return panel;
     }
 
-    /// <summary>One-line move summary: type + the damage gene for attack-family
-    /// moves (defensive moves read by type alone).</summary>
-    private static string MoveChipText(MoveGenome move) => move.Type switch
-    {
-        MoveType.Attack => $"ATK {move.Params.Get(MoveParams.DamageFactor):F1}",
-        MoveType.Projectile => $"PROJ {move.Params.Get(ProjectileParams.DamageFactor):F1}",
-        MoveType.Shield => "SHLD",
-        MoveType.Dash => "DASH",
-        _ => move.Type.ToString().ToUpperInvariant(),
-    };
-
     private static PanelContainer CardPanel()
     {
         var panel = new PanelContainer();
-        panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-        {
-            BgColor = new Color(0.13f, 0.13f, 0.17f),
-            BorderColor = new Color(0.3f, 0.32f, 0.4f),
-            BorderWidthTop = 1, BorderWidthBottom = 1, BorderWidthLeft = 1, BorderWidthRight = 1,
-            CornerRadiusTopLeft = 8, CornerRadiusTopRight = 8,
-            CornerRadiusBottomLeft = 8, CornerRadiusBottomRight = 8,
-            ContentMarginLeft = 8f, ContentMarginRight = 8f,
-            ContentMarginTop = 6f, ContentMarginBottom = 6f,
-        });
+        panel.AddThemeStyleboxOverride("panel", UiWidgets.PanelStyle(
+            UiPalette.PanelBg, border: UiPalette.PanelBorder,
+            borderWidth: 1, cornerRadius: 8, marginX: 8f, marginY: 6f));
         return panel;
     }
 
@@ -539,7 +474,26 @@ public partial class GameBuilderView : Control
         root.AddThemeConstantOverride("separation", 24);
         AddChild(root);
 
-        // LEFT — the games library.
+        BuildLibraryColumn(root);
+        BuildRosterColumn(root);
+        BuildSourceColumn(root);
+
+        _confirmDelete = new ConfirmationDialog
+        {
+            DialogText = "Delete this game? The compiled document is removed from disk.",
+        };
+        _confirmDelete.Confirmed += DeleteOpenGame;
+        AddChild(_confirmDelete);
+
+        _sourceDialog = GameLibraryUi.JsonBrowser(OpenSource, filter: "*.json ; evolved game");
+        AddChild(_sourceDialog);
+
+        RefreshSourceList();
+    }
+
+    // LEFT — the games library.
+    private void BuildLibraryColumn(HBoxContainer root)
+    {
         var left = new VBoxContainer { CustomMinimumSize = new Vector2(280f, 0f) };
         left.AddThemeConstantOverride("separation", 8);
         root.AddChild(left);
@@ -547,14 +501,8 @@ public partial class GameBuilderView : Control
         title.AddThemeFontSizeOverride("font_size", 34);
         left.AddChild(title);
         left.AddChild(Heading("GAMES"));
-        var libraryScroll = new ScrollContainer
-        {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        _libraryList = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _libraryList.AddThemeConstantOverride("separation", 4);
-        libraryScroll.AddChild(_libraryList);
+        ScrollContainer libraryScroll = UiWidgets.ScrollList(out _libraryList, separation: 4);
+        libraryScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
         left.AddChild(libraryScroll);
         var newButton = new Button { Text = "NEW GAME" };
         newButton.Pressed += NewGame;
@@ -563,10 +511,13 @@ public partial class GameBuilderView : Control
         _deleteButton.Pressed += () => _confirmDelete.PopupCentered();
         left.AddChild(_deleteButton);
         var back = new Button { Text = "BACK" };
-        back.Pressed += () => GetTree().ChangeSceneToFile("res://scenes/main_menu.tscn");
+        back.Pressed += () => GetTree().ChangeSceneToFile(Scenes.MainMenu);
         left.AddChild(back);
+    }
 
-        // MIDDLE — the open game's roster.
+    // MIDDLE — the open game's roster.
+    private void BuildRosterColumn(HBoxContainer root)
+    {
         var mid = new VBoxContainer { CustomMinimumSize = new Vector2(400f, 0f) };
         mid.AddThemeConstantOverride("separation", 8);
         root.AddChild(mid);
@@ -587,84 +538,43 @@ public partial class GameBuilderView : Control
         mid.AddChild(_gameName);
         _charHeading = Heading("CHARACTERS 0/8");
         mid.AddChild(_charHeading);
-        var charScroll = new ScrollContainer
-        {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-            SizeFlagsStretchRatio = 2f,
-        };
-        _rosterCharacters = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _rosterCharacters.AddThemeConstantOverride("separation", 6);
-        charScroll.AddChild(_rosterCharacters);
+        ScrollContainer charScroll = UiWidgets.ScrollList(out _rosterCharacters, separation: 6);
+        charScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
+        charScroll.SizeFlagsStretchRatio = 2f;
         mid.AddChild(charScroll);
         _stageHeading = Heading("STAGES 0/4");
         mid.AddChild(_stageHeading);
-        var stageScroll = new ScrollContainer
-        {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        _rosterStages = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _rosterStages.AddThemeConstantOverride("separation", 6);
-        stageScroll.AddChild(_rosterStages);
+        ScrollContainer stageScroll = UiWidgets.ScrollList(out _rosterStages, separation: 6);
+        stageScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
         mid.AddChild(stageScroll);
+    }
 
-        // RIGHT — sources.
+    // RIGHT — sources.
+    private void BuildSourceColumn(HBoxContainer root)
+    {
         var right = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
         right.AddThemeConstantOverride("separation", 8);
         root.AddChild(right);
         right.AddChild(Heading("ADD FROM"));
-        var sourceScroll = new ScrollContainer
-        {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        _sourceList = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _sourceList.AddThemeConstantOverride("separation", 4);
-        sourceScroll.AddChild(_sourceList);
+        ScrollContainer sourceScroll = UiWidgets.ScrollList(out _sourceList, separation: 4);
+        sourceScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
         right.AddChild(sourceScroll);
         var advanced = new Button { Text = "ADVANCED: BROWSE FILES…" };
         advanced.Pressed += () => _sourceDialog.PopupCentered(new Vector2I(900, 600));
         right.AddChild(advanced);
         right.AddChild(Heading("ELEMENTS"));
-        var elementScroll = new ScrollContainer
-        {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-            SizeFlagsStretchRatio = 2f,
-        };
-        _sourceElements = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _sourceElements.AddThemeConstantOverride("separation", 6);
-        elementScroll.AddChild(_sourceElements);
+        ScrollContainer elementScroll = UiWidgets.ScrollList(out _sourceElements, separation: 6);
+        elementScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
+        elementScroll.SizeFlagsStretchRatio = 2f;
         right.AddChild(elementScroll);
         _status = new Label { Modulate = new Color(1f, 0.9f, 0.6f) };
         _status.AddThemeFontSizeOverride("font_size", 13);
         right.AddChild(_status);
-
-        _confirmDelete = new ConfirmationDialog
-        {
-            DialogText = "Delete this game? The compiled document is removed from disk.",
-        };
-        _confirmDelete.Confirmed += DeleteOpenGame;
-        AddChild(_confirmDelete);
-
-        _sourceDialog = new FileDialog
-        {
-            FileMode = FileDialog.FileModeEnum.OpenFile,
-            Access = FileDialog.AccessEnum.Filesystem,
-            Filters = new[] { "*.json ; evolved game" },
-            CurrentDir = AppPaths.RunsRoot(),
-        };
-        _sourceDialog.FileSelected += OpenSource;
-        AddChild(_sourceDialog);
-
-        RefreshSourceList();
     }
 
     private static Label Heading(string text)
     {
-        var label = new Label { Text = text, Modulate = new Color(0.65f, 0.7f, 0.78f) };
-        label.AddThemeFontSizeOverride("font_size", 15);
+        Label label = UiWidgets.Heading(text, 15);
         return label;
     }
 
@@ -695,12 +605,9 @@ public partial class GameBuilderView : Control
             string label = System.IO.Path.GetFileNameWithoutExtension(path).ToUpperInvariant();
             for (int i = 0; i < record.Genome.Characters.Count; i++)
             {
-                _game.TryAddCharacter(new BuiltCharacter(
-                    $"{label} P{i + 1}", $"{record.Origin ?? label}/char{i}",
-                    record.Genome.Characters[i]), out _);
+                _game.TryAddCharacter(CharacterFrom(record, label, i), out _);
             }
-            _game.TryAddStage(new BuiltStage(
-                $"{label} STAGE", $"{record.Origin ?? label}/stage", record.Genome.Stage), out _);
+            _game.TryAddStage(StageFrom(record, label), out _);
         }
         SaveOpenGame();
         if (sources.Length > 0)

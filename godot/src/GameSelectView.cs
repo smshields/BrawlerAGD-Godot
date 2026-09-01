@@ -3,13 +3,6 @@ using BrawlerSim.Serialization;
 
 namespace BrawlerGodot;
 
-/// <summary>Hand-off from game selection to the character select screen.</summary>
-public static class BuiltGameSession
-{
-    public static BuiltGame? Game;
-    public static string? Path;
-}
-
 /// <summary>
 /// The Game Player's game selection screen (2026-08-14, FEATURES.md §Game Menu /
 /// Game Player; docs/features/game-player.md): an organized, game-menu-styled list
@@ -36,40 +29,36 @@ public partial class GameSelectView : Control
         title.AddThemeFontSizeOverride("font_size", 34);
         root.AddChild(title);
 
-        var scroll = new ScrollContainer
-        {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        var list = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        list.AddThemeConstantOverride("separation", 8);
-        scroll.AddChild(list);
+        ScrollContainer scroll = UiWidgets.ScrollList(out VBoxContainer list, separation: 8);
+        scroll.SizeFlagsVertical = SizeFlags.ExpandFill;
         root.AddChild(scroll);
 
+        // Load every built game ONCE and reuse the (path, game) pairs for the list,
+        // the BRAWLER_AUTOOPEN scan, and the deferred open (previously each step
+        // re-parsed the files).
         string[] files = System.IO.Directory.GetFiles(AppPaths.GamesRoot(), "*.json");
         System.Array.Sort(files);
-        int playable = 0;
+        var games = new System.Collections.Generic.List<(string Path, BuiltGame Game)>();
         foreach (string file in files)
         {
-            string path = file;
-            BuiltGame game;
             try
             {
-                game = BuiltGameJson.Load(path);
+                games.Add((file, BuiltGameJson.Load(file)));
             }
             catch (System.Exception e)
             {
-                GD.PrintErr($"built game {path}: {e.Message}");
-                continue;
+                GD.PrintErr($"built game {file}: {e.Message}");
             }
+        }
+        int playable = 0;
+        foreach ((string path, BuiltGame game) in games)
+        {
             bool complete = game.IsComplete;
             var button = new Button
             {
                 Text = complete
                     ? $"{game.Name}   —   {game.Characters.Count} FIGHTERS · {game.Stages.Count} STAGES"
-                    : $"{game.Name}   —   IN PROGRESS "
-                      + $"({game.Characters.Count}/{BuiltGame.RequiredCharacters} · "
-                      + $"{game.Stages.Count}/{BuiltGame.RequiredStages})",
+                    : $"{game.Name}   —   IN PROGRESS ({GameLibraryUi.CompletionBadge(game)})",
                 Alignment = HorizontalAlignment.Left,
                 Disabled = !complete,
                 CustomMinimumSize = new Vector2(0f, 52f),
@@ -83,46 +72,42 @@ public partial class GameSelectView : Control
         }
         if (playable == 0)
         {
-            var empty = new Label
-            {
-                Text = "no complete games yet — assemble one in BUILD GAME "
-                    + "(8 characters + 4 stages)",
-                Modulate = new Color(0.55f, 0.6f, 0.68f),
-                AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            };
-            empty.AddThemeFontSizeOverride("font_size", 14);
+            Label empty = UiWidgets.Hint(
+                    "no complete games yet — assemble one in BUILD GAME "
+                    + "(8 characters + 4 stages)", 14);
+            empty.AutowrapMode = TextServer.AutowrapMode.WordSmart;
             list.AddChild(empty);
         }
 
         var back = new Button { Text = "BACK", CustomMinimumSize = new Vector2(0f, 44f) };
-        back.Pressed += () => GetTree().ChangeSceneToFile("res://scenes/main_menu.tscn");
+        back.Pressed += () => GetTree().ChangeSceneToFile(Scenes.MainMenu);
         root.AddChild(back);
 
         // Automation: BRAWLER_AUTOOPEN=1 opens the first complete game (with the
         // naming pass) so screenshots can reach the character select headlessly.
-        if (OS.GetEnvironment("BRAWLER_AUTOOPEN") == "1")
+        if (AutomationEnv.AutoOpen)
         {
-            foreach (string file in files)
+            foreach ((string path, BuiltGame game) in games)
             {
-                BuiltGame game;
-                try
-                {
-                    game = BuiltGameJson.Load(file);
-                }
-                catch
-                {
-                    continue;
-                }
                 if (game.IsComplete)
                 {
-                    CallDeferred(nameof(DeferredOpen), file);
+                    _autoOpen = (path, game);
+                    CallDeferred(nameof(DeferredOpen));
                     break;
                 }
             }
         }
     }
 
-    private void DeferredOpen(string path) => OpenGame(BuiltGameJson.Load(path), path);
+    private (string Path, BuiltGame Game)? _autoOpen;
+
+    private void DeferredOpen()
+    {
+        if (_autoOpen is { } pending)
+        {
+            OpenGame(pending.Game, pending.Path);
+        }
+    }
 
     private void OpenGame(BuiltGame game, string path)
     {
@@ -135,6 +120,6 @@ public partial class GameSelectView : Control
         }
         BuiltGameSession.Game = game;
         BuiltGameSession.Path = path;
-        GetTree().ChangeSceneToFile("res://scenes/character_select.tscn");
+        GetTree().ChangeSceneToFile(Scenes.CharacterSelect);
     }
 }

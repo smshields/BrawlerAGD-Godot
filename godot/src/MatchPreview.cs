@@ -49,18 +49,12 @@ public partial class MatchPreview : Node2D
     {
         _record = null;
         _world = null;
-        foreach (Node child in GetChildren())
-        {
-            child.QueueFree();
-        }
+        UiWidgets.ClearChildren(this);
     }
 
     private void Rebuild()
     {
-        foreach (Node child in GetChildren())
-        {
-            child.QueueFree();
-        }
+        UiWidgets.ClearChildren(this);
         if (_record is null)
         {
             return;
@@ -87,7 +81,7 @@ public partial class MatchPreview : Node2D
         {
             var view = new PlayerView();
             AddChild(view);
-            CharacterGenomeView(i, view);
+            SetupPlayerView(i, view);
             _views[i] = view;
         }
 
@@ -106,7 +100,7 @@ public partial class MatchPreview : Node2D
         MatchChanged?.Invoke();
     }
 
-    private void CharacterGenomeView(int i, PlayerView view)
+    private void SetupPlayerView(int i, PlayerView view)
     {
         var character = _record!.Genome.Characters[i];
         view.Setup(_world!.Players[i], character, Ppu);

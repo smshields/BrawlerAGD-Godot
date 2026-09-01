@@ -27,6 +27,7 @@ public partial class MovesetPreview : SubViewportContainer
     private ScriptedCycle? _script;
     private Node2D _root = null!;
     private PlayerView _performer = null!;
+    private ProjectileLayer? _projectiles;
     private SubViewport _viewport = null!;
     private Label[] _legend = System.Array.Empty<Label>();
 
@@ -79,8 +80,6 @@ public partial class MovesetPreview : SubViewportContainer
         BuildLegend(character, jumpCap, actionCaps);
     }
 
-    private ProjectileLayer? _projectiles;
-
     /// <summary>The key→move legend (2026-08-17): JUMP + the five action buttons,
     /// keycap (when the pane has a device) + the move's debug-strip name; the row
     /// being demoed lights up. Drawn over the viewport's top-left corner.</summary>
@@ -102,7 +101,7 @@ public partial class MovesetPreview : SubViewportContainer
                 : actionCaps is not null && row - 1 < actionCaps.Length ? actionCaps[row - 1] : "";
             string move = row == 0
                 ? "JUMP"
-                : HudView.MoveAbbrev(character, character.ButtonMoves[row - 1]);
+                : MoveLabels.Abbrev(character, character.ButtonMoves[row - 1]);
             var label = new Label
             {
                 Text = cap.Length > 0 ? $"{cap,-3} {move}" : move,

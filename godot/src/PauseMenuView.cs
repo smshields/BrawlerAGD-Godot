@@ -17,6 +17,7 @@ public partial class PauseMenuView : CanvasLayer
 
     private Control _root = null!;
     private Button _debugButton = null!;
+    private Button? _firstButton;
 
     public override void _Ready()
     {
@@ -29,7 +30,7 @@ public partial class PauseMenuView : CanvasLayer
 
         var dim = new ColorRect
         {
-            Color = new Color(0.02f, 0.02f, 0.04f, 0.6f),
+            Color = UiPalette.OverlayDim,
             AnchorRight = 1f,
             AnchorBottom = 1f,
         };
@@ -58,13 +59,8 @@ public partial class PauseMenuView : CanvasLayer
         AddButton(box, "SETTINGS", OpenSettings);
         AddButton(box, "QUIT TO MENU", () => QuitRequested?.Invoke());
 
-        var hint = new Label
-        {
-            Text = "ESC resume · Q quit to menu",
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Modulate = new Color(0.55f, 0.6f, 0.68f),
-        };
-        hint.AddThemeFontSizeOverride("font_size", 13);
+        Label hint = UiWidgets.Hint("ESC resume · Q quit to menu");
+        hint.HorizontalAlignment = HorizontalAlignment.Center;
         box.AddChild(hint);
     }
 
@@ -86,8 +82,6 @@ public partial class PauseMenuView : CanvasLayer
         _root.Visible = false;
     }
 
-    private Button? _firstButton;
-
     private Button AddButton(VBoxContainer box, string text, System.Action onPressed)
     {
         var button = new Button { Text = text, CustomMinimumSize = new Vector2(320f, 42f) };
@@ -99,47 +93,5 @@ public partial class PauseMenuView : CanvasLayer
 
     /// <summary>Same options as the main menu's SETTINGS popup (minimap), reachable
     /// mid-match per the designer's pause-menu decision.</summary>
-    private void OpenSettings()
-    {
-        var popup = new PopupPanel { Theme = UiTheme.Buttons }; // popups don't inherit the scene theme
-        var box = new VBoxContainer { CustomMinimumSize = new Vector2(380f, 0f) };
-        box.AddThemeConstantOverride("separation", 10);
-        popup.AddChild(box);
-
-        var title = new Label { Text = "SETTINGS", HorizontalAlignment = HorizontalAlignment.Center };
-        title.AddThemeFontSizeOverride("font_size", 24);
-        box.AddChild(title);
-
-        var enabled = new CheckButton { Text = "MINIMAP", ButtonPressed = AppSettings.MinimapEnabled };
-        enabled.Toggled += on => AppSettings.MinimapEnabled = on;
-        box.AddChild(enabled);
-
-        box.AddChild(new Label { Text = "MINIMAP CORNER" });
-        var corner = new OptionButton();
-        foreach (string name in new[] { "UPPER LEFT", "UPPER RIGHT", "LOWER LEFT", "LOWER RIGHT" })
-        {
-            corner.AddItem(name);
-        }
-        corner.Selected = (int)AppSettings.MinimapCorner;
-        corner.ItemSelected += index => AppSettings.MinimapCorner = (AppSettings.Corner)index;
-        box.AddChild(corner);
-
-        box.AddChild(new Label { Text = "MINIMAP SIZE" });
-        var size = new HSlider { MinValue = 0.1, MaxValue = 0.4, Step = 0.01, Value = AppSettings.MinimapSize };
-        size.ValueChanged += value => AppSettings.MinimapSize = (float)value;
-        box.AddChild(size);
-
-        box.AddChild(new Label { Text = "MINIMAP OPACITY" });
-        var opacity = new HSlider { MinValue = 0.1, MaxValue = 1.0, Step = 0.05, Value = AppSettings.MinimapOpacity };
-        opacity.ValueChanged += value => AppSettings.MinimapOpacity = (float)value;
-        box.AddChild(opacity);
-
-        var close = new Button { Text = "CLOSE" };
-        close.Pressed += () => popup.Hide();
-        box.AddChild(close);
-
-        popup.PopupHide += () => popup.QueueFree();
-        _root.AddChild(popup);
-        popup.PopupCentered();
-    }
+    private void OpenSettings() => SettingsPopup.Open(_root);
 }
