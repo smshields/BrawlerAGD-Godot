@@ -80,7 +80,7 @@ public partial class MatchPreview : Node2D
 
         var stage = new StageView();
         AddChild(stage);
-        stage.Setup(_world, Ppu);
+        stage.Setup(_world, Ppu, _record.Genome.Stage); // themed tiles (M4d)
 
         _views = new PlayerView[players];
         for (int i = 0; i < players; i++)

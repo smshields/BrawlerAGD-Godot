@@ -394,7 +394,7 @@ public partial class CharacterSelectView : Control
         MatchSession.Game = new GameRecord(
             _game.Name,
             $"built:{System.IO.Path.GetFileName(_path)}/stage{_stageIndex}",
-            new GameGenome(fighters, stage.Stage));
+            new GameGenome(fighters, stage.Presented)); // negotiated theme rides in (M4d)
         MatchSession.PlayerSpecs = specs;
         MatchSession.Mode = specs.Any(s => s.Human) ? MatchMode.HumanVsCpu : MatchMode.AiVsAi;
         MatchSession.EndRule = _mode;

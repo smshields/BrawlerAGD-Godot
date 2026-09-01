@@ -25,7 +25,7 @@ public static class BuiltGamePresenter
     /// already presented it at packaging time.</summary>
     public static bool EnsurePresented(BuiltGame game, string? path)
     {
-        int changed = BuiltGamePresentation.EnsurePresented(game, Generator, SpriteBank.Selector);
+        int changed = BuiltGamePresentation.EnsurePresented(game, Generator, SpriteBank.Selector, ThemeBank.Selector);
         if (changed > 0 && path is not null)
         {
             BuiltGameJson.Save(game, path);
