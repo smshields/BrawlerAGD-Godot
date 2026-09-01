@@ -3,13 +3,6 @@ using BrawlerSim.Serialization;
 
 namespace BrawlerGodot;
 
-/// <summary>Hand-off from game selection to the character select screen.</summary>
-public static class BuiltGameSession
-{
-    public static BuiltGame? Game;
-    public static string? Path;
-}
-
 /// <summary>
 /// The Game Player's game selection screen (2026-08-14, FEATURES.md §Game Menu /
 /// Game Player; docs/features/game-player.md): an organized, game-menu-styled list

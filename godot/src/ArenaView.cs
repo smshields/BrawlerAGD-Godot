@@ -4,6 +4,7 @@ using BrawlerSim.Agents;
 using BrawlerSim.Determinism;
 using BrawlerSim.Replay;
 using BrawlerSim.Sim;
+using SimAabb = BrawlerSim.Sim.Aabb;
 
 namespace BrawlerGodot;
 
@@ -246,7 +247,7 @@ public partial class ArenaView : Node2D
     private void TriggerDeathFlash(
         BrawlerSim.Determinism.Vec2 pos, BrawlerSim.Determinism.Vec2 vel, float dmg, float bodyHalfX)
     {
-        BrawlerSim.Sim.Aabb view = _camera.UsableWorldRect;
+        SimAabb view = _camera.UsableWorldRect;
         float usableFrac = _camera.UsableFraction();
         float fx = view.Right > view.Left
             ? (pos.X - view.Left) / (view.Right - view.Left) : 0.5f;

@@ -1,5 +1,6 @@
 using Godot;
 using BrawlerSim.Sim;
+using SimAabb = BrawlerSim.Sim.Aabb;
 
 namespace BrawlerGodot;
 
@@ -56,7 +57,7 @@ public partial class SpawnPadView : Node2D
         }
     }
 
-    private void DrawPad(in BrawlerSim.Sim.Aabb pad, float alpha)
+    private void DrawPad(in SimAabb pad, float alpha)
     {
         // A solid PILL (rounded rectangle, corner radius = half the pad height) that
         // reads as a platform: solid white body, subtle darker underside, bright flat
