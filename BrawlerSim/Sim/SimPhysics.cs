@@ -18,6 +18,15 @@ public static class SimPhysics
 {
     private const float Skin = 0.001f; // resolution slack to keep resting contacts stable
 
+    /// <summary>Half height of the feet probe used by SupportPlatformIndex — a thin
+    /// band straddling the bottom edge so a body resting ON the skin still senses
+    /// the platform beneath it.</summary>
+    private const float FeetProbeHalfHeight = 2f * Skin;
+
+    /// <summary>How far the feet may sink below a platform top and still count as
+    /// standing on it (covers the skin plus one capped depenetration step).</summary>
+    private const float GroundContactTolerance = 4f * Skin;
+
     /// <summary>N-player step (2026-08-12, four-player.md): every OTHER present player
     /// is a solid collider, checked in array order. For two players this is
     /// bit-identical to the pairwise step (the self entry is skipped).
@@ -89,40 +98,10 @@ public static class SimPhysics
         // from relative position (nearest side), not motion direction: a squeezed
         // player moving "down" is not necessarily above the opponent.
         // A spawn-intangible player (2026-07-22) phases through others entirely —
-        // no body-vs-body clamp either way; an ABSENT (blacked-out or eliminated)
-        // player isn't there to collide with at all.
+        // no body-vs-body clamp either way.
         if (!player.SpawnIntangible)
         {
-            for (int o = 0; o < all.Length; o++)
-            {
-                SimPlayer opponent = all[o];
-                if (opponent == player || opponent.SpawnIntangible || opponent.IsAbsent
-                    || overlappedBefore[o] || !player.Body.Overlaps(opponent.Body))
-                {
-                    continue;
-                }
-                Aabb other = opponent.Body;
-                if (horizontal)
-                {
-                    bool playerOnLeft = player.Position.X <= opponent.Position.X;
-                    float resolvedX = playerOnLeft
-                        ? other.Left - player.BodyHalf.X - Skin
-                        : other.Right + player.BodyHalf.X + Skin;
-                    player.Position = player.Position with { X = resolvedX };
-                    ResolveAxisVelocity(player, opponent, config, horizontal: true,
-                        directionOfA: playerOnLeft ? -1f : 1f);
-                }
-                else
-                {
-                    bool playerBelow = player.Position.Y <= opponent.Position.Y;
-                    float resolvedY = playerBelow
-                        ? other.Bottom - player.BodyHalf.Y - Skin
-                        : other.Top + player.BodyHalf.Y + Skin;
-                    player.Position = player.Position with { Y = resolvedY };
-                    ResolveAxisVelocity(player, opponent, config, horizontal: false,
-                        directionOfA: playerBelow ? -1f : 1f);
-                }
-            }
+            ResolvePlayerCrossings(player, all, config, horizontal, overlappedBefore);
         }
 
         Aabb body = player.Body;
@@ -131,46 +110,103 @@ public static class SimPhysics
             Aabb platform = platforms[k];
             if (thin is not null && k < thin.Count && thin[k])
             {
-                // Thin platform (2026-09-01, FEATURES.md §Thin Platforms): solid ONLY
-                // to a body landing from above — horizontal and upward motion pass
-                // through, and a body mid drop-through ignores it until clear. A
-                // surface-CROSSING test (not overlap) does the landing, so a fast
-                // fall cannot tunnel the thin slice within one substep.
-                if (horizontal || delta > 0f || k == player.DropThroughPlatform)
-                {
-                    continue;
-                }
-                if (bottomBefore >= platform.Top - Skin && body.Bottom <= platform.Top
-                    && body.Left < platform.Right && body.Right > platform.Left)
-                {
-                    player.Position = player.Position with { Y = platform.Top + player.BodyHalf.Y + Skin };
-                    player.Velocity = player.Velocity with { Y = 0f };
-                    body = player.Body;
-                }
-                continue;
-            }
-            if (!body.Overlaps(platform))
-            {
-                continue;
-            }
-            if (horizontal)
-            {
-                float resolvedX = delta > 0f
-                    ? platform.Left - player.BodyHalf.X - Skin
-                    : platform.Right + player.BodyHalf.X + Skin;
-                player.Position = player.Position with { X = resolvedX };
-                player.Velocity = player.Velocity with { X = 0f };
+                TryLandOnThinPlatform(player, platform, k, delta, horizontal, bottomBefore, ref body);
             }
             else
             {
-                float resolvedY = delta > 0f
-                    ? platform.Bottom - player.BodyHalf.Y - Skin
-                    : platform.Top + player.BodyHalf.Y + Skin;
-                player.Position = player.Position with { Y = resolvedY };
-                player.Velocity = player.Velocity with { Y = 0f };
+                ClampAgainstSolidPlatform(player, platform, delta, horizontal, ref body);
             }
+        }
+    }
+
+    /// <summary>Clamp against any other present player's body when this axis move
+    /// CREATED the crossing (array order, 2026-08-12). The contact face comes from
+    /// relative position (nearest side), not motion direction: a squeezed player
+    /// moving "down" is not necessarily above the opponent. An opponent that is
+    /// spawn-intangible or ABSENT (blacked-out or eliminated) isn't there to
+    /// collide with at all.</summary>
+    private static void ResolvePlayerCrossings(SimPlayer player, SimPlayer[] all,
+        MatchConfig config, bool horizontal, ReadOnlySpan<bool> overlappedBefore)
+    {
+        for (int o = 0; o < all.Length; o++)
+        {
+            SimPlayer opponent = all[o];
+            if (opponent == player || opponent.SpawnIntangible || opponent.IsAbsent
+                || overlappedBefore[o] || !player.Body.Overlaps(opponent.Body))
+            {
+                continue;
+            }
+            Aabb other = opponent.Body;
+            if (horizontal)
+            {
+                bool playerOnLeft = player.Position.X <= opponent.Position.X;
+                float resolvedX = playerOnLeft
+                    ? other.Left - player.BodyHalf.X - Skin
+                    : other.Right + player.BodyHalf.X + Skin;
+                player.Position = player.Position with { X = resolvedX };
+                ResolveAxisVelocity(player, opponent, config, horizontal: true,
+                    directionOfA: playerOnLeft ? -1f : 1f);
+            }
+            else
+            {
+                bool playerBelow = player.Position.Y <= opponent.Position.Y;
+                float resolvedY = playerBelow
+                    ? other.Bottom - player.BodyHalf.Y - Skin
+                    : other.Top + player.BodyHalf.Y + Skin;
+                player.Position = player.Position with { Y = resolvedY };
+                ResolveAxisVelocity(player, opponent, config, horizontal: false,
+                    directionOfA: playerBelow ? -1f : 1f);
+            }
+        }
+    }
+
+    /// <summary>Thin platform (2026-09-01, FEATURES.md §Thin Platforms): solid ONLY
+    /// to a body landing from above — horizontal and upward motion pass through, and
+    /// a body mid drop-through ignores it until clear. A surface-CROSSING test (not
+    /// overlap) does the landing, so a fast fall cannot tunnel the thin slice within
+    /// one substep.</summary>
+    private static void TryLandOnThinPlatform(SimPlayer player, in Aabb platform, int platformIndex,
+        float delta, bool horizontal, float bottomBefore, ref Aabb body)
+    {
+        if (horizontal || delta > 0f || platformIndex == player.DropThroughPlatform)
+        {
+            return;
+        }
+        if (bottomBefore >= platform.Top - Skin && body.Bottom <= platform.Top
+            && body.Left < platform.Right && body.Right > platform.Left)
+        {
+            player.Position = player.Position with { Y = platform.Top + player.BodyHalf.Y + Skin };
+            player.Velocity = player.Velocity with { Y = 0f };
             body = player.Body;
         }
+    }
+
+    /// <summary>Clamp the moved body against a solid platform on the moved axis,
+    /// zeroing that axis's velocity (the classic axis-separated collision step).</summary>
+    private static void ClampAgainstSolidPlatform(SimPlayer player, in Aabb platform,
+        float delta, bool horizontal, ref Aabb body)
+    {
+        if (!body.Overlaps(platform))
+        {
+            return;
+        }
+        if (horizontal)
+        {
+            float resolvedX = delta > 0f
+                ? platform.Left - player.BodyHalf.X - Skin
+                : platform.Right + player.BodyHalf.X + Skin;
+            player.Position = player.Position with { X = resolvedX };
+            player.Velocity = player.Velocity with { X = 0f };
+        }
+        else
+        {
+            float resolvedY = delta > 0f
+                ? platform.Bottom - player.BodyHalf.Y - Skin
+                : platform.Top + player.BodyHalf.Y + Skin;
+            player.Position = player.Position with { Y = resolvedY };
+            player.Velocity = player.Velocity with { Y = 0f };
+        }
+        body = player.Body;
     }
 
     /// <summary>Grounded = a platform top directly under the feet, and not moving
@@ -190,11 +226,11 @@ public static class SimPhysics
         }
         Aabb feet = new(
             new Vec2(player.Position.X, player.Body.Bottom - Skin),
-            new Vec2(player.BodyHalf.X, 2f * Skin));
+            new Vec2(player.BodyHalf.X, FeetProbeHalfHeight));
         for (int i = 0; i < platforms.Count; i++)
         {
             if (i != ignorePlatform && feet.Overlaps(platforms[i])
-                && player.Body.Bottom >= platforms[i].Top - 4f * Skin)
+                && player.Body.Bottom >= platforms[i].Top - GroundContactTolerance)
             {
                 return i;
             }
@@ -270,15 +306,16 @@ public static class SimPhysics
         float aNew = common, bNew = common;
         if (b.IsDashTraveling && !a.IsDashTraveling)
         {
-            aNew = MathF.Abs(common) > config.DashContactPushCap
-                ? MathF.Sign(common) * config.DashContactPushCap : common;
+            aNew = ClampPush(common, config.DashContactPushCap);
         }
         else if (a.IsDashTraveling && !b.IsDashTraveling)
         {
-            bNew = MathF.Abs(common) > config.DashContactPushCap
-                ? MathF.Sign(common) * config.DashContactPushCap : common;
+            bNew = ClampPush(common, config.DashContactPushCap);
         }
         a.Velocity = horizontal ? a.Velocity with { X = aNew } : a.Velocity with { Y = aNew };
         b.Velocity = horizontal ? b.Velocity with { X = bNew } : b.Velocity with { Y = bNew };
     }
+
+    private static float ClampPush(float velocity, float cap) =>
+        MathF.Abs(velocity) > cap ? MathF.Sign(velocity) * cap : velocity;
 }

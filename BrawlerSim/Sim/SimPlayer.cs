@@ -107,6 +107,9 @@ public sealed class SimPlayer
     public readonly float HitstunDamageScalar;
     public readonly float FastFallAcceleration;
     public readonly float CrouchAcceleration;
+    /// <summary>Positive crouch slides cap at this multiple of the ground-speed gene
+    /// (2026-07-13 crouch spec).</summary>
+    private const float CrouchSlideSpeedCapFactor = 1.5f;
     public readonly int CrouchStageTicks;
     public readonly float CrouchMoveSpeed;
     public readonly float CrouchHeightRatio;
@@ -448,7 +451,7 @@ public sealed class SimPlayer
     {
         // Held direction (2026-07-13): one capture serving fast fall (down, airborne),
         // crouch entry (down, grounded), and DI (read at the hit instant).
-        HeldDirection = new Vec2(MathF.Sign(input.Horizontal), MathF.Sign(input.Vertical));
+        HeldDirection = input.HeldDirection;
 
         // Shield regeneration: every slot not currently held regenerates toward full —
         // resuming from CURRENT health (spec: never resets to fresh).
@@ -461,108 +464,123 @@ public sealed class SimPlayer
             }
         }
 
+        // One uniform delegation per state — the per-state rules live in the
+        // StepX methods below.
         switch (State)
         {
-            case PlayerState.Shield:
-                StepShield(input);
-                return;
-
-            case PlayerState.Dash:
-                StepDash(input);
-                return;
-
-            case PlayerState.Crouch:
-                StepCrouch(input);
-                return;
-
-            case PlayerState.Stun:
-                StunTicks++;
-                if (--PhaseTicksLeft <= 0) ResolveNeutralState();
-                return; // no control in stun
-
-            case PlayerState.WarmUp:
-                ApplyHorizontal(input.Horizontal); // Unity allowed movement during warm-up
-                if (--PhaseTicksLeft <= 0)
-                {
-                    State = PlayerState.Attack;
-                    if (_projectileMoves[CurrentMoveIndex] is { } firing)
-                    {
-                        // The projectile launches as execution begins; SimWorld's
-                        // projectile phase consumes the flag this same tick.
-                        PhaseTicksLeft = firing.ExecuteTicks;
-                        ProjectileSpawnPending = true;
-                    }
-                    else
-                    {
-                        PhaseTicksLeft = Move.ExecuteTicks;
-                    }
-                }
-                return;
-
-            case PlayerState.Attack:
-                if (--PhaseTicksLeft <= 0)
-                {
-                    State = PlayerState.CoolDown;
-                    PhaseTicksLeft = _projectileMoves[CurrentMoveIndex]?.CoolDownTicks ?? Move.CoolDownTicks;
-                }
-                return;
-
-            case PlayerState.CoolDown:
-                if (--PhaseTicksLeft <= 0) ResolveNeutralState();
-                return;
-
-            case PlayerState.Idle:
-                ApplyHorizontal(input.Horizontal);
-                if (input.Jump && IsGrounded)
-                {
-                    Jumps++;
-                    Velocity = Velocity with { Y = GroundJumpForce };
-                    State = PlayerState.Air;
-                }
-                else if (input.Actions != 0)
-                {
-                    StartAction(input.FirstAction);
-                }
-                else if (input.Vertical < 0f && IsGrounded)
-                {
-                    // Crouch entry (2026-07-13): Idle + held down, grounded only.
-                    State = PlayerState.Crouch;
-                    CrouchPhase = CrouchStage.Sink;
-                    PhaseTicksLeft = CrouchStageTicks;
-                    QueuedCrouchAction = -1;
-                }
-                return;
-
-            case PlayerState.Air:
-                ApplyHorizontal(input.Horizontal);
-                if (input.Jump && !JumpsExhausted)
-                {
-                    Jumps++;
-                    Velocity = Velocity with { Y = AirJumpForce };
-                    JumpsExhausted = true;
-                    if (FullyAirExhausted)
-                    {
-                        State = PlayerState.AirJumpsExhausted;
-                    }
-                    // else (2026-07-23, DEVIATIONS #31): an unused air dash keeps the
-                    // character in Air with full air abilities — exhaustion requires
-                    // jump, jump, AND dash.
-                }
-                else if (input.Actions != 0)
-                {
-                    StartAction(input.FirstAction, airborne: true);
-                }
-                return;
-
-            case PlayerState.AirJumpsExhausted:
-                // Unity parity: movement only — no attacks once the air budget is
-                // spent. Since the 2026-07-23 exhaustion rule (DEVIATIONS #31) this
-                // state is only entered FULLY spent (jumps AND dash), so the old
-                // dash-entry branch here is unreachable and gone — a dash in hand
-                // keeps the player in Air instead.
-                ApplyHorizontal(input.Horizontal);
-                return;
+            case PlayerState.Shield: StepShield(input); return;
+            case PlayerState.Dash: StepDash(input); return;
+            case PlayerState.Crouch: StepCrouch(input); return;
+            case PlayerState.Stun: StepStun(); return;
+            case PlayerState.WarmUp: StepWarmUp(input); return;
+            case PlayerState.Attack: StepAttack(); return;
+            case PlayerState.CoolDown: StepCoolDown(); return;
+            case PlayerState.Idle: StepIdle(input); return;
+            case PlayerState.Air: StepAir(input); return;
+            case PlayerState.AirJumpsExhausted: StepAirJumpsExhausted(input); return;
         }
+    }
+
+    private void StepStun()
+    {
+        StunTicks++;
+        if (--PhaseTicksLeft <= 0) ResolveNeutralState();
+        // No control in stun.
+    }
+
+    private void StepWarmUp(in InputFrame input)
+    {
+        ApplyHorizontal(input.Horizontal); // Unity allowed movement during warm-up
+        if (--PhaseTicksLeft <= 0)
+        {
+            State = PlayerState.Attack;
+            if (_projectileMoves[CurrentMoveIndex] is { } firing)
+            {
+                // The projectile launches as execution begins; SimWorld's
+                // projectile phase consumes the flag this same tick.
+                PhaseTicksLeft = firing.ExecuteTicks;
+                ProjectileSpawnPending = true;
+            }
+            else
+            {
+                PhaseTicksLeft = Move.ExecuteTicks;
+            }
+        }
+    }
+
+    private void StepAttack()
+    {
+        if (--PhaseTicksLeft <= 0)
+        {
+            State = PlayerState.CoolDown;
+            PhaseTicksLeft = _projectileMoves[CurrentMoveIndex]?.CoolDownTicks ?? Move.CoolDownTicks;
+        }
+    }
+
+    private void StepCoolDown()
+    {
+        if (--PhaseTicksLeft <= 0) ResolveNeutralState();
+    }
+
+    private void StepIdle(in InputFrame input)
+    {
+        ApplyHorizontal(input.Horizontal);
+        if (input.Jump && IsGrounded)
+        {
+            PerformGroundJump();
+        }
+        else if (input.Actions != 0)
+        {
+            StartAction(input.FirstAction);
+        }
+        else if (input.Vertical < 0f && IsGrounded)
+        {
+            // Crouch entry (2026-07-13): Idle + held down, grounded only.
+            State = PlayerState.Crouch;
+            CrouchPhase = CrouchStage.Sink;
+            PhaseTicksLeft = CrouchStageTicks;
+            QueuedCrouchAction = -1;
+        }
+    }
+
+    private void StepAir(in InputFrame input)
+    {
+        ApplyHorizontal(input.Horizontal);
+        if (input.Jump && !JumpsExhausted)
+        {
+            Jumps++;
+            Velocity = Velocity with { Y = AirJumpForce };
+            JumpsExhausted = true;
+            if (FullyAirExhausted)
+            {
+                State = PlayerState.AirJumpsExhausted;
+            }
+            // else (2026-07-23, DEVIATIONS #31): an unused air dash keeps the
+            // character in Air with full air abilities — exhaustion requires
+            // jump, jump, AND dash.
+        }
+        else if (input.Actions != 0)
+        {
+            StartAction(input.FirstAction, airborne: true);
+        }
+    }
+
+    private void StepAirJumpsExhausted(in InputFrame input)
+    {
+        // Unity parity: movement only — no attacks once the air budget is
+        // spent. Since the 2026-07-23 exhaustion rule (DEVIATIONS #31) this
+        // state is only entered FULLY spent (jumps AND dash), so the old
+        // dash-entry branch here is unreachable and gone — a dash in hand
+        // keeps the player in Air instead.
+        ApplyHorizontal(input.Horizontal);
+    }
+
+    /// <summary>The grounded jump, shared by Idle and the crouch-rise queue.</summary>
+    private void PerformGroundJump()
+    {
+        Jumps++;
+        Velocity = Velocity with { Y = GroundJumpForce };
+        State = PlayerState.Air;
     }
 
     /// <summary>Called by physics after ground contact is resolved for this tick.</summary>
@@ -585,9 +603,14 @@ public sealed class SimPlayer
         }
         else if (State == PlayerState.Idle)
         {
-            State = FullyAirExhausted ? PlayerState.AirJumpsExhausted : PlayerState.Air;
+            State = AirStateForBudget();
         }
     }
+
+    /// <summary>Which airborne state the current air budget puts the player in
+    /// (DEVIATIONS #31: exhaustion requires jump, jump, AND dash).</summary>
+    private PlayerState AirStateForBudget() =>
+        FullyAirExhausted ? PlayerState.AirJumpsExhausted : PlayerState.Air;
 
     public void ApplyHit(float damage, Vec2 knockback, int stunTicks)
     {
@@ -604,12 +627,19 @@ public sealed class SimPlayer
         PhaseTicksLeft = stunTicks;
     }
 
-    /// <summary>Instant respawn (spawning feature OFF — Unity/pre-feature parity):
-    /// close out the stock and reappear immediately at the spawn point.</summary>
-    public void Respawn()
+    /// <summary>Record the ended stock: bank its damage and spend a stock. Reads
+    /// Damage, so it must run BEFORE ResetToSpawnPose zeroes it.</summary>
+    private void CloseOutStock()
     {
         CompletedStockDamage.Add(Damage);
         Stocks--;
+    }
+
+    /// <summary>Fresh-life pose shared by all three spawn paths: zero damage, parked
+    /// at the spawn point, Idle with clean timers and air budget. A new field that
+    /// must reset on every fresh life belongs HERE, not in the individual paths.</summary>
+    private void ResetToSpawnPose()
+    {
         Damage = 0f;
         Velocity = Vec2.Zero;
         Position = SpawnPosition;
@@ -617,8 +647,22 @@ public sealed class SimPlayer
         PhaseTicksLeft = 0;
         JumpsExhausted = false;
         DropThroughPlatform = -1; // a teleport ends any drop-through (2026-09-01)
-        LastInfluencer = -1; // a new life owes nobody a KO (2026-08-12)
+    }
+
+    /// <summary>A new life owes nobody a KO (2026-08-12).</summary>
+    private void ClearKoInfluence()
+    {
+        LastInfluencer = -1;
         GroundedInfluenceTicks = 0;
+    }
+
+    /// <summary>Instant respawn (spawning feature OFF — Unity/pre-feature parity):
+    /// close out the stock and reappear immediately at the spawn point.</summary>
+    public void Respawn()
+    {
+        CloseOutStock();
+        ResetToSpawnPose();
+        ClearKoInfluence();
     }
 
     /// <summary>Death with the spawning feature ON (2026-07-22): close out the stock,
@@ -627,34 +671,22 @@ public sealed class SimPlayer
     /// absent, but deterministic and off the visible fight).</summary>
     public void BeginRespawn(int blackoutTicks)
     {
-        CompletedStockDamage.Add(Damage);
-        Stocks--;
-        Damage = 0f;
-        Velocity = Vec2.Zero;
-        Position = SpawnPosition;
-        State = PlayerState.Idle;
-        PhaseTicksLeft = 0;
-        JumpsExhausted = false;
-        DropThroughPlatform = -1; // a teleport ends any drop-through (2026-09-01)
+        CloseOutStock();
+        ResetToSpawnPose();
         RespawnBlackoutLeft = blackoutTicks;
         SpawnPadActive = false;
         SpawnIntangible = false;
         SpawnInvulnTicksLeft = 0;
-        LastInfluencer = -1; // a new life owes nobody a KO (2026-08-12)
-        GroundedInfluenceTicks = 0;
+        ClearKoInfluence();
     }
 
     /// <summary>Appear on the spawn pad, intangible + invulnerable (2026-07-22). Used
-    /// both at match start (feature on, no blackout) and when a respawn blackout ends.</summary>
+    /// both at match start (feature on, no blackout) and when a respawn blackout ends.
+    /// Deliberately does NOT touch stocks or KO influence: the stock closed out at
+    /// BeginRespawn, and at match start there is nothing to clear.</summary>
     public void Materialize(int platformTicks, int invulnTicks)
     {
-        Damage = 0f;
-        Velocity = Vec2.Zero;
-        Position = SpawnPosition;
-        State = PlayerState.Idle;
-        PhaseTicksLeft = 0;
-        JumpsExhausted = false;
-        DropThroughPlatform = -1; // a teleport ends any drop-through (2026-09-01)
+        ResetToSpawnPose();
         RespawnBlackoutLeft = 0;
         SpawnPadActive = platformTicks > 0;
         SpawnPadTicksLeft = platformTicks;
@@ -668,25 +700,26 @@ public sealed class SimPlayer
     private void StartAction(int button, bool airborne = false)
     {
         int slot = _buttonMoves[button];
-        if (_shields[slot] is SimShield)
+        switch (MoveTypeAt(slot))
         {
-            // Re-raising a shield already at/below its break threshold would
-            // instant-break; the press is ignored instead (documented).
-            if (!airborne && ShieldHealths[slot] > ShieldBreakRadius)
-            {
-                StartShield(slot, button);
-            }
-            return;
+            case MoveType.Shield:
+                // Re-raising a shield already at/below its break threshold would
+                // instant-break; the press is ignored instead (documented).
+                if (!airborne && ShieldHealths[slot] > ShieldBreakRadius)
+                {
+                    StartShield(slot, button);
+                }
+                return;
+            case MoveType.Dash:
+                if (CanDash)
+                {
+                    StartDash(slot);
+                }
+                return;
+            default:
+                StartMove(slot); // Attack and Projectile ride the same move FSM
+                return;
         }
-        if (_dashes[slot] is not null)
-        {
-            if (CanDash)
-            {
-                StartDash(slot);
-            }
-            return;
-        }
-        StartMove(slot);
     }
 
     private void StepCrouch(in InputFrame input)
@@ -712,7 +745,7 @@ public sealed class SimPlayer
                 ApplyHorizontalScaled(input.Horizontal, CrouchMoveSpeed);
                 if (CrouchAcceleration != 0f && Velocity.X != 0f)
                 {
-                    float cap = MaxGroundSpeed * 1.5f;
+                    float cap = MaxGroundSpeed * CrouchSlideSpeedCapFactor;
                     float slid = Velocity.X + MathF.Sign(Velocity.X) * CrouchAcceleration * _config.Dt;
                     if (MathF.Sign(slid) != MathF.Sign(Velocity.X))
                     {
@@ -772,9 +805,7 @@ public sealed class SimPlayer
                     {
                         if (IsGrounded)
                         {
-                            Jumps++;
-                            Velocity = Velocity with { Y = GroundJumpForce };
-                            State = PlayerState.Air;
+                            PerformGroundJump();
                         }
                     }
                     else if (queued >= 0)
@@ -817,7 +848,7 @@ public sealed class SimPlayer
                 {
                     // Direction captured at travel start from the HELD axes (8-way);
                     // neutral falls back to horizontal facing (spec).
-                    var direction = new Vec2(MathF.Sign(input.Horizontal), MathF.Sign(input.Vertical));
+                    Vec2 direction = input.HeldDirection;
                     float length = direction.Length();
                     DashDirection = length > 0f ? direction * (1f / length) : new Vec2(Facing, 0f);
                     if (DashDirection.X != 0f)
@@ -868,14 +899,8 @@ public sealed class SimPlayer
         // |offset| ≤ current radius.
         if (ShieldPhase != ShieldStage.Shrink)
         {
-            var direction = new Vec2(MathF.Sign(input.Horizontal), MathF.Sign(input.Vertical));
-            ShieldOffset += direction * (_config.ShieldOffsetSpeed * _config.Dt);
-            float radius = ShieldRadius;
-            float length = ShieldOffset.Length();
-            if (length > radius && length > 0f)
-            {
-                ShieldOffset *= radius / length;
-            }
+            ShieldOffset += input.HeldDirection * (_config.ShieldOffsetSpeed * _config.Dt);
+            ClampShieldOffsetToRadius();
         }
 
         switch (ShieldPhase)
@@ -912,12 +937,18 @@ public sealed class SimPlayer
         // against this tick's shrinkage too, not just last tick's radius.
         if (State == PlayerState.Shield)
         {
-            float clampRadius = ShieldRadius;
-            float offsetLength = ShieldOffset.Length();
-            if (offsetLength > clampRadius && offsetLength > 0f)
-            {
-                ShieldOffset *= clampRadius / offsetLength;
-            }
+            ClampShieldOffsetToRadius();
+        }
+    }
+
+    /// <summary>Edge-never-past-center invariant: |offset| ≤ current radius.</summary>
+    private void ClampShieldOffsetToRadius()
+    {
+        float radius = ShieldRadius;
+        float length = ShieldOffset.Length();
+        if (length > radius && length > 0f)
+        {
+            ShieldOffset *= radius / length;
         }
     }
 
@@ -967,9 +998,7 @@ public sealed class SimPlayer
     {
         StunFromShieldBreak = false;
         PhaseTicksLeft = 0;
-        State = IsGrounded
-            ? PlayerState.Idle
-            : (FullyAirExhausted ? PlayerState.AirJumpsExhausted : PlayerState.Air);
+        State = IsGrounded ? PlayerState.Idle : AirStateForBudget();
     }
 
     /// <summary>

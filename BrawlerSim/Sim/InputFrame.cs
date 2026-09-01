@@ -1,3 +1,5 @@
+using BrawlerSim.Determinism;
+
 namespace BrawlerSim.Sim;
 
 /// <summary>
@@ -8,12 +10,15 @@ namespace BrawlerSim.Sim;
 ///
 /// 2026-07-08 control-scheme rework (docs/features/multi-move-controls.md): the single
 /// Attack bit became four assignable action buttons (a bitmask; which move each button
-/// triggers is a genome gene), and Vertical was added. Vertical is captured in traces
-/// but currently read by nothing — it exists so future features (down-attacks,
-/// drop-through) don't force a second trace-format migration.
+/// triggers is a genome gene), and Vertical was added (read since 2026-07-13 by fast
+/// fall, crouch, DI, and shield/dash aiming).
 /// </summary>
 public readonly record struct InputFrame(float Horizontal, float Vertical, bool Jump, byte Actions)
 {
+    /// <summary>The held 8-way direction: sign of each axis. One definition for the
+    /// captures in the player FSM (held-direction latch, dash aim, shield aim).</summary>
+    public Vec2 HeldDirection => new(MathF.Sign(Horizontal), MathF.Sign(Vertical));
+
     /// <summary>Number of assignable action buttons in the control scheme.
     /// 2026-07-20 (designer): jump reduced to a SINGLE button (pad B; Space), freeing
     /// pad Y as a fifth assignable slot — button 3 = U key / pad Y (the new slot),
