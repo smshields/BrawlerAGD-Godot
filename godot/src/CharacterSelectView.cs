@@ -66,7 +66,7 @@ public partial class CharacterSelectView : Control
     private int _minutes = 4;
     private int _mousePane = -1; // the keyboard/mouse player's pane, -1 until joined
 
-    private Label _modeLabel = null!;
+    private Button _modeButton = null!;
     private Label _valueLabel = null!;
     private Button _startButton = null!;
     private StageThumb _stagePreview = null!;
@@ -302,9 +302,9 @@ public partial class CharacterSelectView : Control
         return used.Contains(1) ? -1 : 1;
     }
 
-    /// <summary>The human/CPU icon cycle (spec: clicking through can turn the panel
-    /// off): HUMAN → CPU → OFF; a CPU pane clicked by an actor with no pane of its
-    /// own becomes that actor's... it stays the simple cycle — CPU → OFF.</summary>
+    /// <summary>The pane mode cycle: HUMAN → CPU → OFF. A HUMAN pane releases its
+    /// device binding (pad cursor or mouse claim) and becomes a CPU; a CPU pane
+    /// leaves entirely (OFF). OFF panes rejoin via JOIN, not this cycle.</summary>
     private void CycleMode(int index)
     {
         Pane p = _panes[index];
@@ -433,7 +433,7 @@ public partial class CharacterSelectView : Control
         header.AddChild(new Control { SizeFlagsHorizontal = SizeFlags.ExpandFill });
 
         Button mode = HeaderButton("MODE: STOCK");
-        _modeLabel = mode.GetNode<Label>("Label"); // HeaderButton stores its label
+        _modeButton = mode;
         void ToggleMode(int _)
         {
             _mode = _mode == MatchEndRule.Stock ? MatchEndRule.Timed : MatchEndRule.Stock;
@@ -626,12 +626,7 @@ public partial class CharacterSelectView : Control
     }
 
     private static Button HeaderButton(string text)
-    {
-        var button = new Button { Text = text, CustomMinimumSize = new Vector2(0f, 40f) };
-        var label = new Label { Name = "Label", Visible = false }; // text mirror (mode)
-        button.AddChild(label);
-        return button;
-    }
+        => new Button { Text = text, CustomMinimumSize = new Vector2(0f, 40f) };
 
     private void Register(Control area, System.Action<int> activate, System.Func<bool>? enabled = null)
         => _hotspots.Add(new Hotspot(area, activate, enabled));
@@ -653,7 +648,7 @@ public partial class CharacterSelectView : Control
 
     private void RefreshAll()
     {
-        _modeLabel.GetParent<Button>().Text = _mode == MatchEndRule.Stock ? "MODE: STOCK" : "MODE: TIMED";
+        _modeButton.Text = _mode == MatchEndRule.Stock ? "MODE: STOCK" : "MODE: TIMED";
         _valueLabel.Text = _mode == MatchEndRule.Stock ? $"STOCKS {_stocks}" : $"TIME {_minutes} MIN";
         _startButton.Disabled = !CanStart();
 
@@ -879,12 +874,9 @@ public partial class CharacterSelectView : Control
             var pick = new Button { Text = "PICK CHARACTER" };
             void Retarget(int actor)
             {
-                // The next grid pick by this actor assigns to THIS CPU pane.
+                // The next grid pick by this actor assigns to THIS CPU pane. The Pressed
+                // path resolves the actor via _mousePane; the hotspot path passes it in.
                 _retarget[actor >= 0 ? actor : -1] = index;
-                if (actor < 0)
-                {
-                    _retarget[-1] = index; // mouse admin
-                }
             }
             pick.Pressed += () => { _retarget[_mousePane >= 0 ? _mousePane : -1] = index; };
             Register(pick, Retarget);

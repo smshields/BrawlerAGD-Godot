@@ -64,8 +64,8 @@ public partial class MainMenu : Control
 
         _hint = new Label
         {
-            Text = "P1: A/D move · SPACE jump · I/J/K/L attacks        P2: gamepad\n" +
-                   "gamepad: stick/dpad move · Y/B jump · X/A/L1/R1 attacks",
+            Text = "P1: WASD move · SPACE jump · I/J/K/U/L attacks        P2: gamepad\n" +
+                   "gamepad: stick/dpad move · B jump · L1/X/A/Y/R1 attacks",
             HorizontalAlignment = HorizontalAlignment.Center,
             Modulate = new Color(0.55f, 0.6f, 0.68f),
             AnchorTop = 1f, AnchorBottom = 1f, AnchorRight = 1f,
