@@ -124,10 +124,13 @@ public static class GameGenomeOps
                     (StageParams.Spawn2X, s2.X), (StageParams.Spawn2Y, s2.Y),
                     (StageParams.Spawn3X, s3.X), (StageParams.Spawn3Y, s3.Y),
                     (StageParams.Spawn4X, -s3.X), (StageParams.Spawn4Y, s3.Y));
-                return new StageGenome(transformed, symmetricSpawns);
+                // Theme gene is heredity through mutation (2026-09-01, M4d, the
+                // SpriteId pattern) — the repair pass re-resolves it only if the
+                // mutated stage's salient traits contradict it.
+                return new StageGenome(transformed, symmetricSpawns, stage.ThemeId);
             }
         }
-        return config.CreateStageGenerator().Regenerate(mutated, rng);
+        return config.CreateStageGenerator().Regenerate(mutated, rng).WithThemeId(stage.ThemeId);
     }
 
     /// <summary>

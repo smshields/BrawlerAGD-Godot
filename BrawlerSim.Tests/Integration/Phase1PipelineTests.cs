@@ -70,6 +70,13 @@ public class Phase1PipelineTests
     [Fact]
     public void PopulationFingerprintMatchesGoldenValue()
     {
+        // Re-pinned 2026-09-01 (2nd): STAGE TILE THEMES (M4d,
+        // docs/features/stage-tile-selection.md) — game.json is v13 ("formatVersion"
+        // in the serialized bytes; stage themeId omitted when null). BYTES ONLY, the
+        // v10/v11 precedent: GenerationConfig.Default has no theme library, so
+        // ThemeId stays null and the crossover theme coin is RNG-GATED on a theme
+        // existing — every draw stream is untouched (sprite fixture tests unmoved
+        // prove it). All other goldens unmoved. Prior pin: 17381351727395034445.
         // Re-pinned 2026-09-01: THIN PLATFORMS (FEATURES.md §Thin Platforms;
         // docs/features/thin-platforms.md) — the stage schema appended
         // thinPlatformFraction (drawn with the structure genes) and every accepted
@@ -132,6 +139,6 @@ public class Phase1PipelineTests
         // (fast fall/crouch/DI), 16079587979934170348 (dash slot),
         // 10607725140721060960 (shield), 5432710911100783110 (two moves),
         // 13551893661434631362, 9300943650238635838.
-        Assert.Equal(17381351727395034445UL, RunPipeline(20260707));
+        Assert.Equal(7918250599314887397UL, RunPipeline(20260707));
     }
 }

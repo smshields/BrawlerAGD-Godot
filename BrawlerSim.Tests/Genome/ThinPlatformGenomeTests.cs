@@ -199,7 +199,7 @@ public class ThinPlatformGenomeTests
             new StageGenome(platforms, StageRules.LegacyParams(platforms).With(
                 (StageParams.ThinPlatformFraction, 0.4f))));
         string json = GameGenomeJson.Serialize(new GameRecord("thin game", null, genome));
-        Assert.Contains("\"formatVersion\": 12", json);
+        Assert.Contains("\"formatVersion\": 13", json); // v13: stage tile themes (2026-09-01)
         // Written only when true — solid platforms keep their pre-v12 bytes
         // (BuiltGameJson.ContentKey stability for legacy content).
         Assert.Single(

@@ -42,7 +42,17 @@ public sealed record BuiltCharacter(string DisplayName, string? Origin, Characte
     }
 }
 
-public sealed record BuiltStage(string DisplayName, string? Origin, StageGenome Stage);
+/// <summary>One stage entry. ThemeId + Register (2026-09-01, M4d —
+/// stage-tile-selection.md) are the NEGOTIATED presentation, settled with the stage's
+/// generated name by the game-open pass and persisted once, like BuiltCharacter's
+/// sprite fields; the stored genome stays untouched.</summary>
+public sealed record BuiltStage(string DisplayName, string? Origin, StageGenome Stage,
+    string? ThemeId = null, string? Register = null)
+{
+    /// <summary>The stage as this game presents it: the negotiated theme injected
+    /// over the inherited gene — views and match launches read this.</summary>
+    public StageGenome Presented => ThemeId is null ? Stage : Stage.WithThemeId(ThemeId);
+}
 
 /// <summary>
 /// A curated, self-contained game assembled from evolved outputs (2026-08-13,
@@ -126,8 +136,14 @@ public sealed class BuiltGame
         return JsonSerializer.Serialize(doc, ContentKeyOptions);
     }
 
-    public static string ContentKey(StageGenome stage) =>
-        JsonSerializer.Serialize(GameGenomeJson.ToStageDoc(stage), ContentKeyOptions);
+    public static string ContentKey(StageGenome stage)
+    {
+        GameGenomeJson.StageDoc doc = GameGenomeJson.ToStageDoc(stage);
+        doc.ThemeId = null; // theme is presentation, not identity (2026-09-01, M4d) —
+                            // and the stage naming seed derives from this key, so it
+                            // must not shift when selection or repair changes the look
+        return JsonSerializer.Serialize(doc, ContentKeyOptions);
+    }
 
     /// <summary>Null suppression keeps ContentKey (and therefore the naming/sprite
     /// seeds) byte-identical to the pre-spriteId era: no doc field other than the new
@@ -160,10 +176,14 @@ public sealed class BuiltGame
 ///       when true — solid platforms keep their pre-v12 bytes, so ContentKey and
 ///       the naming/sprite seeds of legacy content are unchanged). ≤3 files load
 ///       all-solid via the shared game.json element shapes.
+///   5 — 2026-09-01 stage tile themes (M4d): stage entries gained "themeId" +
+///       "register" (the negotiated presentation, persisted once with the stage's
+///       name by the game-open pass; omitted when null). ≤4 files load with nulls
+///       and get both on their next open. ContentKey excludes the theme gene.
 /// </summary>
 public static class BuiltGameJson
 {
-    public const int CurrentFormatVersion = 4;
+    public const int CurrentFormatVersion = 5;
 
     private static readonly JsonSerializerOptions Options = new()
     {
@@ -191,6 +211,8 @@ public static class BuiltGameJson
             {
                 DisplayName = s.DisplayName,
                 Origin = s.Origin,
+                ThemeId = s.ThemeId,
+                Register = s.Register,
                 Stage = GameGenomeJson.ToStageDoc(s.Stage),
             }).ToList(),
         };
@@ -227,7 +249,9 @@ public static class BuiltGameJson
                 s.Origin,
                 GameGenomeJson.StageFromDoc(
                     s.Stage ?? throw new JsonException("built game entry is missing its stage."),
-                    config)));
+                    config),
+                s.ThemeId,
+                s.Register));
         }
         return game;
     }
@@ -263,6 +287,8 @@ public static class BuiltGameJson
     {
         public string? DisplayName { get; set; }
         public string? Origin { get; set; }
+        public string? ThemeId { get; set; }  // v5+; omitted when null
+        public string? Register { get; set; } // v5+; omitted when null
         public GameGenomeJson.StageDoc? Stage { get; set; }
     }
 }

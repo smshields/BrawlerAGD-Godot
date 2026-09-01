@@ -54,10 +54,15 @@ namespace BrawlerSim.Serialization;
 ///       gained dropThroughDelay. ≤11 files load all-solid with both new params 0,
 ///       so old games and traces replay bit-identically (every thin path is gated
 ///       on a thin platform existing).
+///  13 — 2026-09-01 stage tile themes (M4d, stage-tile-selection.md): the stage
+///       gained "themeId" (the tiles_v2 theme gene), omitted when null. ≤12 files
+///       load with themeId = null — the M4 legacy stance: null renders the v1
+///       Kenney tiles and is resolved fresh only in a theme-enabled pipeline.
+///       Purely cosmetic — replays and match goldens untouched.
 /// </summary>
 public static class GameGenomeJson
 {
-    public const int CurrentFormatVersion = 12; // 2026-09-01 thin platforms (see header)
+    public const int CurrentFormatVersion = 13; // 2026-09-01 stage tile themes (see header)
     private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = new()
@@ -108,6 +113,7 @@ public static class GameGenomeJson
 
     internal static StageDoc ToStageDoc(StageGenome stage) => new()
     {
+        ThemeId = stage.ThemeId,
         Params = stage.Params.ToDictionary(),
         Platforms = stage.Platforms
             // Thin is written only when TRUE (null suppression): solid platforms
@@ -190,7 +196,8 @@ public static class GameGenomeJson
         // (bit-identical playback). v7+: read them (missing keys throw, as everywhere).
         return new StageGenome(platforms, doc.Params is null
             ? StageRules.LegacyParams(platforms, config.StageSchema)
-            : ParamSet.FromDictionary(config.StageSchema, WithStageDefaults(doc.Params, platforms)));
+            : ParamSet.FromDictionary(config.StageSchema, WithStageDefaults(doc.Params, platforms)),
+            doc.ThemeId); // absent (≤v12) → null: legacy v1-tile rendering
     }
 
     public static void Save(GameRecord record, string path)
@@ -298,6 +305,7 @@ public static class GameGenomeJson
 
     internal sealed class StageDoc
     {
+        public string? ThemeId { get; set; } // v13+; omitted when null
         public Dictionary<string, float>? Params { get; set; } // absent in ≤ v6 files
         public List<PlatformDoc>? Platforms { get; set; }
     }

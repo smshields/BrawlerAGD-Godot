@@ -844,7 +844,7 @@ public static class StageRules
             return stage;
         }
         var list = plats.ToList();
-        return new StageGenome(list, RepairSpawns(list, stage.Params));
+        return new StageGenome(list, RepairSpawns(list, stage.Params), stage.ThemeId);
     }
 
     /// <summary>Phase 1 — connectivity for ALL characters: grow a connected set from

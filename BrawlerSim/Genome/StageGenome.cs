@@ -27,12 +27,21 @@ public sealed class StageGenome
 
     public ParamSet Params { get; }
 
+    /// <summary>Semantic stage theme gene (2026-09-01, M4d —
+    /// docs/features/stage-tile-selection.md): an id into the tiles_v2 theme library.
+    /// A structural gene exactly like CharacterGenome.SpriteId — children inherit a
+    /// parent's look (50/50 coin at crossover), repaired only when it stops making
+    /// sense against the child's salient stage traits. Null on pre-v13 files and when
+    /// generation runs without a theme library; null renders the legacy v1 tiles.</summary>
+    public string? ThemeId { get; }
+
     public StageGenome(IEnumerable<PlatformGene> platforms)
         : this(platforms, null)
     {
     }
 
-    public StageGenome(IEnumerable<PlatformGene> platforms, ParamSet? stageParams)
+    public StageGenome(IEnumerable<PlatformGene> platforms, ParamSet? stageParams,
+        string? themeId = null)
     {
         _platforms = platforms.ToArray();
         if (_platforms.Length == 0)
@@ -40,7 +49,12 @@ public sealed class StageGenome
             throw new ArgumentException("A stage must have at least one platform.");
         }
         Params = stageParams ?? StageRules.LegacyParams(_platforms);
+        ThemeId = themeId;
     }
+
+    /// <summary>Copy with a different theme gene (selection/repair).</summary>
+    public StageGenome WithThemeId(string? themeId) =>
+        themeId == ThemeId ? this : new StageGenome(_platforms, Params, themeId);
 
     public IReadOnlyList<PlatformGene> Platforms => _platforms;
 
@@ -64,11 +78,19 @@ public sealed class StageGenome
         {
             child.Add(b._platforms[i]);
         }
+        // Theme gene (2026-09-01, M4d): a 50/50 parent coin, the SpriteId pattern —
+        // but the draw is RNG-GATED on a theme actually existing (theme-less
+        // populations, including every pre-tile run, keep their stream bit-exact).
+        string? themeId = a.ThemeId ?? b.ThemeId;
+        if (a.ThemeId is not null && b.ThemeId is not null)
+        {
+            themeId = rng.NextInt(2) == 0 ? a.ThemeId : b.ThemeId;
+        }
         // Platforms legal under a parent's box genes may violate the CHILD's playable
         // box (2026-08-13, designer containment rule) — clamp them in, then repair the
         // spawn genes against the repaired layout. Identity for legal stages; never
         // runs at sim time.
         child = StageRules.RepairPlatforms(child, childParams);
-        return new StageGenome(child, StageRules.RepairSpawns(child, childParams));
+        return new StageGenome(child, StageRules.RepairSpawns(child, childParams), themeId);
     }
 }
