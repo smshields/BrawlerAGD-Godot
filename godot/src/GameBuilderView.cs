@@ -74,10 +74,7 @@ public partial class GameBuilderView : Control
             {
                 BuiltGame game = BuiltGameJson.Load(path);
                 name = game.Name;
-                badge = game.IsComplete
-                    ? "COMPLETE"
-                    : $"{game.Characters.Count}/{BuiltGame.RequiredCharacters} · "
-                      + $"{game.Stages.Count}/{BuiltGame.RequiredStages}";
+                badge = game.IsComplete ? "COMPLETE" : GameLibraryUi.CompletionBadge(game);
             }
             catch (System.Exception e)
             {
@@ -228,32 +225,18 @@ public partial class GameBuilderView : Control
     }
 
     private void AddSourceSection(string heading, string dir)
-    {
-        if (!System.IO.Directory.Exists(dir))
-        {
-            return;
-        }
-        string[] files = System.IO.Directory.GetFiles(dir, "*.json");
-        System.Array.Sort(files);
-        if (files.Length == 0)
-        {
-            return;
-        }
-        var section = new Label { Text = heading, Modulate = UiPalette.Heading };
-        section.AddThemeFontSizeOverride("font_size", 14);
-        _sourceList.AddChild(section);
-        foreach (string file in files)
-        {
-            string path = file;
-            var button = new Button
-            {
-                Text = System.IO.Path.GetFileNameWithoutExtension(file).ToUpperInvariant(),
-                Alignment = HorizontalAlignment.Left,
-            };
-            button.Pressed += () => OpenSource(path);
-            _sourceList.AddChild(button);
-        }
-    }
+        => GameLibraryUi.AddSection(_sourceList, heading, dir, OpenSource);
+
+    // The source-to-roster naming convention, shared by the source browser and
+    // AutoBuildSample. The origin strings feed provenance/credits — outputs must
+    // stay byte-identical between the two paths.
+
+    private static BuiltCharacter CharacterFrom(GameRecord record, string label, int index)
+        => new($"{label} P{index + 1}", $"{record.Origin ?? label}/char{index}",
+            record.Genome.Characters[index]);
+
+    private static BuiltStage StageFrom(GameRecord record, string label)
+        => new($"{label} STAGE", $"{record.Origin ?? label}/stage", record.Genome.Stage);
 
     private void OpenSource(string path)
     {
@@ -287,25 +270,22 @@ public partial class GameBuilderView : Control
 
         for (int i = 0; i < _source.Genome.Characters.Count; i++)
         {
-            CharacterGenome character = _source.Genome.Characters[i];
-            string defaultName = $"{_sourceLabel} P{i + 1}";
-            string origin = $"{_source.Origin ?? _sourceLabel}/char{i}";
+            BuiltCharacter entry = CharacterFrom(_source, _sourceLabel, i);
             bool inGame = _game is not null
                 && _game.Characters.Any(c =>
-                    BuiltGame.ContentKey(c.Character) == BuiltGame.ContentKey(character));
+                    BuiltGame.ContentKey(c.Character) == BuiltGame.ContentKey(entry.Character));
             _sourceElements.AddChild(CharacterCard(
-                character, defaultName, origin, rename: null,
+                entry.Character, entry.DisplayName, entry.Origin, rename: null,
                 action: (_game is null ? "OPEN A GAME" : inGame ? "IN GAME" : "ADD", () =>
                 {
                     if (_game is null)
                     {
                         return;
                     }
-                    if (_game.TryAddCharacter(
-                            new BuiltCharacter(defaultName, origin, character), out string reason))
+                    if (_game.TryAddCharacter(entry, out string reason))
                     {
                         SaveOpenGame();
-                        Status($"added {defaultName}");
+                        Status($"added {entry.DisplayName}");
                         RefreshRoster();
                         RefreshLibrary();
                         RefreshSourceElements();
@@ -318,23 +298,21 @@ public partial class GameBuilderView : Control
                 actionEnabled: _game is not null && !inGame));
         }
 
-        StageGenome stage = _source.Genome.Stage;
-        string stageName = $"{_sourceLabel} STAGE";
-        string stageOrigin = $"{_source.Origin ?? _sourceLabel}/stage";
+        BuiltStage stageEntry = StageFrom(_source, _sourceLabel);
         bool stageInGame = _game is not null
-            && _game.Stages.Any(s => BuiltGame.ContentKey(s.Stage) == BuiltGame.ContentKey(stage));
+            && _game.Stages.Any(s => BuiltGame.ContentKey(s.Stage) == BuiltGame.ContentKey(stageEntry.Stage));
         _sourceElements.AddChild(StageCard(
-            stage, stageName, stageOrigin, rename: null,
+            stageEntry.Stage, stageEntry.DisplayName, stageEntry.Origin, rename: null,
             action: (_game is null ? "OPEN A GAME" : stageInGame ? "IN GAME" : "ADD", () =>
             {
                 if (_game is null)
                 {
                     return;
                 }
-                if (_game.TryAddStage(new BuiltStage(stageName, stageOrigin, stage), out string reason))
+                if (_game.TryAddStage(stageEntry, out string reason))
                 {
                     SaveOpenGame();
-                    Status($"added {stageName}");
+                    Status($"added {stageEntry.DisplayName}");
                     RefreshRoster();
                     RefreshLibrary();
                     RefreshSourceElements();
@@ -575,14 +553,7 @@ public partial class GameBuilderView : Control
         _confirmDelete.Confirmed += DeleteOpenGame;
         AddChild(_confirmDelete);
 
-        _sourceDialog = new FileDialog
-        {
-            FileMode = FileDialog.FileModeEnum.OpenFile,
-            Access = FileDialog.AccessEnum.Filesystem,
-            Filters = new[] { "*.json ; evolved game" },
-            CurrentDir = AppPaths.RunsRoot(),
-        };
-        _sourceDialog.FileSelected += OpenSource;
+        _sourceDialog = GameLibraryUi.JsonBrowser(OpenSource, filter: "*.json ; evolved game");
         AddChild(_sourceDialog);
 
         RefreshSourceList();
@@ -621,12 +592,9 @@ public partial class GameBuilderView : Control
             string label = System.IO.Path.GetFileNameWithoutExtension(path).ToUpperInvariant();
             for (int i = 0; i < record.Genome.Characters.Count; i++)
             {
-                _game.TryAddCharacter(new BuiltCharacter(
-                    $"{label} P{i + 1}", $"{record.Origin ?? label}/char{i}",
-                    record.Genome.Characters[i]), out _);
+                _game.TryAddCharacter(CharacterFrom(record, label, i), out _);
             }
-            _game.TryAddStage(new BuiltStage(
-                $"{label} STAGE", $"{record.Origin ?? label}/stage", record.Genome.Stage), out _);
+            _game.TryAddStage(StageFrom(record, label), out _);
         }
         SaveOpenGame();
         if (sources.Length > 0)

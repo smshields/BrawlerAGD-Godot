@@ -15,6 +15,7 @@ public partial class MainMenu : Control
     private OptionButton? _rulesOption; // 2026-08-12 STOCK/TIMED picker row
     private Label _hint = null!;
     private Button _twoPlayerButton = null!;
+    private PadPresence _padWatch = null!;
 
     public override void _Ready()
     {
@@ -78,8 +79,13 @@ public partial class MainMenu : Control
         _traceDialog = MakeDialog("Choose the matching trace.json", OnTracePicked);
 
         // 2-player needs a controller (the keyboard is entirely P1's now).
-        Input.Singleton.JoyConnectionChanged += OnJoyConnectionChanged;
-        UpdateTwoPlayerAvailability();
+        _padWatch = PadPresence.Watch(hasPad =>
+        {
+            _twoPlayerButton.Disabled = !hasPad;
+            _twoPlayerButton.Text = hasPad
+                ? "PLAY — 2 PLAYERS"
+                : "PLAY — 2 PLAYERS · CONNECT A CONTROLLER";
+        });
 
         // Automation: BRAWLER_PICKER=1 opens the game picker on load (screenshots).
         if (OS.GetEnvironment("BRAWLER_PICKER") == "1")
@@ -92,18 +98,7 @@ public partial class MainMenu : Control
 
     public override void _ExitTree()
     {
-        Input.Singleton.JoyConnectionChanged -= OnJoyConnectionChanged;
-    }
-
-    private void OnJoyConnectionChanged(long device, bool connected) => UpdateTwoPlayerAvailability();
-
-    private void UpdateTwoPlayerAvailability()
-    {
-        bool hasPad = Input.GetConnectedJoypads().Count > 0;
-        _twoPlayerButton.Disabled = !hasPad;
-        _twoPlayerButton.Text = hasPad
-            ? "PLAY — 2 PLAYERS"
-            : "PLAY — 2 PLAYERS · CONNECT A CONTROLLER";
+        _padWatch.Detach();
     }
 
     private Control? _picker;
@@ -194,37 +189,11 @@ public partial class MainMenu : Control
     /// <summary>One picker section: a button per game.json in the directory (name from
     /// the filename — records are only parsed on selection). Returns the entry count.</summary>
     private int AddGameSection(VBoxContainer list, string heading, string dir)
-    {
-        if (!System.IO.Directory.Exists(dir))
+        => GameLibraryUi.AddSection(list, heading, dir, path =>
         {
-            return 0;
-        }
-        string[] files = System.IO.Directory.GetFiles(dir, "*.json");
-        System.Array.Sort(files);
-        if (files.Length == 0)
-        {
-            return 0;
-        }
-        var section = new Label { Text = heading, Modulate = UiPalette.Heading };
-        section.AddThemeFontSizeOverride("font_size", 14);
-        list.AddChild(section);
-        foreach (string file in files)
-        {
-            string path = file;
-            var button = new Button
-            {
-                Text = System.IO.Path.GetFileNameWithoutExtension(file).ToUpperInvariant(),
-                Alignment = HorizontalAlignment.Left,
-            };
-            button.Pressed += () =>
-            {
-                ClosePicker();
-                OnGamePicked(path);
-            };
-            list.AddChild(button);
-        }
-        return files.Length;
-    }
+            ClosePicker();
+            OnGamePicked(path);
+        });
 
     private void OnGamePicked(string path)
     {
@@ -263,16 +232,7 @@ public partial class MainMenu : Control
 
     private FileDialog MakeDialog(string title, System.Action<string> onSelected)
     {
-        var dialog = new FileDialog
-        {
-            Title = title,
-            Access = FileDialog.AccessEnum.Filesystem,
-            FileMode = FileDialog.FileModeEnum.OpenFile,
-            Filters = new[] { "*.json" },
-            // Open where evolution runs and imported games live.
-            CurrentDir = AppPaths.RunsRoot(),
-        };
-        dialog.FileSelected += path => onSelected(path);
+        FileDialog dialog = GameLibraryUi.JsonBrowser(onSelected, title);
         AddChild(dialog);
         return dialog;
     }

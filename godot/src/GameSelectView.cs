@@ -40,30 +40,32 @@ public partial class GameSelectView : Control
         scroll.SizeFlagsVertical = SizeFlags.ExpandFill;
         root.AddChild(scroll);
 
+        // Load every built game ONCE and reuse the (path, game) pairs for the list,
+        // the BRAWLER_AUTOOPEN scan, and the deferred open (previously each step
+        // re-parsed the files).
         string[] files = System.IO.Directory.GetFiles(AppPaths.GamesRoot(), "*.json");
         System.Array.Sort(files);
-        int playable = 0;
+        var games = new System.Collections.Generic.List<(string Path, BuiltGame Game)>();
         foreach (string file in files)
         {
-            string path = file;
-            BuiltGame game;
             try
             {
-                game = BuiltGameJson.Load(path);
+                games.Add((file, BuiltGameJson.Load(file)));
             }
             catch (System.Exception e)
             {
-                GD.PrintErr($"built game {path}: {e.Message}");
-                continue;
+                GD.PrintErr($"built game {file}: {e.Message}");
             }
+        }
+        int playable = 0;
+        foreach ((string path, BuiltGame game) in games)
+        {
             bool complete = game.IsComplete;
             var button = new Button
             {
                 Text = complete
                     ? $"{game.Name}   —   {game.Characters.Count} FIGHTERS · {game.Stages.Count} STAGES"
-                    : $"{game.Name}   —   IN PROGRESS "
-                      + $"({game.Characters.Count}/{BuiltGame.RequiredCharacters} · "
-                      + $"{game.Stages.Count}/{BuiltGame.RequiredStages})",
+                    : $"{game.Name}   —   IN PROGRESS ({GameLibraryUi.CompletionBadge(game)})",
                 Alignment = HorizontalAlignment.Left,
                 Disabled = !complete,
                 CustomMinimumSize = new Vector2(0f, 52f),
@@ -92,27 +94,27 @@ public partial class GameSelectView : Control
         // naming pass) so screenshots can reach the character select headlessly.
         if (OS.GetEnvironment("BRAWLER_AUTOOPEN") == "1")
         {
-            foreach (string file in files)
+            foreach ((string path, BuiltGame game) in games)
             {
-                BuiltGame game;
-                try
-                {
-                    game = BuiltGameJson.Load(file);
-                }
-                catch
-                {
-                    continue;
-                }
                 if (game.IsComplete)
                 {
-                    CallDeferred(nameof(DeferredOpen), file);
+                    _autoOpen = (path, game);
+                    CallDeferred(nameof(DeferredOpen));
                     break;
                 }
             }
         }
     }
 
-    private void DeferredOpen(string path) => OpenGame(BuiltGameJson.Load(path), path);
+    private (string Path, BuiltGame Game)? _autoOpen;
+
+    private void DeferredOpen()
+    {
+        if (_autoOpen is { } pending)
+        {
+            OpenGame(pending.Game, pending.Path);
+        }
+    }
 
     private void OpenGame(BuiltGame game, string path)
     {
