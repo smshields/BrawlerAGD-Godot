@@ -109,7 +109,9 @@ public static class StageRules
             };
             repaired.Add(fixedUp);
         }
-        return repaired;
+        // Thin Platforms (2026-09-01): crossover may combine two thin-heavy lists
+        // into an all-thin child — the at-least-one-solid rule repairs it here.
+        return EnsureSolidPlatform(repaired);
     }
 
     public static bool IsMirrored(ParamSet stageParams) =>
@@ -165,6 +167,7 @@ public static class StageRules
             0f, // spawnInvulnDuration — off
             spawn3.X, spawn3.Y,
             spawn4.X, spawn4.Y,
+            0f, // thinPlatformFraction — all-solid (2026-09-01, pre-v12 parity)
         });
     }
 
@@ -183,6 +186,52 @@ public static class StageRules
         Vec2 spawn3 = RepairSpawn(preferred, platforms, visW, visH, new[] { spawn1, spawn2 });
         Vec2 spawn4 = RepairSpawn(preferred, platforms, visW, visH, new[] { spawn1, spawn2, spawn3 });
         return (spawn3, spawn4);
+    }
+
+    /// <summary>Thin Platforms (2026-09-01): the generation fraction gene, clamped to
+    /// [0, 1] (range overrides may exceed it — the coin only needs a probability).</summary>
+    public static float ThinFractionOf(ParamSet stageParams) =>
+        Math.Clamp(stageParams.Get(StageParams.ThinPlatformFraction), 0f, 1f);
+
+    /// <summary>
+    /// The at-least-one-solid rule (2026-09-01, designer: the thin fraction may run
+    /// very high SO LONG AS one solid platform is preserved). Generation guarantees it
+    /// structurally (the initial platform never rolls thin); this repair covers the
+    /// breeding products that can lose it — a crossover mixing thin-heavy lists, or a
+    /// mirror transform whose source half held no solid platform. Deterministic and
+    /// RNG-free: when no platform is solid, the WIDEST one flips solid (ties → first
+    /// in list order — the main-stage read), together with its exact mirror twin when
+    /// one exists so symmetric layouts stay symmetric. Identity when a solid exists.
+    /// </summary>
+    public static List<PlatformGene> EnsureSolidPlatform(List<PlatformGene> platforms)
+    {
+        int widest = -1;
+        for (int i = 0; i < platforms.Count; i++)
+        {
+            if (!platforms[i].Thin)
+            {
+                return platforms;
+            }
+            if (widest < 0 || platforms[i].XSize > platforms[widest].XSize)
+            {
+                widest = i;
+            }
+        }
+        if (widest < 0)
+        {
+            return platforms;
+        }
+        PlatformGene mirrorTwin = platforms[widest].MirrorX();
+        platforms[widest] = platforms[widest] with { Thin = false };
+        for (int i = 0; i < platforms.Count; i++)
+        {
+            if (i != widest && platforms[i] == mirrorTwin)
+            {
+                platforms[i] = platforms[i] with { Thin = false };
+                break;
+            }
+        }
+        return platforms;
     }
 
     public static float PlatformSpawnSeconds(ParamSet stageParams) =>
@@ -586,7 +635,10 @@ public static class StageRules
                 result.Add(mirror);
             }
         }
-        return result;
+        // Thin Platforms (2026-09-01): the chosen half may have held no solid
+        // platform — repair keeps the at-least-one-solid rule (mirror-twin aware,
+        // so the transformed layout stays symmetric).
+        return EnsureSolidPlatform(result);
     }
 
     /// <summary>
@@ -947,7 +999,11 @@ public static class StageRules
         {
             for (int j = 0; j < plats.Length; j++)
             {
-                if (i == j || !VerticallyOverlap(plats[i], plats[j]))
+                // Thin platforms never wall a corridor (2026-09-01): bodies pass
+                // through their sides regardless of width, so a gap bounded by one
+                // is passable for EVERY body — never asymmetric.
+                if (i == j || plats[i].Thin || plats[j].Thin
+                    || !VerticallyOverlap(plats[i], plats[j]))
                 {
                     continue;
                 }

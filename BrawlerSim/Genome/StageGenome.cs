@@ -3,8 +3,13 @@ using BrawlerSim.Params;
 
 namespace BrawlerSim.Genome;
 
-/// <summary>One platform: integer grid rect, position = bottom-left corner.</summary>
-public readonly record struct PlatformGene(int X, int Y, int XSize, int YSize)
+/// <summary>One platform: integer grid rect, position = bottom-left corner.
+/// Thin (2026-09-01, FEATURES.md §Thin Platforms): a drop-through platform — solid
+/// only when landed on from above; crouch-drops, upward and sideways motion pass
+/// through. A structural gene (defaulted false, so pre-v12 files load solid); the
+/// gene rect still reserves the full cell for placement/overlap rules, while the sim
+/// collides with only a thin top slice (MatchConfig.ThinPlatformThickness).</summary>
+public readonly record struct PlatformGene(int X, int Y, int XSize, int YSize, bool Thin = false)
 {
     /// <summary>Mirror across x = 0 (Unity Platform.xMirror parity).</summary>
     public PlatformGene MirrorX() => this with { X = -X - XSize };

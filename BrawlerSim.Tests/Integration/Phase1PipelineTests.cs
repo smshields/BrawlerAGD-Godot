@@ -70,6 +70,15 @@ public class Phase1PipelineTests
     [Fact]
     public void PopulationFingerprintMatchesGoldenValue()
     {
+        // Re-pinned 2026-09-01: THIN PLATFORMS (FEATURES.md §Thin Platforms;
+        // docs/features/thin-platforms.md) — the stage schema appended
+        // thinPlatformFraction (drawn with the structure genes) and every accepted
+        // non-initial platform draws a thin coin, so the generation stream moved;
+        // game.json is v12 (the fraction gene + dropThroughDelay in the serialized
+        // bytes; "thin" is written only when true). Match goldens + utility golden
+        // unmoved (thin-free fixtures; every thin sim path is gated on a thin
+        // platform existing). The 4P golden re-pins separately (generated fixture).
+        // Prior pin: 6308630236996759882.
         // Re-pinned 2026-08-23: melee attack sprites (M4b) — game.json is v11
         // ("formatVersion" in the serialized bytes; attack-sprite-selection.md).
         // BYTES ONLY again: no sprite library on GenerationConfig.Default, no new
@@ -123,6 +132,6 @@ public class Phase1PipelineTests
         // (fast fall/crouch/DI), 16079587979934170348 (dash slot),
         // 10607725140721060960 (shield), 5432710911100783110 (two moves),
         // 13551893661434631362, 9300943650238635838.
-        Assert.Equal(6308630236996759882UL, RunPipeline(20260707));
+        Assert.Equal(17381351727395034445UL, RunPipeline(20260707));
     }
 }

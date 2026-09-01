@@ -58,6 +58,9 @@ public sealed class StageGenerator
         // structure genes (fixed draw order = fingerprint contract).
         float platformSpawnGene = Draw(rng, StageParams.PlatformSpawnDuration);
         float spawnInvulnGene = Draw(rng, StageParams.SpawnInvulnDuration);
+        // Thin Platforms (2026-09-01): the drop-through fraction, drawn with the
+        // structure genes (new draw — fingerprint re-pinned with this feature).
+        float thinFractionGene = Draw(rng, StageParams.ThinPlatformFraction);
 
         bool mirrored = mirroredGene >= 0.5f;
         int count = StageRules.IntGene(countGene, 2, 16);
@@ -73,7 +76,7 @@ public sealed class StageGenerator
         // spawns per stage since 2026-08-12 (docs/features/four-player.md).
         (List<PlatformGene> platforms, Vec2 spawn1, Vec2 spawn2, Vec2 spawn3, Vec2 spawn4) =
             BuildLayoutAndSpawns(rng, mirrored, count, maxSize, gridW, gridH,
-                visWidthGene, visHeightGene, playMin, playMax);
+                visWidthGene, visHeightGene, playMin, playMax, thinFractionGene);
 
         var values = new float[_schema.Count];
         values[_schema.IndexOf(StageParams.VisibleHalfWidth)] = visWidthGene;
@@ -93,6 +96,7 @@ public sealed class StageGenerator
         values[_schema.IndexOf(StageParams.Spawn3Y)] = spawn3.Y;
         values[_schema.IndexOf(StageParams.Spawn4X)] = spawn4.X;
         values[_schema.IndexOf(StageParams.Spawn4Y)] = spawn4.Y;
+        values[_schema.IndexOf(StageParams.ThinPlatformFraction)] = thinFractionGene;
         return new StageGenome(platforms, new ParamSet(_schema, values));
     }
 
@@ -111,7 +115,7 @@ public sealed class StageGenerator
 
         (List<PlatformGene> platforms, Vec2 spawn1, Vec2 spawn2, Vec2 spawn3, Vec2 spawn4) =
             BuildLayoutAndSpawns(rng, mirrored, count, maxSize, gridW, gridH, visW, visH,
-                playMin, playMax);
+                playMin, playMax, StageRules.ThinFractionOf(stageParams));
         return new StageGenome(platforms, stageParams.With(
             (StageParams.Spawn1X, spawn1.X), (StageParams.Spawn1Y, spawn1.Y),
             (StageParams.Spawn2X, spawn2.X), (StageParams.Spawn2Y, spawn2.Y),
@@ -146,7 +150,7 @@ public sealed class StageGenerator
     private (List<PlatformGene> Platforms, Vec2 Spawn1, Vec2 Spawn2, Vec2 Spawn3, Vec2 Spawn4)
         BuildLayoutAndSpawns(
             Pcg32 rng, bool mirrored, int count, int maxSize, int gridW, int gridH,
-            float visW, float visH, Vec2 playMin, Vec2 playMax)
+            float visW, float visH, Vec2 playMin, Vec2 playMax, float thinFraction)
     {
         float axisClear = mirrored ? StageRules.SpawnBodyHalfWidth : 0f;
         List<PlatformGene> platforms = null!;
@@ -157,7 +161,7 @@ public sealed class StageGenerator
             // (platform-blockers-only) column — overlap beats the embed fallback,
             // but a regrown layout that separates beats both.
             bool allowBare = attempt >= SeparationAttempts;
-            platforms = Grow(rng, mirrored, count, maxSize, gridW, gridH, playMin, playMax);
+            platforms = Grow(rng, mirrored, count, maxSize, gridW, gridH, playMin, playMax, thinFraction);
             if (mirrored)
             {
                 int unmirrored = platforms.Count;
@@ -246,7 +250,7 @@ public sealed class StageGenerator
 
     private List<PlatformGene> Grow(
         Pcg32 rng, bool mirrored, int count, int maxSize, int gridW, int gridH,
-        Vec2 playMin, Vec2 playMax)
+        Vec2 playMin, Vec2 playMax, float thinFraction)
     {
         // Mirrored stages spend half the budget on the source half (reflection restores
         // the total); the legacy generator's target of 3 pre-mirror ≈ budget 6.
@@ -288,7 +292,11 @@ public sealed class StageGenerator
                 if (TryPlace(rng, direction, parent, all, mirrored, maxSize, gridW, gridH,
                         playMin, playMax, out PlatformGene child))
                 {
-                    all.Add(child);
+                    // Thin Platforms (2026-09-01): one coin per ACCEPTED platform
+                    // (fixed draw count — rejected placements consume nothing extra).
+                    // The INITIAL platform never rolls: it is the structural
+                    // at-least-one-solid guarantee, and mirror copies inherit.
+                    all.Add(child with { Thin = rng.NextFloat() < thinFraction });
                     stack.Push(child);
                 }
             }

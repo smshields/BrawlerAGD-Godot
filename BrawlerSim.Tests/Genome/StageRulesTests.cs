@@ -310,7 +310,11 @@ public class StageRulesTests
         {
             for (int j = 0; j < plats.Count; j++)
             {
-                if (i == j || plats[i].Y >= plats[j].Y + plats[j].YSize
+                // Thin platforms never wall a corridor (2026-09-01): bodies pass
+                // through their sides, so a gap bounded by one is symmetric by
+                // construction — mirrors StageRules.FindAsymmetricGaps' exemption.
+                if (i == j || plats[i].Thin || plats[j].Thin
+                    || plats[i].Y >= plats[j].Y + plats[j].YSize
                     || plats[j].Y >= plats[i].Y + plats[i].YSize)
                 {
                     continue;

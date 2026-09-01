@@ -52,6 +52,8 @@ public class ParamSchemaTests
             ("crouchHeightRatio", 0.4f, 0.9f),
             ("directionalInfluence", 0.02f, 0.10f),
             ("diKnockbackReduction", 0.05f, 0.20f),
+            // Thin Platforms (2026-09-01): the crouch drop-through delay.
+            ("dropThroughDelay", 0.05f, 0.5f),
         };
         AssertSchema(DefaultSchemas.Character, expected);
     }
@@ -115,6 +117,9 @@ public class ParamSchemaTests
             ("spawn3Y", -25f, 26f),
             ("spawn4X", -49f, 49f),
             ("spawn4Y", -25f, 26f),
+            // Thin Platforms (2026-09-01): the drop-through generation fraction —
+            // designer: may run very high; the at-least-one-solid rule is structural.
+            ("thinPlatformFraction", 0f, 1f),
         };
         AssertSchema(DefaultSchemas.Stage, expected);
     }

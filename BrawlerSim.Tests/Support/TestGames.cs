@@ -31,6 +31,9 @@ public static class TestGames
             [CharacterParams.CrouchHeightRatio] = 0.9f,
             [CharacterParams.DirectionalInfluence] = 0f,
             [CharacterParams.DiKnockbackReduction] = 0f,
+            // 2026-09-01 thin platforms: instant drop after the sink — only
+            // observable on stages that actually have thin platforms.
+            [CharacterParams.DropThroughDelay] = 0f,
         };
         foreach ((string key, float value) in overrides)
         {

@@ -48,10 +48,16 @@ namespace BrawlerSim.Serialization;
 ///       gained "spriteId" (moves_v2 library; assigned on Attack moves only),
 ///       omitted when null. ≤10 files load with null move genes — same legacy
 ///       stance as v10. Purely cosmetic.
+///  12 — 2026-09-01 thin platforms (FEATURES.md §Thin Platforms;
+///       docs/features/thin-platforms.md): platforms gained "thin" (drop-through —
+///       a structural gene), the stage gained thinPlatformFraction, and characters
+///       gained dropThroughDelay. ≤11 files load all-solid with both new params 0,
+///       so old games and traces replay bit-identically (every thin path is gated
+///       on a thin platform existing).
 /// </summary>
 public static class GameGenomeJson
 {
-    public const int CurrentFormatVersion = 11; // 2026-08-23 melee attack sprites (see header)
+    public const int CurrentFormatVersion = 12; // 2026-09-01 thin platforms (see header)
     private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = new()
@@ -104,7 +110,14 @@ public static class GameGenomeJson
     {
         Params = stage.Params.ToDictionary(),
         Platforms = stage.Platforms
-            .Select(p => new PlatformDoc { X = p.X, Y = p.Y, XSize = p.XSize, YSize = p.YSize })
+            // Thin is written only when TRUE (null suppression): solid platforms
+            // keep their pre-v12 bytes, which keeps BuiltGameJson.ContentKey — and
+            // therefore the naming/sprite seeds of existing content — byte-identical.
+            .Select(p => new PlatformDoc
+            {
+                X = p.X, Y = p.Y, XSize = p.XSize, YSize = p.YSize,
+                Thin = p.Thin ? true : null,
+            })
             .ToList(),
     };
 
@@ -172,7 +185,7 @@ public static class GameGenomeJson
     internal static StageGenome StageFromDoc(StageDoc doc, GenerationConfig config)
     {
         var platforms = (doc.Platforms ?? throw new JsonException("stage is missing platforms."))
-            .Select(p => new PlatformGene(p.X, p.Y, p.XSize, p.YSize)).ToList();
+            .Select(p => new PlatformGene(p.X, p.Y, p.XSize, p.YSize, p.Thin == true)).ToList(); // absent (≤v11) → solid
         // ≤ v6: no stage params — the legacy dimensions + old derived spawns
         // (bit-identical playback). v7+: read them (missing keys throw, as everywhere).
         return new StageGenome(platforms, doc.Params is null
@@ -204,6 +217,9 @@ public static class GameGenomeJson
         (CharacterParams.CrouchHeightRatio, 0.9f),
         (CharacterParams.DirectionalInfluence, 0f),
         (CharacterParams.DiKnockbackReduction, 0f),
+        // 2026-09-01 thin platforms: pre-v12 characters drop instantly after the
+        // crouch sink (0 s delay) — only observable on stages that have thin platforms.
+        (CharacterParams.DropThroughDelay, 0f),
     };
 
     internal static Dictionary<string, float> WithCharacterDefaults(Dictionary<string, float> dict)
@@ -234,6 +250,7 @@ public static class GameGenomeJson
     {
         dict.TryAdd(StageParams.PlatformSpawnDuration, 0f);
         dict.TryAdd(StageParams.SpawnInvulnDuration, 0f);
+        dict.TryAdd(StageParams.ThinPlatformFraction, 0f); // ≤ v11: all-solid (2026-09-01)
         if (!dict.ContainsKey(StageParams.Spawn3X))
         {
             (Vec2 s3, Vec2 s4) = StageRules.DeriveExtraSpawns(
@@ -291,5 +308,6 @@ public static class GameGenomeJson
         public int Y { get; set; }
         public int XSize { get; set; }
         public int YSize { get; set; }
+        public bool? Thin { get; set; } // v12+; written only when true, absent → solid
     }
 }

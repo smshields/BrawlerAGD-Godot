@@ -366,3 +366,27 @@ Characters should look like what they are. Instead of a random glyph from the Ke
 
 ## Attack Sprite Selection
 Melee attacks should look like what they do, wielded by whoever does it. Each attack move picks a sprite from a tagged 111-sprite melee library (godot/assets/moves_v2.png — weapons, elemental bursts, impacts, and a deliberate goofy-object shelf: bananas, cheese, crystal balls) AFTER the character's sprite, name, and register are settled, consuming them: the character sprite's wields list says what it plausibly swings (a knight favors blades, an adder bites, a floating eye erupts), the move's own params say how it behaves (heavy slow hits pick brutal patient sprites), the shared register colors the element (horror bleeds spectral, scifi sparks electric), and a reserved slice of every pick keeps the objects surfacing — roughly one fighter in five should hit people with something ridiculous. Move sprites within one character are always distinct so the second attack reads differently. Same gene/heredity/repair pattern as character sprites; deterministic from the genome. Brief: docs/features/attack-sprite-selection.md.
+
+# Map Generation
+
+## Thin Platforms
+
+Thin platforms are a new style of platform that allow a character to drop through them by pressing down (crouch) and pass through them when moving upward or for the side. They still have a surface that characters can land on. They are rendered using a thinner hitbox than standard platforms, and will eventually use a different slice of tilesets to be represented. 
+
+### Requirements
+
+Thin platforms affect both player behavior as well as map generation.
+
+Map:
+- Thin platforms can be generated anywhere a normal platform could be generated, and should be interspersed with them.
+- There should always be at least one solid (non thin) platform in a level.
+- Players can spawn over thin platforms.
+- Placement of thin platforms should obey all existing platform rules (obey reachability, etc.)
+- Initial platform renders should be a thin placeholder box, but it will be replaced with sprites in the next feature.
+
+Players:
+- Players can move downwards through thin platforms by crouching.
+- Crouching through platforms should have a very slight delay, and this delay should be a generated characteristic tied to character generation.
+- Agents should perceive moving downwards through platforms as a potential escape routes during utility evaluation, but should only do so if there is a reachable platform below that they can safely land on.
+- Players can move upwards through thin platforms (if knocked or jumping upwards)
+- Players will have normal platform collisions if knocked downwards or landing on top of a platform.

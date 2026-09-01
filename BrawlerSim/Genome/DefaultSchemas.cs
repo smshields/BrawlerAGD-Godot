@@ -28,6 +28,11 @@ public static class CharacterParams
     public const string CrouchHeightRatio = "crouchHeightRatio";
     public const string DirectionalInfluence = "directionalInfluence";
     public const string DiKnockbackReduction = "diKnockbackReduction";
+
+    // Thin platforms (2026-09-01, FEATURES.md §Thin Platforms): how long a held
+    // crouch takes to drop through a thin platform. Appended; pre-v12 files default
+    // to 0 (instant drop after the crouch sink — the mechanic itself has no "off").
+    public const string DropThroughDelay = "dropThroughDelay";
 }
 
 /// <summary>Stable param keys for the shield schema (2026-07-12, FEATURES.md §Shield).</summary>
@@ -117,6 +122,11 @@ public static class StageParams
     public const string Spawn3Y = "spawn3Y";
     public const string Spawn4X = "spawn4X";
     public const string Spawn4Y = "spawn4Y";
+
+    // Thin Platforms (2026-09-01, FEATURES.md §Thin Platforms): the fraction of
+    // non-initial platforms generated as drop-through. Appended; pre-v12 files
+    // default to 0 (all-solid — legacy layouts regenerate all-solid on mutation too).
+    public const string ThinPlatformFraction = "thinPlatformFraction";
 }
 
 /// <summary>Stable param keys for the move schema.</summary>
@@ -170,6 +180,10 @@ public static class DefaultSchemas
         // generation-vs-valid-domain split as knockbackModX, DEVIATIONS #13).
         new ParamSpec(CharacterParams.DirectionalInfluence, 0.02f, 0.10f) { ValidMin = 0f },
         new ParamSpec(CharacterParams.DiKnockbackReduction, 0.05f, 0.20f) { ValidMin = 0f },
+        // Thin platforms (2026-09-01, designer bounds: "very slight delay", up to
+        // 0.5 s for initial testing). ValidMin 0 = pre-v12 loader default (instant
+        // drop after the sink) — same generation-vs-valid split as the DI genes.
+        new ParamSpec(CharacterParams.DropThroughDelay, 0.05f, 0.5f) { ValidMin = 0f },
     });
 
     public static readonly ParamSchema Move = new("move", new[]
@@ -284,6 +298,11 @@ public static class DefaultSchemas
         new ParamSpec(StageParams.Spawn3Y, -25f, 26f),
         new ParamSpec(StageParams.Spawn4X, -49f, 49f),
         new ParamSpec(StageParams.Spawn4Y, -25f, 26f),
+        // Thin Platforms (2026-09-01, designer: the range may run very high — the
+        // at-least-one-solid rule is enforced STRUCTURALLY, never by this gene:
+        // the initial platform generates solid and EnsureSolidPlatform repairs
+        // all-thin breeding products). Pre-v12 files default to 0.
+        new ParamSpec(StageParams.ThinPlatformFraction, 0f, 1f),
     });
 
     public static readonly ParamSchema Projectile = new("projectile", new[]

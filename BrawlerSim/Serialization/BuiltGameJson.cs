@@ -156,10 +156,14 @@ public sealed class BuiltGame
 ///       "moveSpriteIds" — one entry per move, null on non-attack slots; resolved
 ///       around the NEGOTIATED character sprite (whose wields may differ from the
 ///       genome gene's) and persisted once. ≤2 files gain them on next open.
+///   4 — 2026-09-01 thin platforms: platform docs may carry "thin" (written only
+///       when true — solid platforms keep their pre-v12 bytes, so ContentKey and
+///       the naming/sprite seeds of legacy content are unchanged). ≤3 files load
+///       all-solid via the shared game.json element shapes.
 /// </summary>
 public static class BuiltGameJson
 {
-    public const int CurrentFormatVersion = 3;
+    public const int CurrentFormatVersion = 4;
 
     private static readonly JsonSerializerOptions Options = new()
     {
