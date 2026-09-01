@@ -77,9 +77,11 @@ public sealed partial class StageThumb : Control
         foreach (PlatformGene p in _stage.Platforms)
         {
             // Thin platforms (2026-09-01) draw as the top slice of their cell —
-            // the thumb mirrors the in-match placeholder slab (min 1 px so tiny
+            // the thumb mirrors the in-match slab height (min 1 px so tiny
             // thumbs still show the platform at all).
-            float bottom = p.Thin ? p.Y + p.YSize - 0.2f : p.Y;
+            float bottom = p.Thin
+                ? p.Y + p.YSize - BrawlerSim.Sim.MatchConfig.Default.ThinPlatformThickness
+                : p.Y;
             Vector2 tl = Map(p.X, p.Y + p.YSize);
             Vector2 br = Map(p.X + p.XSize, bottom);
             var rect = new Rect2(tl, br - tl);

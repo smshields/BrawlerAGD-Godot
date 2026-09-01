@@ -17,8 +17,9 @@ namespace BrawlerSim.Tests.Sim;
 /// </summary>
 public class ThinPlatformSimTests
 {
-    // Floor top y = -2; thin slice [1.8, 2.0] spanning x in [-3, 3] (0.2 thickness
-    // at the top of the gene cell [1, 2]).
+    // Floor top y = -2; thin slice [1.625, 2.0] spanning x in [-3, 3]
+    // (ThinPlatformThickness 12/32 at the top of the gene cell [1, 2] — matched to
+    // the tiles_v2 drop-slab art, designer 2026-09-01).
     private static readonly PlatformGene Floor = new(-8, -3, 16, 1);
     private static readonly PlatformGene ThinLedge = new(-3, 1, 6, 1, Thin: true);
 
@@ -71,8 +72,9 @@ public class ThinPlatformSimTests
     [Fact]
     public void ExtremeDownwardVelocityStillLandsOnTheThinSlice()
     {
-        // The slice (0.2) is thinner than a substep (0.25): the surface-CROSSING test,
-        // not overlap, must catch a knockback-speed fall (no tunneling).
+        // The surface-CROSSING test, not overlap, must catch a knockback-speed
+        // fall (no tunneling regardless of how the slab height compares to the
+        // 0.25 substep — it was 0.2 before the art-matched 12/32).
         SimWorld world = Settled(ThinArena(), new Vec2(0f, 4f), new Vec2(6.5f, -1.4f));
         SimPlayer player = world.Players[0];
         player.Position = new Vec2(0f, 6f);
@@ -203,7 +205,7 @@ public class ThinPlatformSimTests
         // below — the downward surface crossing consumes it well before TTL, the
         // floor, or the blast line could.
         var perch = new PlatformGene(-8, 0, 3, 1);
-        var ledge = new PlatformGene(-2, -1, 6, 1, Thin: true); // slice [-0.2, 0], x in [-2, 4]
+        var ledge = new PlatformGene(-2, -1, 6, 1, Thin: true); // slice top y = 0, x in [-2, 4]
         CharacterGenome Shooter(string name) => new(name, 3, 0, TestGames.Character(),
             new[]
             {
@@ -246,7 +248,7 @@ public class ThinPlatformSimTests
         // A sine bolt rising through a thin slice from BELOW survives the upward
         // crossing (designer: thin platforms do not destroy from the bottom) and is
         // consumed only when the wave comes back down through the top.
-        var ledge = new PlatformGene(-8, -2, 16, 1, Thin: true); // slice [-1.2, -1.0]
+        var ledge = new PlatformGene(-8, -2, 16, 1, Thin: true); // slice top y = -1.0
         CharacterGenome Shooter(string name) => new(name, 3, 0, TestGames.Character(),
             new[]
             {

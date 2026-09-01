@@ -86,8 +86,10 @@ public sealed record MatchConfig
     /// of a thin platform is a slice this tall at the TOP of its gene cell — the
     /// surface (top edge) every reachability model keys on is unchanged; only the
     /// underside moves up. Landing uses a per-substep surface-crossing test, so the
-    /// slice being thinner than MaxStepDistance cannot tunnel.</summary>
-    public float ThinPlatformThickness { get; init; } = 0.2f;
+    /// slice geometry can never tunnel. 12/32 = the tiles_v2 drop-slab art height
+    /// (designer 2026-09-01, stage tiles: hitbox matches the sprite exactly;
+    /// originally 0.2 with the placeholder slab).</summary>
+    public float ThinPlatformThickness { get; init; } = 12f / 32f;
 
     /// <summary>Projectile path constants (2026-07-14, docs/features/projectiles.md).
     /// One scalar gene per spec ("frequency for waves, scalars for quadratics"), so
