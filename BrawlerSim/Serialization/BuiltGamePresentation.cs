@@ -16,14 +16,17 @@ namespace BrawlerSim.Serialization;
 /// inherited gene is candidate #1, so heredity usually wins; per-roster usage counts
 /// make duplicate fighters diverge); an entry with a kept name (manual rename or
 /// previously generated) gets its sprite resolved around the kept name without
-/// touching it. Stages have no sprites — naming only, exactly as before. Deterministic:
-/// everything derives from BuiltGameNaming.NamingSeed (content-derived, sprite-blind).
+/// touching it. Stages settle their tile THEME with their name the same way since
+/// M4d (2026-09-01, stage-tile-selection.md) — shared register by construction.
+/// Deterministic: everything derives from BuiltGameNaming.NamingSeed
+/// (content-derived, sprite- and theme-blind).
 /// </summary>
 public static class BuiltGamePresentation
 {
     /// <summary>Runs the pass in place; returns how many elements changed. A null
-    /// selector (sprite library unavailable) degrades to the pure naming pass.</summary>
-    public static int EnsurePresented(BuiltGame game, NG.NameGenerator generator, SpriteSelector? selector)
+    /// selector (library unavailable) degrades that half to the pure naming pass.</summary>
+    public static int EnsurePresented(BuiltGame game, NG.NameGenerator generator, SpriteSelector? selector,
+        StageThemeSelector? themes = null)
     {
         var session = new NG.UniqueNameSession(generator);
         var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -146,16 +149,75 @@ public static class BuiltGamePresentation
             changed += EnsureMoveSprites(game, i, selector, moveUsage);
         }
 
+        // Stage themes settled on this game pre-count into the overuse penalty, so a
+        // partially presented game (a v4 file gaining themes) still diverges its new
+        // picks from the kept ones — the four-stage lineup reads as four places.
+        var themeUsage = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (BuiltStage s in game.Stages)
+        {
+            if (s.ThemeId is { } id)
+            {
+                themeUsage[id] = themeUsage.TryGetValue(id, out int n) ? n + 1 : 1;
+            }
+        }
+
         for (int i = 0; i < game.Stages.Count; i++)
         {
             BuiltStage entry = game.Stages[i];
-            if (!BuiltGameNaming.NeedsGeneratedName(entry.DisplayName))
+            bool needsName = BuiltGameNaming.NeedsGeneratedName(entry.DisplayName);
+            bool needsTheme = themes is not null
+                && (entry.ThemeId is null || !themes.Library.Contains(entry.ThemeId));
+            if (!needsName && !needsTheme)
             {
                 continue;
             }
+            ulong seed = BuiltGameNaming.NamingSeed(entry.Stage);
+
+            // Lineup distinctness beats heredity (the roster rule, applied to
+            // stages): an inherited theme already worn by an earlier stage loses its
+            // privilege and this entry selects fresh, steered by the usage penalty.
+            string? inherited = entry.ThemeId ?? entry.Stage.ThemeId;
+            if (inherited is not null && themeUsage.ContainsKey(inherited))
+            {
+                inherited = null;
+            }
+
+            if (themes is not null)
+            {
+                ThemePresentation presented = themes.Present(
+                    entry.Stage, seed, generator, themeUsage, inherited);
+                string stageName = entry.DisplayName;
+                if (needsName)
+                {
+                    stageName = presented.DisplayName;
+                    if (taken.Contains(stageName))
+                    {
+                        stageName = session.GenerateStageName(
+                            StageThemeSelector.Map(entry.Stage),
+                            new NG.NameOptions { Seed = seed, Register = presented.Register }).Display;
+                    }
+                    else
+                    {
+                        session.Reserve(stageName);
+                    }
+                    taken.Add(stageName);
+                }
+                themeUsage[presented.ThemeId] =
+                    themeUsage.TryGetValue(presented.ThemeId, out int n) ? n + 1 : 1;
+                game.Stages[i] = entry with
+                {
+                    DisplayName = stageName,
+                    ThemeId = presented.ThemeId,
+                    Register = presented.Register,
+                };
+                changed++;
+                continue;
+            }
+
+            // No theme library: the pre-feature stage naming pass, byte-for-byte.
             string name = session.GenerateStageName(
                 new NG.StageGenome(entry.Stage.Params.ToDictionary()),
-                new NG.NameOptions { Seed = BuiltGameNaming.NamingSeed(entry.Stage) }).Display;
+                new NG.NameOptions { Seed = seed }).Display;
             game.Stages[i] = entry with { DisplayName = name };
             changed++;
         }

@@ -33,8 +33,10 @@ public static class GameGenomeOps
         // fit it to both children (2026-07-22, RNG-free; docs/features/spawn-and-polish.md).
         // Sprite repair (2026-08-22, sprite-selection.md decision 2): the inherited
         // sprite stands until it stops making sense against the child's salient traits.
+        // Stage theme repair follows the same rule (M4d, 2026-09-01).
         GameGenome.ResolveSprites(children, config);
-        return new GameGenome(children, GameGenome.FitStage(stage, children));
+        return new GameGenome(children,
+            GameGenome.ResolveStageTheme(GameGenome.FitStage(stage, children), config));
     }
 
     public static GameGenome Mutate(GameGenome genome, Pcg32 rng, GenerationConfig? config = null)
@@ -66,7 +68,8 @@ public static class GameGenomeOps
                 character.SpriteId));
         }
         GameGenome.ResolveSprites(mutated, config);
-        return new GameGenome(mutated, GameGenome.FitStage(MutateStage(genome.Stage, config, rng), mutated));
+        return new GameGenome(mutated, GameGenome.ResolveStageTheme(
+            GameGenome.FitStage(MutateStage(genome.Stage, config, rng), mutated), config));
     }
 
     /// <summary>

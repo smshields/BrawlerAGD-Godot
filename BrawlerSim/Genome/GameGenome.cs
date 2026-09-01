@@ -290,8 +290,16 @@ public sealed class GameGenome
         // traverse and no gap is asymmetrically passable. Deterministic, RNG-free — the
         // stream stays aligned (docs/features/spawn-and-polish.md §Platform fit).
         ResolveSprites(characters, config);
-        return new GameGenome(characters, FitStage(stage, characters));
+        return new GameGenome(characters, ResolveStageTheme(FitStage(stage, characters), config));
     }
+
+    /// <summary>Stage theme gene upkeep (M4d, 2026-09-01, stage-tile-selection.md):
+    /// assigns/repairs the stage's ThemeId via the content-seeded selector. Runs
+    /// AFTER the platform fit so the seed derives from the final stage bytes.
+    /// RNG-free — the generation/breeding streams stay aligned, like ResolveSprites.
+    /// No-op without a theme library on the config.</summary>
+    internal static StageGenome ResolveStageTheme(StageGenome stage, GenerationConfig config) =>
+        config.StageThemeSelector is { } selector ? selector.EnsureGene(stage) : stage;
 
     /// <summary>Sprite-gene upkeep over a whole game (2026-08-22, sprite-selection.md;
     /// melee move genes added 2026-08-23, attack-sprite-selection.md): assigns/repairs

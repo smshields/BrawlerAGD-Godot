@@ -71,8 +71,10 @@ public static class RunStore
                     Schema = o.Schema, Key = o.Key, Min = o.Min, Max = o.Max,
                 }).ToList(),
             // Sprite selection (2026-08-22): absent = off, so pre-feature manifests
-            // stay byte-compatible and resume exactly as they ran.
+            // stay byte-compatible and resume exactly as they ran. Stage themes
+            // (M4d, 2026-09-01) record the same way.
             Sprites = config.Generation.SpriteSelector is null ? null : true,
+            Themes = config.Generation.StageThemeSelector is null ? null : true,
             GenerationsCompleted = engine.GenerationsCompleted,
             RngState = state,
             RngInc = inc,
@@ -88,6 +90,21 @@ public static class RunStore
         File.WriteAllText(Path.Combine(runDir, "run.json"), JsonSerializer.Serialize(manifest, Options));
     }
 
+    private static GenerationConfig WithSelectors(GenerationConfig generation,
+        RunManifest manifest, Sprites.SpriteSelector? spriteSelector,
+        Sprites.StageThemeSelector? themeSelector)
+    {
+        if (manifest.Sprites == true && spriteSelector is not null)
+        {
+            generation = generation with { SpriteSelector = spriteSelector };
+        }
+        if (manifest.Themes == true && themeSelector is not null)
+        {
+            generation = generation with { StageThemeSelector = themeSelector };
+        }
+        return generation;
+    }
+
     public static void SaveBest(string runDir, GameGenome best, GenerationStats stats, InputTrace trace)
     {
         GameGenomeJson.Save(
@@ -96,11 +113,13 @@ public static class RunStore
         InputTraceJson.Save(trace, Path.Combine(runDir, "best.trace.json"));
     }
 
-    /// <summary>Resumes a checkpoint. spriteSelector re-attaches sprite selection to
-    /// runs that recorded it (run.json "sprites"); callers own locating the library —
-    /// null degrades gracefully (new children keep null genes, everything else exact).</summary>
+    /// <summary>Resumes a checkpoint. spriteSelector/themeSelector re-attach sprite
+    /// and stage-theme selection to runs that recorded them (run.json "sprites" /
+    /// "themes"); callers own locating the libraries — null degrades gracefully (new
+    /// children keep null genes, everything else exact).</summary>
     public static (EvolutionEngine Engine, EvolutionConfig Config, List<GenerationStats> History) Load(
-        string runDir, Sprites.SpriteSelector? spriteSelector = null)
+        string runDir, Sprites.SpriteSelector? spriteSelector = null,
+        Sprites.StageThemeSelector? themeSelector = null)
     {
         string manifestPath = Path.Combine(runDir, "run.json");
         RunManifest manifest = JsonSerializer.Deserialize<RunManifest>(File.ReadAllText(manifestPath), Options)
@@ -134,9 +153,8 @@ public static class RunStore
                 MaxStunSeconds = manifest.MaxStunSeconds ?? float.PositiveInfinity,
             },
             DiversityWeight = manifest.DiversityWeight ?? 0f,
-            Generation = manifest.Sprites == true && spriteSelector is not null
-                ? BuildGenerationConfig(manifest) with { SpriteSelector = spriteSelector }
-                : BuildGenerationConfig(manifest),
+            Generation = WithSelectors(BuildGenerationConfig(manifest), manifest,
+                spriteSelector, themeSelector),
         };
 
         var population = new List<GameGenome>(manifest.PopulationSize);
@@ -206,6 +224,7 @@ public static class RunStore
         public float? FitnessCollisionScalar { get; set; }
         public int? Players { get; set; } // 2026-08-12 four-player; absent = 2
         public bool? Sprites { get; set; } // 2026-08-22 sprite selection; absent = off
+        public bool? Themes { get; set; }  // 2026-09-01 stage tile themes (M4d); absent = off
         public List<string>? Composition { get; set; }
         public float? TypeRerollRate { get; set; }
         public List<RangeOverrideDoc>? RangeOverrides { get; set; }

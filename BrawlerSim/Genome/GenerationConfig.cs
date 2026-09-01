@@ -87,6 +87,13 @@ public sealed record GenerationConfig
     /// all content-seeded and RNG-free, so evolution streams never move.</summary>
     public Sprites.SpriteSelector? SpriteSelector { get; init; }
 
+    /// <summary>Stage theme selection (M4d, 2026-09-01, stage-tile-selection.md).
+    /// Null (default) = off: stages carry ThemeId = null and render the legacy v1
+    /// tiles, byte-identical to pre-feature behavior. Non-null: fresh generations
+    /// resolve a ThemeId gene and breeding repairs incoherent inherits — all
+    /// content-seeded and RNG-free, like SpriteSelector.</summary>
+    public Sprites.StageThemeSelector? StageThemeSelector { get; init; }
+
     /// <summary>The active range overrides, recorded in run.json (empty = stock schemas).</summary>
     public IReadOnlyList<RangeOverride> RangeOverrides { get; init; } = Array.Empty<RangeOverride>();
 

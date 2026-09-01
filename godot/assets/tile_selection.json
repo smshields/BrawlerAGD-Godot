@@ -1,0 +1,14 @@
+{
+  // Stage theme selection tuning (M4d, 2026-09-01 — docs/features/stage-tile-selection.md).
+  // Hot-editable: the app and the CLI read this file next to tiles_v2_slices.json;
+  // values here start at the StageThemeConfig code defaults. Sibling of
+  // sprite_selection.json (designer 2026-09-01).
+  "goofBudget": 0.08,
+  "goofVibes": ["goofy", "cute"],
+  "maxThemeShare": 0.12,
+  "softmaxTemperature": 0.35,
+  "repairFloor": 0.05,
+  "registerPoolFloor": 6,
+  "overusePenalty": 0.5,
+  "candidateCount": 4
+}

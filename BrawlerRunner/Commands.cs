@@ -123,7 +123,7 @@ internal static class Commands
         List<GenerationStats> history;
         if (opts.ContainsKey("resume"))
         {
-            (engine, config, history) = RunStore.Load(outDir, LoadSpriteSelector(opts));
+            (engine, config, history) = RunStore.Load(outDir, LoadSpriteSelector(opts), LoadStageThemeSelector(opts));
             Console.WriteLine($"Resumed {outDir} at generation {engine.GenerationsCompleted}.");
         }
         else
@@ -147,11 +147,16 @@ internal static class Commands
                 FitnessName = opts.GetValueOrDefault("fitness"),
                 FitnessCollisionScalar = opts.ContainsKey("collision-scalar")
                     ? GetFloat(opts, "collision-scalar", 0f) : null,
-                // Sprite selection (2026-08-22): on whenever the library is found —
-                // cosmetic, RNG-free, fitness-blind; --no-sprites turns it off.
+                // Sprite selection (2026-08-22) + stage tile themes (M4d,
+                // 2026-09-01): on whenever the libraries are found — cosmetic,
+                // RNG-free, fitness-blind; --no-sprites turns both off.
                 Generation = opts.ContainsKey("no-sprites")
                     ? ParseGeneration(opts)
-                    : ParseGeneration(opts) with { SpriteSelector = LoadSpriteSelector(opts) },
+                    : ParseGeneration(opts) with
+                    {
+                        SpriteSelector = LoadSpriteSelector(opts),
+                        StageThemeSelector = LoadStageThemeSelector(opts),
+                    },
             };
             engine = new EvolutionEngine(config);
             history = new List<GenerationStats>();
@@ -317,7 +322,8 @@ internal static class Commands
         }
 
         var generator = NameGen.NameGenerator.CreateDefault();
-        int changed = BuiltGamePresentation.EnsurePresented(game, generator, LoadSpriteSelector(opts));
+        int changed = BuiltGamePresentation.EnsurePresented(
+            game, generator, LoadSpriteSelector(opts), LoadStageThemeSelector(opts));
         BuiltGameJson.Save(game, Require(opts, "out"));
         Console.WriteLine($"prepared '{game.Name}': presented {changed} elements → {opts["out"]}");
         // The shell packager reads these two lines to brand the build.
@@ -354,6 +360,29 @@ internal static class Commands
             ? BrawlerSim.Sprites.MoveSpriteLibrary.LoadFile(moves)
             : null;
         return new BrawlerSim.Sprites.SpriteSelector(library, config, moveLibrary: moveLibrary);
+    }
+
+    /// <summary>The stage theme library (M4d, 2026-09-01) — same auto-discovery as
+    /// the sprite library; tile_selection.json rides alongside. Null (with a warning)
+    /// = stages keep null theme genes / legacy names.</summary>
+    internal static BrawlerSim.Sprites.StageThemeSelector? LoadStageThemeSelector(Dictionary<string, string> opts)
+    {
+        string? slices = opts.TryGetValue("tiles", out string? given)
+            ? given
+            : FindUpward(Path.Combine("godot", "assets", "tiles_v2_slices.json"));
+        if (slices is null || !File.Exists(slices))
+        {
+            Console.Error.WriteLine(
+                "warning: stage tile library not found (godot/assets/tiles_v2_slices.json; "
+                + "override with --tiles) — running without stage theme selection.");
+            return null;
+        }
+        var library = BrawlerSim.Sprites.StageThemeLibrary.LoadFile(slices);
+        string tuning = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(slices))!, "tile_selection.json");
+        var config = File.Exists(tuning)
+            ? BrawlerSim.Sprites.StageThemeConfig.LoadFile(tuning)
+            : BrawlerSim.Sprites.StageThemeConfig.Default;
+        return new BrawlerSim.Sprites.StageThemeSelector(library, config);
     }
 
     private static string? FindUpward(string relative)
