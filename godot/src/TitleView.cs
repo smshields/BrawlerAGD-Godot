@@ -44,7 +44,7 @@ public partial class TitleView : Control
             Text = $"{game.Characters.Count} FIGHTERS · {game.Stages.Count} STAGES — "
                 + "A GAME GROWN BY EVOLUTION",
             HorizontalAlignment = HorizontalAlignment.Center,
-            Modulate = new Color(0.55f, 0.6f, 0.68f),
+            Modulate = UiPalette.Hint,
         };
         subtitle.AddThemeFontSizeOverride("font_size", 14);
         box.AddChild(subtitle);
@@ -151,7 +151,7 @@ public partial class TitleView : Control
 
         void Heading(string s)
         {
-            var label = new Label { Text = s, Modulate = new Color(0.65f, 0.7f, 0.78f) };
+            var label = new Label { Text = s, Modulate = UiPalette.Heading };
             label.AddThemeFontSizeOverride("font_size", 18);
             text.AddChild(label);
         }

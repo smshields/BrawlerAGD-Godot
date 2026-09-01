@@ -30,8 +30,8 @@ public partial class MinimapView : CanvasLayer
         _frame = new Panel();
         var style = new StyleBoxFlat
         {
-            BgColor = new Color(0.09f, 0.09f, 0.12f, 0.85f),
-            BorderColor = new Color(0.55f, 0.6f, 0.68f, 0.9f),
+            BgColor = new Color(UiPalette.Background, 0.85f),
+            BorderColor = new Color(UiPalette.Hint, 0.9f),
         };
         style.SetBorderWidthAll(1);
         _frame.AddThemeStyleboxOverride("panel", style);

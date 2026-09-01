@@ -87,7 +87,7 @@ public partial class GameSelectView : Control
             {
                 Text = "no complete games yet — assemble one in BUILD GAME "
                     + "(8 characters + 4 stages)",
-                Modulate = new Color(0.55f, 0.6f, 0.68f),
+                Modulate = UiPalette.Hint,
                 AutowrapMode = TextServer.AutowrapMode.WordSmart,
             };
             empty.AddThemeFontSizeOverride("font_size", 14);

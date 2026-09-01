@@ -425,7 +425,7 @@ public partial class CharacterSelectView : Control
         {
             Text = _game.Name,
             VerticalAlignment = VerticalAlignment.Center,
-            Modulate = new Color(0.65f, 0.7f, 0.78f),
+            Modulate = UiPalette.Heading,
         };
         gameName.AddThemeFontSizeOverride("font_size", 16);
         header.AddChild(gameName);
@@ -617,7 +617,7 @@ public partial class CharacterSelectView : Control
         {
             Text = "SELECT A STAGE",
             HorizontalAlignment = HorizontalAlignment.Center,
-            Modulate = new Color(0.65f, 0.7f, 0.78f),
+            Modulate = UiPalette.Heading,
         };
         _stagePreviewName.AddThemeFontSizeOverride("font_size", 13);
         center.AddChild(_stagePreviewName);
@@ -656,8 +656,8 @@ public partial class CharacterSelectView : Control
         {
             _stageCards[i].AddThemeStyleboxOverride("panel", new StyleBoxFlat
             {
-                BgColor = new Color(0.11f, 0.11f, 0.15f),
-                BorderColor = i == _stageIndex ? Colors.White : new Color(0.3f, 0.32f, 0.4f),
+                BgColor = UiPalette.CardBg,
+                BorderColor = i == _stageIndex ? Colors.White : UiPalette.PanelBorder,
                 BorderWidthTop = i == _stageIndex ? 4 : 1,
                 BorderWidthBottom = i == _stageIndex ? 4 : 1,
                 BorderWidthLeft = i == _stageIndex ? 4 : 1,
@@ -684,12 +684,12 @@ public partial class CharacterSelectView : Control
                 }
             }
             Color border = owners.Count == 0
-                ? new Color(0.3f, 0.32f, 0.4f)
+                ? UiPalette.PanelBorder
                 : owners.Select(PlayerPalette.Of)
                     .Aggregate(new Color(0, 0, 0, 0), (acc, c) => acc + c / owners.Count);
             _gridCells[cell].AddThemeStyleboxOverride("panel", new StyleBoxFlat
             {
-                BgColor = owners.Count == 0 ? new Color(0.11f, 0.11f, 0.15f) : new Color(0.15f, 0.15f, 0.2f),
+                BgColor = owners.Count == 0 ? UiPalette.CardBg : new Color(0.15f, 0.15f, 0.2f),
                 BorderColor = border with { A = 1f },
                 BorderWidthTop = owners.Count == 0 ? 1 : 3,
                 BorderWidthBottom = owners.Count == 0 ? 1 : 3,
@@ -713,7 +713,7 @@ public partial class CharacterSelectView : Control
         bool off = p.Mode == PaneMode.Off;
         p.Root.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
-            BgColor = off ? new Color(0.09f, 0.09f, 0.12f) : new Color(0.13f, 0.13f, 0.17f),
+            BgColor = off ? UiPalette.Background : UiPalette.PanelBg,
             BorderColor = off ? new Color(0.22f, 0.24f, 0.3f) : color,
             BorderWidthTop = 2, BorderWidthBottom = 2, BorderWidthLeft = 2, BorderWidthRight = 2,
             CornerRadiusTopLeft = 8, CornerRadiusTopRight = 8,

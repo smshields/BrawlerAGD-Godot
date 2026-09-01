@@ -29,7 +29,7 @@ public partial class PauseMenuView : CanvasLayer
 
         var dim = new ColorRect
         {
-            Color = new Color(0.02f, 0.02f, 0.04f, 0.6f),
+            Color = UiPalette.OverlayDim,
             AnchorRight = 1f,
             AnchorBottom = 1f,
         };
@@ -62,7 +62,7 @@ public partial class PauseMenuView : CanvasLayer
         {
             Text = "ESC resume · Q quit to menu",
             HorizontalAlignment = HorizontalAlignment.Center,
-            Modulate = new Color(0.55f, 0.6f, 0.68f),
+            Modulate = UiPalette.Hint,
         };
         hint.AddThemeFontSizeOverride("font_size", 13);
         box.AddChild(hint);

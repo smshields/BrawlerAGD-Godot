@@ -67,7 +67,7 @@ public partial class GameBuilderView : Control
             var empty = new Label
             {
                 Text = "no games yet — NEW GAME to start one",
-                Modulate = new Color(0.55f, 0.6f, 0.68f),
+                Modulate = UiPalette.Hint,
                 AutowrapMode = TextServer.AutowrapMode.WordSmart,
             };
             empty.AddThemeFontSizeOverride("font_size", 13);
@@ -256,7 +256,7 @@ public partial class GameBuilderView : Control
         {
             return;
         }
-        var section = new Label { Text = heading, Modulate = new Color(0.65f, 0.7f, 0.78f) };
+        var section = new Label { Text = heading, Modulate = UiPalette.Heading };
         section.AddThemeFontSizeOverride("font_size", 14);
         _sourceList.AddChild(section);
         foreach (string file in files)
@@ -298,7 +298,7 @@ public partial class GameBuilderView : Control
             var hint = new Label
             {
                 Text = "pick a game above to see its characters and stage",
-                Modulate = new Color(0.55f, 0.6f, 0.68f),
+                Modulate = UiPalette.Hint,
                 AutowrapMode = TextServer.AutowrapMode.WordSmart,
             };
             hint.AddThemeFontSizeOverride("font_size", 13);
@@ -418,7 +418,7 @@ public partial class GameBuilderView : Control
             });
             var text = new Label { Text = MoveChipText(move) };
             text.AddThemeFontSizeOverride("font_size", 10);
-            text.Modulate = new Color(0.65f, 0.7f, 0.78f);
+            text.Modulate = UiPalette.Heading;
             chip.AddChild(text);
             chips.AddChild(chip);
         }
@@ -454,7 +454,7 @@ public partial class GameBuilderView : Control
                 + $"{stage.Params.Get(StageParams.VisibleHalfHeight) * 2f:F0} UNITS",
         };
         info.AddThemeFontSizeOverride("font_size", 10);
-        info.Modulate = new Color(0.65f, 0.7f, 0.78f);
+        info.Modulate = UiPalette.Heading;
         mid.AddChild(info);
 
         row.AddChild(ActionButton(action, actionEnabled));
@@ -481,8 +481,8 @@ public partial class GameBuilderView : Control
         var panel = new PanelContainer();
         panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
         {
-            BgColor = new Color(0.13f, 0.13f, 0.17f),
-            BorderColor = new Color(0.3f, 0.32f, 0.4f),
+            BgColor = UiPalette.PanelBg,
+            BorderColor = UiPalette.PanelBorder,
             BorderWidthTop = 1, BorderWidthBottom = 1, BorderWidthLeft = 1, BorderWidthRight = 1,
             CornerRadiusTopLeft = 8, CornerRadiusTopRight = 8,
             CornerRadiusBottomLeft = 8, CornerRadiusBottomRight = 8,
@@ -663,7 +663,7 @@ public partial class GameBuilderView : Control
 
     private static Label Heading(string text)
     {
-        var label = new Label { Text = text, Modulate = new Color(0.65f, 0.7f, 0.78f) };
+        var label = new Label { Text = text, Modulate = UiPalette.Heading };
         label.AddThemeFontSizeOverride("font_size", 15);
         return label;
     }

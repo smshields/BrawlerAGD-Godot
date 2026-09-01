@@ -237,7 +237,7 @@ public partial class HudView : CanvasLayer
             // Main panel: solid background, outline in the identity color.
             _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
             {
-                BgColor = new Color(0.13f, 0.13f, 0.17f),
+                BgColor = UiPalette.PanelBg,
                 BorderColor = _color,
                 BorderWidthTop = 2, BorderWidthBottom = 2, BorderWidthLeft = 2, BorderWidthRight = 2,
                 CornerRadiusTopLeft = 8, CornerRadiusTopRight = 8,
@@ -325,7 +325,7 @@ public partial class HudView : CanvasLayer
             var debugBg = new PanelContainer();
             debugBg.AddThemeStyleboxOverride("panel", new StyleBoxFlat
             {
-                BgColor = new Color(0.09f, 0.09f, 0.12f, 0.55f),
+                BgColor = new Color(UiPalette.Background, 0.55f),
                 CornerRadiusTopLeft = 8, CornerRadiusTopRight = 8,
                 CornerRadiusBottomLeft = 8, CornerRadiusBottomRight = 8,
             });
@@ -547,7 +547,7 @@ public partial class HudView : CanvasLayer
             _move.Text = move;
             _move.HorizontalAlignment = HorizontalAlignment.Center;
             _move.AddThemeFontSizeOverride("font_size", 10);
-            _move.Modulate = new Color(0.65f, 0.7f, 0.78f);
+            _move.Modulate = UiPalette.Heading;
             _move.Position = position + new Vector2(0f, 19f);
             _move.CustomMinimumSize = new Vector2(40f, 12f);
             parent.AddChild(_move);
@@ -562,7 +562,7 @@ public partial class HudView : CanvasLayer
             _flash = System.Math.Max(0, _flash - 1);
             bool lit = _flash > 0;
             _style.BgColor = lit ? new Color(1f, 1f, 1f, 0.45f) : new Color(1f, 1f, 1f, 0.10f);
-            _key.Modulate = lit ? new Color(0.09f, 0.09f, 0.12f) : new Color(0.9f, 0.92f, 0.98f);
+            _key.Modulate = lit ? UiPalette.Background : new Color(0.9f, 0.92f, 0.98f);
         }
     }
 }

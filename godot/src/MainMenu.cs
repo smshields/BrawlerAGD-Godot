@@ -37,7 +37,7 @@ public partial class MainMenu : Control
         {
             Text = "automated brawler game designer — godot edition",
             HorizontalAlignment = HorizontalAlignment.Center,
-            Modulate = new Color(0.65f, 0.7f, 0.78f),
+            Modulate = UiPalette.Heading,
         };
         subtitle.AddThemeFontSizeOverride("font_size", 15);
         box.AddChild(subtitle);
@@ -67,7 +67,7 @@ public partial class MainMenu : Control
             Text = "P1: WASD move · SPACE jump · I/J/K/U/L attacks        P2: gamepad\n" +
                    "gamepad: stick/dpad move · B jump · L1/X/A/Y/R1 attacks",
             HorizontalAlignment = HorizontalAlignment.Center,
-            Modulate = new Color(0.55f, 0.6f, 0.68f),
+            Modulate = UiPalette.Hint,
             AnchorTop = 1f, AnchorBottom = 1f, AnchorRight = 1f,
             OffsetTop = -64f,
         };
@@ -123,7 +123,7 @@ public partial class MainMenu : Control
         AddChild(overlay);
         var dim = new ColorRect
         {
-            Color = new Color(0.02f, 0.02f, 0.04f, 0.6f),
+            Color = UiPalette.OverlayDim,
             AnchorRight = 1f,
             AnchorBottom = 1f,
         };
@@ -161,7 +161,7 @@ public partial class MainMenu : Control
             var empty = new Label
             {
                 Text = "no favorites yet — ADD TO GAMES from the EVOLVE screen",
-                Modulate = new Color(0.55f, 0.6f, 0.68f),
+                Modulate = UiPalette.Hint,
             };
             empty.AddThemeFontSizeOverride("font_size", 13);
             list.AddChild(empty);
@@ -216,7 +216,7 @@ public partial class MainMenu : Control
         {
             return 0;
         }
-        var section = new Label { Text = heading, Modulate = new Color(0.65f, 0.7f, 0.78f) };
+        var section = new Label { Text = heading, Modulate = UiPalette.Heading };
         section.AddThemeFontSizeOverride("font_size", 14);
         list.AddChild(section);
         foreach (string file in files)
