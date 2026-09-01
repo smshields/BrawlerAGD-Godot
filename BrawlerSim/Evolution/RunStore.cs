@@ -16,19 +16,29 @@ namespace BrawlerSim.Evolution;
 /// </summary>
 public static class RunStore
 {
+    // The layout's file names — public so the app layer (ManageView/EvolveView/
+    // ArenaView) addresses run artifacts through these instead of re-spelling them.
+    public const string ManifestFileName = "run.json";
+    public const string PopulationDirName = "population";
+    public const string BestGameFileName = "best.json";
+    public const string BestTraceFileName = "best.trace.json";
+
+    /// <summary>population/game_NNN.json — index-addressed population member.</summary>
+    public static string PopulationFileName(int index) => $"game_{index:D3}.json";
+
     private static readonly JsonSerializerOptions Options = JsonOptions.Document;
 
     public static void SaveCheckpoint(string runDir, EvolutionEngine engine, EvolutionConfig config, List<GenerationStats> history)
     {
         Directory.CreateDirectory(runDir);
-        string populationDir = Path.Combine(runDir, "population");
+        string populationDir = Path.Combine(runDir, PopulationDirName);
         Directory.CreateDirectory(populationDir);
 
         for (int i = 0; i < engine.Population.Count; i++)
         {
             GameGenomeJson.Save(
                 new GameRecord($"game_{i:D3}", $"evolved:gen{engine.GenerationsCompleted}/idx{i}", engine.Population[i]),
-                Path.Combine(populationDir, $"game_{i:D3}.json"));
+                Path.Combine(populationDir, PopulationFileName(i)));
         }
 
         (ulong state, ulong inc) = engine.RngSnapshot;
@@ -82,7 +92,7 @@ public static class RunStore
                 BestIndex = s.BestIndex,
             }).ToList(),
         };
-        File.WriteAllText(Path.Combine(runDir, "run.json"), JsonSerializer.Serialize(manifest, Options));
+        File.WriteAllText(Path.Combine(runDir, ManifestFileName), JsonSerializer.Serialize(manifest, Options));
     }
 
     private static GenerationConfig WithSelectors(GenerationConfig generation,
@@ -104,8 +114,8 @@ public static class RunStore
     {
         GameGenomeJson.Save(
             new GameRecord("best", $"evolved:gen{stats.Generation}/idx{stats.BestIndex}/fitness{stats.TopFitness:F2}", best),
-            Path.Combine(runDir, "best.json"));
-        InputTraceJson.Save(trace, Path.Combine(runDir, "best.trace.json"));
+            Path.Combine(runDir, BestGameFileName));
+        InputTraceJson.Save(trace, Path.Combine(runDir, BestTraceFileName));
     }
 
     /// <summary>Resumes a checkpoint. spriteSelector/themeSelector re-attach sprite
@@ -116,7 +126,7 @@ public static class RunStore
         string runDir, Sprites.SpriteSelector? spriteSelector = null,
         Sprites.StageThemeSelector? themeSelector = null)
     {
-        string manifestPath = Path.Combine(runDir, "run.json");
+        string manifestPath = Path.Combine(runDir, ManifestFileName);
         RunManifest manifest = JsonSerializer.Deserialize<RunManifest>(File.ReadAllText(manifestPath), Options)
             ?? throw new JsonException($"Could not parse {manifestPath}.");
 
@@ -156,7 +166,7 @@ public static class RunStore
         for (int i = 0; i < manifest.PopulationSize; i++)
         {
             population.Add(GameGenomeJson.Load(
-                Path.Combine(runDir, "population", $"game_{i:D3}.json"), config.Generation).Genome);
+                Path.Combine(runDir, PopulationDirName, PopulationFileName(i)), config.Generation).Genome);
         }
 
         var history = (manifest.Stats ?? new List<GenerationStatsDoc>())

@@ -24,9 +24,5 @@ internal static class Bench
     }
 
     private static MatchResult RunOne(BrawlerSim.Genome.GameGenome g, ulong seed) =>
-        MatchRunner.Run(g, new IInputSource[]
-        {
-            AgentConfig.Default.CreateSource(new Pcg32(seed, 0)),
-            AgentConfig.Default.CreateSource(new Pcg32(seed, 1)),
-        });
+        MatchRunner.Run(g, AgentConfig.Default.CreateSources(seed, players: 2));
 }

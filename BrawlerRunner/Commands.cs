@@ -56,20 +56,13 @@ internal static class Commands
         float targetSeconds = GetFloat(opts, "target-seconds", 45f);
         ulong seed = (ulong)GetInt(opts, "seed", 1);
         AgentConfig agent = ParseAgent(opts);
-        var match = MatchConfig.Default with
-        {
-            MaxMatchSeconds = maxSeconds,
-            MaxStunSeconds = GetFloat(opts, "max-stun", float.PositiveInfinity),
-        };
+        MatchConfig match = BuildMatchConfig(opts);
         Console.WriteLine("game,config,reps,mean,std,min,max,drawRate");
         foreach (string path in games)
         {
             GameRecord record = GameGenomeJson.Load(path);
             int players = record.Genome.Characters.Count;
-            IFitnessFunction fitness = FitnessRegistry.Create(
-                opts.GetValueOrDefault("fitness"), targetSeconds, maxSeconds,
-                opts.ContainsKey("collision-scalar") ? GetFloat(opts, "collision-scalar", 0f) : null,
-                players);
+            IFitnessFunction fitness = ResolveFitness(opts, players);
             string config = $"r{rounds}-{(median ? "med" : "mean")}-{maxSeconds:F0}s-t{targetSeconds:F0}-{fitness.Name}"
                 + (opts.ContainsKey("collision-scalar")
                     ? FormattableString.Invariant($"-cs{GetFloat(opts, "collision-scalar", 0f):0.##}")
@@ -137,16 +130,11 @@ internal static class Commands
                 MutationRate = GetFloat(opts, "mutation", 0.4f),
                 Agent = ParseAgent(opts),
                 TargetGameLengthSeconds = GetFloat(opts, "target-seconds", 45f),
-                Match = MatchConfig.Default with
-                {
-                    MaxMatchSeconds = GetFloat(opts, "max-seconds", 60f),
-                    MaxStunSeconds = GetFloat(opts, "max-stun", float.PositiveInfinity),
-                },
+                Match = BuildMatchConfig(opts),
                 DiversityWeight = GetFloat(opts, "diversity-weight", 0f),
                 // Absent --fitness = auto: standard-v5 at 2 players, ffa-v2 at 3/4 (2026-09-01).
                 FitnessName = opts.GetValueOrDefault("fitness"),
-                FitnessCollisionScalar = opts.ContainsKey("collision-scalar")
-                    ? GetFloat(opts, "collision-scalar", 0f) : null,
+                FitnessCollisionScalar = CollisionScalar(opts),
                 // Sprite selection (2026-08-22) + stage tile themes (M4d,
                 // 2026-09-01): on whenever the libraries are found — cosmetic,
                 // RNG-free, fitness-blind; --no-sprites turns both off.
@@ -194,18 +182,9 @@ internal static class Commands
         ulong seed = (ulong)GetInt(opts, "seed", 7);
         int rounds = GetInt(opts, "rounds", 5);
         AgentConfig agent = ParseAgent(opts);
-        float maxSeconds = GetFloat(opts, "max-seconds", 60f);
-        var matchConfig = MatchConfig.Default with
-        {
-            MaxMatchSeconds = maxSeconds,
-            MaxStunSeconds = GetFloat(opts, "max-stun", float.PositiveInfinity),
-        };
+        MatchConfig matchConfig = BuildMatchConfig(opts);
         int players = record.Genome.Characters.Count;
-        IFitnessFunction fitness = FitnessRegistry.Create(
-            opts.GetValueOrDefault("fitness"),
-            GetFloat(opts, "target-seconds", 45f), maxSeconds,
-            opts.ContainsKey("collision-scalar") ? GetFloat(opts, "collision-scalar", 0f) : null,
-            players);
+        IFitnessFunction fitness = ResolveFitness(opts, players);
         bool breakdown = opts.ContainsKey("breakdown");
 
         Console.WriteLine(
@@ -396,15 +375,31 @@ internal static class Commands
         return slug.Length > 0 ? slug : "game";
     }
 
-    private static IInputSource[] AiSources(ulong seed, AgentConfig agent, int players = 2)
-    {
-        var sources = new IInputSource[players];
-        for (int p = 0; p < players; p++)
+    private static IInputSource[] AiSources(ulong seed, AgentConfig agent, int players = 2) =>
+        agent.CreateSources(seed, players);
+
+    /// <summary>The evaluation MatchConfig shared by evolve/evaluate/noise:
+    /// --max-seconds (default 60) and --max-stun (default uncapped).</summary>
+    private static MatchConfig BuildMatchConfig(Dictionary<string, string> opts) =>
+        MatchConfig.Default with
         {
-            sources[p] = agent.CreateSource(new Pcg32(seed, (ulong)p));
-        }
-        return sources;
-    }
+            MaxMatchSeconds = GetFloat(opts, "max-seconds", 60f),
+            MaxStunSeconds = GetFloat(opts, "max-stun", float.PositiveInfinity),
+        };
+
+    /// <summary>--collision-scalar when present, else null = the registry default.</summary>
+    private static float? CollisionScalar(Dictionary<string, string> opts) =>
+        opts.ContainsKey("collision-scalar") ? GetFloat(opts, "collision-scalar", 0f) : null;
+
+    /// <summary>The fitness resolution shared by evaluate/noise: --fitness (absent =
+    /// auto by player count), --target-seconds/--max-seconds, --collision-scalar.</summary>
+    private static IFitnessFunction ResolveFitness(Dictionary<string, string> opts, int players) =>
+        FitnessRegistry.Create(
+            opts.GetValueOrDefault("fitness"),
+            GetFloat(opts, "target-seconds", 45f),
+            GetFloat(opts, "max-seconds", 60f),
+            CollisionScalar(opts),
+            players);
 
     private static AgentConfig ParseAgent(Dictionary<string, string> opts) => new()
     {

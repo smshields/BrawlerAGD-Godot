@@ -46,4 +46,20 @@ public sealed record AgentConfig
         AgentKind.DecisionTree => new DecisionTreeAgent(rng),
         _ => new UtilityAgent(rng, this),
     };
+
+    /// <summary>
+    /// THE seed → per-player-stream mapping: player p draws from Pcg32(seed, p).
+    /// Part of the reproducibility contract — every AI match (evolution, CLI
+    /// evaluate/bench, rendered autoplay) derives its sources here, so the mapping
+    /// can never drift between the headless and rendered paths.
+    /// </summary>
+    public IInputSource[] CreateSources(ulong seed, int players)
+    {
+        var sources = new IInputSource[players];
+        for (int p = 0; p < players; p++)
+        {
+            sources[p] = CreateSource(new Pcg32(seed, (ulong)p));
+        }
+        return sources;
+    }
 }
