@@ -654,17 +654,11 @@ public partial class CharacterSelectView : Control
 
         for (int i = 0; i < _stageCards.Count; i++)
         {
-            _stageCards[i].AddThemeStyleboxOverride("panel", new StyleBoxFlat
-            {
-                BgColor = UiPalette.CardBg,
-                BorderColor = i == _stageIndex ? Colors.White : UiPalette.PanelBorder,
-                BorderWidthTop = i == _stageIndex ? 4 : 1,
-                BorderWidthBottom = i == _stageIndex ? 4 : 1,
-                BorderWidthLeft = i == _stageIndex ? 4 : 1,
-                BorderWidthRight = i == _stageIndex ? 4 : 1,
-                ContentMarginLeft = 4f, ContentMarginRight = 4f,
-                ContentMarginTop = 4f, ContentMarginBottom = 4f,
-            });
+            _stageCards[i].AddThemeStyleboxOverride("panel", UiWidgets.PanelStyle(
+                UiPalette.CardBg,
+                border: i == _stageIndex ? Colors.White : UiPalette.PanelBorder,
+                borderWidth: i == _stageIndex ? 4 : 1,
+                marginX: 4f, marginY: 4f));
         }
         if (_stageIndex >= 0)
         {
@@ -687,17 +681,11 @@ public partial class CharacterSelectView : Control
                 ? UiPalette.PanelBorder
                 : owners.Select(PlayerPalette.Of)
                     .Aggregate(new Color(0, 0, 0, 0), (acc, c) => acc + c / owners.Count);
-            _gridCells[cell].AddThemeStyleboxOverride("panel", new StyleBoxFlat
-            {
-                BgColor = owners.Count == 0 ? UiPalette.CardBg : new Color(0.15f, 0.15f, 0.2f),
-                BorderColor = border with { A = 1f },
-                BorderWidthTop = owners.Count == 0 ? 1 : 3,
-                BorderWidthBottom = owners.Count == 0 ? 1 : 3,
-                BorderWidthLeft = owners.Count == 0 ? 1 : 3,
-                BorderWidthRight = owners.Count == 0 ? 1 : 3,
-                ContentMarginLeft = 4f, ContentMarginRight = 4f,
-                ContentMarginTop = 4f, ContentMarginBottom = 4f,
-            });
+            _gridCells[cell].AddThemeStyleboxOverride("panel", UiWidgets.PanelStyle(
+                owners.Count == 0 ? UiPalette.CardBg : new Color(0.15f, 0.15f, 0.2f),
+                border: border with { A = 1f },
+                borderWidth: owners.Count == 0 ? 1 : 3,
+                marginX: 4f, marginY: 4f));
         }
 
         for (int i = 0; i < PaneCount; i++)
@@ -711,21 +699,12 @@ public partial class CharacterSelectView : Control
         Pane p = _panes[index];
         Color color = PlayerPalette.Of(index);
         bool off = p.Mode == PaneMode.Off;
-        p.Root.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-        {
-            BgColor = off ? UiPalette.Background : UiPalette.PanelBg,
-            BorderColor = off ? new Color(0.22f, 0.24f, 0.3f) : color,
-            BorderWidthTop = 2, BorderWidthBottom = 2, BorderWidthLeft = 2, BorderWidthRight = 2,
-            CornerRadiusTopLeft = 8, CornerRadiusTopRight = 8,
-            CornerRadiusBottomLeft = 8, CornerRadiusBottomRight = 8,
-            ContentMarginLeft = 10f, ContentMarginRight = 10f,
-            ContentMarginTop = 8f, ContentMarginBottom = 8f,
-        });
+        p.Root.AddThemeStyleboxOverride("panel", UiWidgets.PanelStyle(
+            off ? UiPalette.Background : UiPalette.PanelBg,
+            border: off ? new Color(0.22f, 0.24f, 0.3f) : color,
+            borderWidth: 2, cornerRadius: 8, marginX: 10f, marginY: 8f));
 
-        foreach (Node child in p.Body.GetChildren())
-        {
-            child.QueueFree();
-        }
+        UiWidgets.ClearChildren(p.Body);
 
         if (off)
         {

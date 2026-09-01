@@ -58,13 +58,8 @@ public partial class PauseMenuView : CanvasLayer
         AddButton(box, "SETTINGS", OpenSettings);
         AddButton(box, "QUIT TO MENU", () => QuitRequested?.Invoke());
 
-        var hint = new Label
-        {
-            Text = "ESC resume · Q quit to menu",
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Modulate = UiPalette.Hint,
-        };
-        hint.AddThemeFontSizeOverride("font_size", 13);
+        Label hint = UiWidgets.Hint("ESC resume · Q quit to menu");
+        hint.HorizontalAlignment = HorizontalAlignment.Center;
         box.AddChild(hint);
     }
 

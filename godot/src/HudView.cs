@@ -235,14 +235,8 @@ public partial class HudView : CanvasLayer
             hud.AddChild(_root);
 
             // Main panel: solid background, outline in the identity color.
-            _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-            {
-                BgColor = UiPalette.PanelBg,
-                BorderColor = _color,
-                BorderWidthTop = 2, BorderWidthBottom = 2, BorderWidthLeft = 2, BorderWidthRight = 2,
-                CornerRadiusTopLeft = 8, CornerRadiusTopRight = 8,
-                CornerRadiusBottomLeft = 8, CornerRadiusBottomRight = 8,
-            });
+            _panel.AddThemeStyleboxOverride("panel", UiWidgets.PanelStyle(
+                UiPalette.PanelBg, border: _color, borderWidth: 2, cornerRadius: 8));
             _panel.AnchorLeft = 0f;
             _panel.AnchorRight = 1f;
             _panel.AnchorTop = 1f;
@@ -323,12 +317,8 @@ public partial class HudView : CanvasLayer
             _root.AddChild(_debug);
 
             var debugBg = new PanelContainer();
-            debugBg.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-            {
-                BgColor = new Color(UiPalette.Background, 0.55f),
-                CornerRadiusTopLeft = 8, CornerRadiusTopRight = 8,
-                CornerRadiusBottomLeft = 8, CornerRadiusBottomRight = 8,
-            });
+            debugBg.AddThemeStyleboxOverride("panel", UiWidgets.PanelStyle(
+                new Color(UiPalette.Background, 0.55f), cornerRadius: 8));
             debugBg.AnchorRight = 1f;
             debugBg.AnchorBottom = 1f;
             _debug.AddChild(debugBg);

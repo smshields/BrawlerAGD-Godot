@@ -56,21 +56,13 @@ public partial class GameBuilderView : Control
 
     private void RefreshLibrary()
     {
-        foreach (Node child in _libraryList.GetChildren())
-        {
-            child.QueueFree();
-        }
+        UiWidgets.ClearChildren(_libraryList);
         string[] files = System.IO.Directory.GetFiles(AppPaths.GamesRoot(), "*.json");
         System.Array.Sort(files);
         if (files.Length == 0)
         {
-            var empty = new Label
-            {
-                Text = "no games yet — NEW GAME to start one",
-                Modulate = UiPalette.Hint,
-                AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            };
-            empty.AddThemeFontSizeOverride("font_size", 13);
+            Label empty = UiWidgets.Hint("no games yet — NEW GAME to start one");
+            empty.AutowrapMode = TextServer.AutowrapMode.WordSmart;
             _libraryList.AddChild(empty);
         }
         foreach (string file in files)
@@ -176,14 +168,8 @@ public partial class GameBuilderView : Control
             $"CHARACTERS {_game?.Characters.Count ?? 0}/{BuiltGame.RequiredCharacters}";
         _stageHeading.Text = $"STAGES {_game?.Stages.Count ?? 0}/{BuiltGame.RequiredStages}";
 
-        foreach (Node child in _rosterCharacters.GetChildren())
-        {
-            child.QueueFree();
-        }
-        foreach (Node child in _rosterStages.GetChildren())
-        {
-            child.QueueFree();
-        }
+        UiWidgets.ClearChildren(_rosterCharacters);
+        UiWidgets.ClearChildren(_rosterStages);
         if (_game is null)
         {
             return;
@@ -236,10 +222,7 @@ public partial class GameBuilderView : Control
 
     private void RefreshSourceList()
     {
-        foreach (Node child in _sourceList.GetChildren())
-        {
-            child.QueueFree();
-        }
+        UiWidgets.ClearChildren(_sourceList);
         AddSourceSection("FAVORITES", AppPaths.FavoritesRoot());
         AddSourceSection("DEMO GAMES", AppPaths.DemoRoot());
     }
@@ -289,19 +272,11 @@ public partial class GameBuilderView : Control
 
     private void RefreshSourceElements()
     {
-        foreach (Node child in _sourceElements.GetChildren())
-        {
-            child.QueueFree();
-        }
+        UiWidgets.ClearChildren(_sourceElements);
         if (_source is null)
         {
-            var hint = new Label
-            {
-                Text = "pick a game above to see its characters and stage",
-                Modulate = UiPalette.Hint,
-                AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            };
-            hint.AddThemeFontSizeOverride("font_size", 13);
+            Label hint = UiWidgets.Hint("pick a game above to see its characters and stage");
+            hint.AutowrapMode = TextServer.AutowrapMode.WordSmart;
             _sourceElements.AddChild(hint);
             return;
         }
@@ -479,16 +454,9 @@ public partial class GameBuilderView : Control
     private static PanelContainer CardPanel()
     {
         var panel = new PanelContainer();
-        panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-        {
-            BgColor = UiPalette.PanelBg,
-            BorderColor = UiPalette.PanelBorder,
-            BorderWidthTop = 1, BorderWidthBottom = 1, BorderWidthLeft = 1, BorderWidthRight = 1,
-            CornerRadiusTopLeft = 8, CornerRadiusTopRight = 8,
-            CornerRadiusBottomLeft = 8, CornerRadiusBottomRight = 8,
-            ContentMarginLeft = 8f, ContentMarginRight = 8f,
-            ContentMarginTop = 6f, ContentMarginBottom = 6f,
-        });
+        panel.AddThemeStyleboxOverride("panel", UiWidgets.PanelStyle(
+            UiPalette.PanelBg, border: UiPalette.PanelBorder,
+            borderWidth: 1, cornerRadius: 8, marginX: 8f, marginY: 6f));
         return panel;
     }
 
@@ -547,14 +515,8 @@ public partial class GameBuilderView : Control
         title.AddThemeFontSizeOverride("font_size", 34);
         left.AddChild(title);
         left.AddChild(Heading("GAMES"));
-        var libraryScroll = new ScrollContainer
-        {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        _libraryList = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _libraryList.AddThemeConstantOverride("separation", 4);
-        libraryScroll.AddChild(_libraryList);
+        ScrollContainer libraryScroll = UiWidgets.ScrollList(out _libraryList, separation: 4);
+        libraryScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
         left.AddChild(libraryScroll);
         var newButton = new Button { Text = "NEW GAME" };
         newButton.Pressed += NewGame;
@@ -587,26 +549,14 @@ public partial class GameBuilderView : Control
         mid.AddChild(_gameName);
         _charHeading = Heading("CHARACTERS 0/8");
         mid.AddChild(_charHeading);
-        var charScroll = new ScrollContainer
-        {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-            SizeFlagsStretchRatio = 2f,
-        };
-        _rosterCharacters = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _rosterCharacters.AddThemeConstantOverride("separation", 6);
-        charScroll.AddChild(_rosterCharacters);
+        ScrollContainer charScroll = UiWidgets.ScrollList(out _rosterCharacters, separation: 6);
+        charScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
+        charScroll.SizeFlagsStretchRatio = 2f;
         mid.AddChild(charScroll);
         _stageHeading = Heading("STAGES 0/4");
         mid.AddChild(_stageHeading);
-        var stageScroll = new ScrollContainer
-        {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        _rosterStages = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _rosterStages.AddThemeConstantOverride("separation", 6);
-        stageScroll.AddChild(_rosterStages);
+        ScrollContainer stageScroll = UiWidgets.ScrollList(out _rosterStages, separation: 6);
+        stageScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
         mid.AddChild(stageScroll);
 
         // RIGHT — sources.
@@ -614,28 +564,16 @@ public partial class GameBuilderView : Control
         right.AddThemeConstantOverride("separation", 8);
         root.AddChild(right);
         right.AddChild(Heading("ADD FROM"));
-        var sourceScroll = new ScrollContainer
-        {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        _sourceList = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _sourceList.AddThemeConstantOverride("separation", 4);
-        sourceScroll.AddChild(_sourceList);
+        ScrollContainer sourceScroll = UiWidgets.ScrollList(out _sourceList, separation: 4);
+        sourceScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
         right.AddChild(sourceScroll);
         var advanced = new Button { Text = "ADVANCED: BROWSE FILES…" };
         advanced.Pressed += () => _sourceDialog.PopupCentered(new Vector2I(900, 600));
         right.AddChild(advanced);
         right.AddChild(Heading("ELEMENTS"));
-        var elementScroll = new ScrollContainer
-        {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-            SizeFlagsStretchRatio = 2f,
-        };
-        _sourceElements = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        _sourceElements.AddThemeConstantOverride("separation", 6);
-        elementScroll.AddChild(_sourceElements);
+        ScrollContainer elementScroll = UiWidgets.ScrollList(out _sourceElements, separation: 6);
+        elementScroll.SizeFlagsVertical = SizeFlags.ExpandFill;
+        elementScroll.SizeFlagsStretchRatio = 2f;
         right.AddChild(elementScroll);
         _status = new Label { Modulate = new Color(1f, 0.9f, 0.6f) };
         _status.AddThemeFontSizeOverride("font_size", 13);
@@ -663,8 +601,7 @@ public partial class GameBuilderView : Control
 
     private static Label Heading(string text)
     {
-        var label = new Label { Text = text, Modulate = UiPalette.Heading };
-        label.AddThemeFontSizeOverride("font_size", 15);
+        Label label = UiWidgets.Heading(text, 15);
         return label;
     }
 

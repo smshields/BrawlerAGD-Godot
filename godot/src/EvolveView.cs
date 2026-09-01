@@ -495,15 +495,9 @@ public partial class EvolveView : Control
 
     private ScrollContainer BuildAdvancedPanel()
     {
-        var scroll = new ScrollContainer
-        {
-            Visible = false,
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        var list = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        list.AddThemeConstantOverride("separation", 2);
-        scroll.AddChild(list);
+        ScrollContainer scroll = UiWidgets.ScrollList(out VBoxContainer list, separation: 2);
+        scroll.Visible = false;
+        scroll.SizeFlagsVertical = SizeFlags.ExpandFill;
 
         var heading = new Label { Text = "GENERATION RANGES — EDITS APPLY TO NEW RUNS AND ARE RECORDED IN RUN.JSON" };
         heading.AddThemeFontSizeOverride("font_size", 14);

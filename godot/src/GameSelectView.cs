@@ -36,14 +36,8 @@ public partial class GameSelectView : Control
         title.AddThemeFontSizeOverride("font_size", 34);
         root.AddChild(title);
 
-        var scroll = new ScrollContainer
-        {
-            SizeFlagsVertical = SizeFlags.ExpandFill,
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        var list = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        list.AddThemeConstantOverride("separation", 8);
-        scroll.AddChild(list);
+        ScrollContainer scroll = UiWidgets.ScrollList(out VBoxContainer list, separation: 8);
+        scroll.SizeFlagsVertical = SizeFlags.ExpandFill;
         root.AddChild(scroll);
 
         string[] files = System.IO.Directory.GetFiles(AppPaths.GamesRoot(), "*.json");
@@ -83,14 +77,10 @@ public partial class GameSelectView : Control
         }
         if (playable == 0)
         {
-            var empty = new Label
-            {
-                Text = "no complete games yet — assemble one in BUILD GAME "
-                    + "(8 characters + 4 stages)",
-                Modulate = UiPalette.Hint,
-                AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            };
-            empty.AddThemeFontSizeOverride("font_size", 14);
+            Label empty = UiWidgets.Hint(
+                    "no complete games yet — assemble one in BUILD GAME "
+                    + "(8 characters + 4 stages)", 14);
+            empty.AutowrapMode = TextServer.AutowrapMode.WordSmart;
             list.AddChild(empty);
         }
 

@@ -145,25 +145,14 @@ public partial class MainMenu : Control
         title.AddThemeFontSizeOverride("font_size", 24);
         box.AddChild(title);
 
-        var scroll = new ScrollContainer
-        {
-            CustomMinimumSize = new Vector2(480f, 380f),
-            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-        };
-        var list = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-        list.AddThemeConstantOverride("separation", 4);
-        scroll.AddChild(list);
+        ScrollContainer scroll = UiWidgets.ScrollList(out VBoxContainer list, separation: 4);
+        scroll.CustomMinimumSize = new Vector2(480f, 380f);
         box.AddChild(scroll);
 
         int favorites = AddGameSection(list, "FAVORITES", AppPaths.FavoritesRoot());
         if (favorites == 0)
         {
-            var empty = new Label
-            {
-                Text = "no favorites yet — ADD TO GAMES from the EVOLVE screen",
-                Modulate = UiPalette.Hint,
-            };
-            empty.AddThemeFontSizeOverride("font_size", 13);
+            Label empty = UiWidgets.Hint("no favorites yet — ADD TO GAMES from the EVOLVE screen");
             list.AddChild(empty);
         }
         AddGameSection(list, "DEMO GAMES", AppPaths.DemoRoot());

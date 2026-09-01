@@ -49,18 +49,12 @@ public partial class MatchPreview : Node2D
     {
         _record = null;
         _world = null;
-        foreach (Node child in GetChildren())
-        {
-            child.QueueFree();
-        }
+        UiWidgets.ClearChildren(this);
     }
 
     private void Rebuild()
     {
-        foreach (Node child in GetChildren())
-        {
-            child.QueueFree();
-        }
+        UiWidgets.ClearChildren(this);
         if (_record is null)
         {
             return;
