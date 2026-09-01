@@ -391,7 +391,7 @@ public partial class GameBuilderView : Control
                 ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
                 CustomMinimumSize = new Vector2(16f, 16f),
             });
-            var text = new Label { Text = MoveChipText(move) };
+            var text = new Label { Text = MoveLabels.Chip(move) };
             text.AddThemeFontSizeOverride("font_size", 10);
             text.Modulate = UiPalette.Heading;
             chip.AddChild(text);
@@ -439,17 +439,6 @@ public partial class GameBuilderView : Control
         }
         return panel;
     }
-
-    /// <summary>One-line move summary: type + the damage gene for attack-family
-    /// moves (defensive moves read by type alone).</summary>
-    private static string MoveChipText(MoveGenome move) => move.Type switch
-    {
-        MoveType.Attack => $"ATK {move.Params.Get(MoveParams.DamageFactor):F1}",
-        MoveType.Projectile => $"PROJ {move.Params.Get(ProjectileParams.DamageFactor):F1}",
-        MoveType.Shield => "SHLD",
-        MoveType.Dash => "DASH",
-        _ => move.Type.ToString().ToUpperInvariant(),
-    };
 
     private static PanelContainer CardPanel()
     {

@@ -33,9 +33,6 @@ public partial class HudView : CanvasLayer
     public static float ReservedBottomPixels() =>
         BottomMargin + PanelHeight + (AppSettings.DebugPanelEnabled ? 4f + DebugHeight : 0f);
 
-    private static readonly string[] KeyNamesKeyboard = { "I", "J", "K", "U", "L" };
-    private static readonly string[] KeyNamesPad = { "L1", "X", "A", "Y", "R1" };
-
     private SimWorld _world = null!;
     private Label _banner = null!;
     private Label _timer = null!;
@@ -128,56 +125,6 @@ public partial class HudView : CanvasLayer
             }
         }
         return $"{_world.Players[_world.LoserIndex].Name} HAS LOST THE GAME";
-    }
-
-    /// <summary>Human-readable state names (FEATURES.md §HUD #3) — machine enums
-    /// stay in the sim; the player reads verbs.</summary>
-    private static string StateName(SimPlayer player)
-    {
-        if (player.Eliminated)
-        {
-            return "ELIMINATED"; // out for good (2026-08-12, STOCK rule)
-        }
-        if (player.IsRespawning)
-        {
-            return $"RESPAWNING {player.RespawnBlackoutLeft / BrawlerSim.SimInfo.TicksPerSecond:F1}s";
-        }
-        if (player.State == PlayerState.Stun && player.StunFromShieldBreak)
-        {
-            return "SHIELD BROKEN";
-        }
-        return player.State switch
-        {
-            PlayerState.Idle => "READY",
-            PlayerState.Air => "AIRBORNE",
-            PlayerState.AirJumpsExhausted => "EXHAUSTED",
-            PlayerState.WarmUp => "WINDING UP",
-            PlayerState.Attack => "ATTACKING",
-            PlayerState.CoolDown => "RECOVERING",
-            PlayerState.Stun => "STUNNED",
-            PlayerState.Shield => "SHIELDING",
-            PlayerState.Dash => "DASHING",
-            PlayerState.Crouch => "CROUCHING",
-            _ => player.State.ToString().ToUpperInvariant(),
-        };
-    }
-
-    /// <summary>Shared move-name vocabulary (internal since 2026-08-17: the character
-    /// select's key→move view uses the same labels as the debug strip).</summary>
-    internal static string MoveAbbrev(CharacterGenome character, int moveIndex)
-    {
-        MoveType type = character.Moves[moveIndex].Type;
-        if (type == MoveType.Attack)
-        {
-            return $"ATK{moveIndex + 1}";
-        }
-        return type switch
-        {
-            MoveType.Shield => "SHLD",
-            MoveType.Dash => "DASH",
-            MoveType.Projectile => "PROJ",
-            _ => type.ToString().ToUpperInvariant(),
-        };
     }
 
     /// <summary>One player's quarter: main panel + debug strip + all animations.</summary>
@@ -340,8 +287,8 @@ public partial class HudView : CanvasLayer
 
             // Control layout: jump + the five action buttons, move names attached,
             // keycaps highlight on press (agent presses included).
-            string[] keys = index == 0 ? KeyNamesKeyboard : KeyNamesPad;
-            string jumpKey = index == 0 ? "SPC" : "B";
+            string[] keys = index == 0 ? ControlLabels.Keyboard : ControlLabels.Pad;
+            string jumpKey = index == 0 ? ControlLabels.KeyboardJump : ControlLabels.PadJump;
             _keys = new Keycap[keys.Length + 1];
             float x = 8f;
             _keys[0] = new Keycap(_debug, jumpKey, "JUMP", new Vector2(x, DebugHeight - 34f));
@@ -349,7 +296,7 @@ public partial class HudView : CanvasLayer
             for (int b = 0; b < keys.Length; b++)
             {
                 _keys[b + 1] = new Keycap(_debug, keys[b],
-                    MoveAbbrev(character, character.ButtonMoves[b]), new Vector2(x, DebugHeight - 34f));
+                    MoveLabels.Abbrev(character, character.ButtonMoves[b]), new Vector2(x, DebugHeight - 34f));
                 x += 52f;
             }
         }
@@ -436,10 +383,10 @@ public partial class HudView : CanvasLayer
             {
                 return;
             }
-            _state.Text = StateName(player);
+            _state.Text = StateVocabulary.Name(player);
             _state.Modulate = player.Eliminated || player.IsRespawning
                 ? new Color(0.8f, 0.8f, 0.85f)
-                : PlayerView.StateColor(player.State);
+                : StateVocabulary.Color(player.State);
 
             float fps = BrawlerSim.SimInfo.TicksPerSecond;
             _intangible.Sync(player.SpawnIntangible && _spawnPadSeconds > 0f

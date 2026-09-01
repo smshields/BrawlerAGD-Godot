@@ -358,8 +358,8 @@ public partial class EvolveView : Control
 
         _perButtonRow = new HBoxContainer { Visible = false };
         _perButtonRow.AddThemeConstantOverride("separation", 4);
-        // 2026-07-20 five buttons: U (pad Y) is the new slot 3; L (R1) stays LAST.
-        string[] buttonNames = { "I", "J", "K", "U", "L" };
+        // Slot-order invariant (L pinned last) documented on ControlLabels.
+        string[] buttonNames = ControlLabels.Keyboard;
         for (int b = 0; b < _buttonSlots.Length; b++)
         {
             var slot = new OptionButton { SizeFlagsHorizontal = SizeFlags.ExpandFill };

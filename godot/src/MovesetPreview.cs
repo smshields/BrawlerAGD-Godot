@@ -103,7 +103,7 @@ public partial class MovesetPreview : SubViewportContainer
                 : actionCaps is not null && row - 1 < actionCaps.Length ? actionCaps[row - 1] : "";
             string move = row == 0
                 ? "JUMP"
-                : HudView.MoveAbbrev(character, character.ButtonMoves[row - 1]);
+                : MoveLabels.Abbrev(character, character.ButtonMoves[row - 1]);
             var label = new Label
             {
                 Text = cap.Length > 0 ? $"{cap,-3} {move}" : move,

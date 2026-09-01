@@ -782,11 +782,9 @@ public partial class CharacterSelectView : Control
             // humans (keyboard vs the joined pad's layout); CPUs list moves only.
             bool pad = p.Device >= 0;
             preview.Setup(entry.Character, entry.DisplayName,
-                p.Mode == PaneMode.Human ? (pad ? "B" : "SPC") : null,
+                p.Mode == PaneMode.Human ? (pad ? ControlLabels.PadJump : ControlLabels.KeyboardJump) : null,
                 p.Mode == PaneMode.Human
-                    ? (pad
-                        ? new[] { "L1", "X", "A", "Y", "R1" }
-                        : new[] { "I", "J", "K", "U", "L" })
+                    ? (pad ? ControlLabels.Pad : ControlLabels.Keyboard)
                     : null);
             p.Body.AddChild(preview);
             var charName = new Label
