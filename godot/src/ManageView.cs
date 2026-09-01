@@ -113,7 +113,7 @@ public partial class ManageView : Control
         {
             MatchSession.Mode = mode == MatchMode.Replay ? MatchMode.AiVsAi : mode;
         }
-        GetTree().ChangeSceneToFile("res://scenes/arena.tscn");
+        GetTree().ChangeSceneToFile(Scenes.Arena);
     }
 
     private void ConfirmDelete()
@@ -174,7 +174,7 @@ public partial class ManageView : Control
         AddButton(buttons, "WATCH", () => Launch(MatchMode.Replay));
         AddButton(buttons, "DELETE…", ConfirmDelete);
         AddButton(buttons, "REFRESH", Refresh);
-        AddButton(buttons, "BACK", () => GetTree().ChangeSceneToFile("res://scenes/main_menu.tscn"));
+        AddButton(buttons, "BACK", () => GetTree().ChangeSceneToFile(Scenes.MainMenu));
 
         _confirm = new ConfirmationDialog { Title = "Delete" };
         _confirm.Confirmed += DeleteSelected;

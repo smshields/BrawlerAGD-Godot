@@ -46,7 +46,7 @@ public partial class GameBuilderView : Control
         RefreshRoster();
         RefreshSourceElements();
 
-        if (OS.GetEnvironment("BRAWLER_AUTOBUILD") == "1")
+        if (AutomationEnv.AutoBuild)
         {
             AutoBuildSample();
         }
@@ -492,7 +492,7 @@ public partial class GameBuilderView : Control
         _deleteButton.Pressed += () => _confirmDelete.PopupCentered();
         left.AddChild(_deleteButton);
         var back = new Button { Text = "BACK" };
-        back.Pressed += () => GetTree().ChangeSceneToFile("res://scenes/main_menu.tscn");
+        back.Pressed += () => GetTree().ChangeSceneToFile(Scenes.MainMenu);
         left.AddChild(back);
 
         // MIDDLE — the open game's roster.

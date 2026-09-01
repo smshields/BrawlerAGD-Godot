@@ -87,12 +87,12 @@ public partial class GameSelectView : Control
         }
 
         var back = new Button { Text = "BACK", CustomMinimumSize = new Vector2(0f, 44f) };
-        back.Pressed += () => GetTree().ChangeSceneToFile("res://scenes/main_menu.tscn");
+        back.Pressed += () => GetTree().ChangeSceneToFile(Scenes.MainMenu);
         root.AddChild(back);
 
         // Automation: BRAWLER_AUTOOPEN=1 opens the first complete game (with the
         // naming pass) so screenshots can reach the character select headlessly.
-        if (OS.GetEnvironment("BRAWLER_AUTOOPEN") == "1")
+        if (AutomationEnv.AutoOpen)
         {
             foreach ((string path, BuiltGame game) in games)
             {
@@ -126,6 +126,6 @@ public partial class GameSelectView : Control
         }
         BuiltGameSession.Game = game;
         BuiltGameSession.Path = path;
-        GetTree().ChangeSceneToFile("res://scenes/character_select.tscn");
+        GetTree().ChangeSceneToFile(Scenes.CharacterSelect);
     }
 }

@@ -74,7 +74,7 @@ public partial class EvolveView : Control
     {
         Theme = UiTheme.Buttons; // app-wide button styling (2026-08-17)
         BuildUi();
-        string auto = OS.GetEnvironment("BRAWLER_AUTOEVOLVE");
+        string auto = AutomationEnv.AutoEvolve;
         if (auto.Length > 0)
         {
             ApplyAutoConfig(auto);
@@ -167,8 +167,8 @@ public partial class EvolveView : Control
             }
         }
 
-        string shot = OS.GetEnvironment("BRAWLER_SHOT");
-        if (shot.Length > 0 && OS.GetEnvironment("BRAWLER_AUTOEVOLVE").Length > 0)
+        string shot = AutomationEnv.Shot;
+        if (shot.Length > 0 && AutomationEnv.AutoEvolve.Length > 0)
         {
             _ = CaptureAndQuit(shot);
         }
@@ -233,20 +233,14 @@ public partial class EvolveView : Control
         return name;
     }
 
-    private async Task CaptureAndQuit(string path)
-    {
-        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-        GetViewport().GetTexture().GetImage().SavePng(path);
-        GD.Print($"shot saved: {path}");
-        GetTree().Quit();
-    }
+    private Task CaptureAndQuit(string path) => Screenshot.CaptureAsync(this, path, quitWhenDone: true);
 
     private void WatchBest()
     {
         MatchSession.Game = GameGenomeJson.Load(System.IO.Path.Combine(_runDir, "best.json"));
         MatchSession.Mode = MatchMode.Replay;
         MatchSession.Trace = BrawlerSim.Replay.InputTraceJson.Load(System.IO.Path.Combine(_runDir, "best.trace.json"));
-        GetTree().ChangeSceneToFile("res://scenes/arena.tscn");
+        GetTree().ChangeSceneToFile(Scenes.Arena);
     }
 
     /// <summary>Collects composition mode + advanced range rows into the run's
@@ -395,7 +389,7 @@ public partial class EvolveView : Control
         _watchBest.Pressed += WatchBest;
         left.AddChild(_watchBest);
         var back = new Button { Text = "BACK" };
-        back.Pressed += () => GetTree().ChangeSceneToFile("res://scenes/main_menu.tscn");
+        back.Pressed += () => GetTree().ChangeSceneToFile(Scenes.MainMenu);
         left.AddChild(back);
 
         var right = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };

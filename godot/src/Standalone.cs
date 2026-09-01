@@ -55,7 +55,7 @@ public static class Standalone
     /// <summary>Where "back to the menu" goes: the packaged title screen in
     /// standalone mode, the dev main menu otherwise.</summary>
     public static string MenuScene() =>
-        Active ? "res://scenes/title.tscn" : "res://scenes/main_menu.tscn";
+        Active ? Scenes.Title : Scenes.MainMenu;
 
     /// <summary>First-run defaults for packaged games (called once from Boot):
     /// the research debug strip starts OFF for players; their pause menu can

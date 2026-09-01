@@ -100,7 +100,7 @@ public partial class CharacterSelectView : Control
 
         // Automation (screenshot verification): BRAWLER_AUTOSELECT="p1=0;cpu2=3;
         // cpu2level=9;stage=1;mode=timed;rename1=1" arranges a lobby on load.
-        string auto = OS.GetEnvironment("BRAWLER_AUTOSELECT");
+        string auto = AutomationEnv.AutoSelect;
         if (auto.Length > 0)
         {
             ApplyAutoSelect(auto);
@@ -400,7 +400,7 @@ public partial class CharacterSelectView : Control
         MatchSession.EndRule = _mode;
         MatchSession.TimedMatchSeconds = _minutes * 60f;
         MatchSession.Trace = null;
-        GetTree().ChangeSceneToFile("res://scenes/arena.tscn");
+        GetTree().ChangeSceneToFile(Scenes.Arena);
     }
 
     // ── UI construction ────────────────────────────────────────────────────────
@@ -415,7 +415,7 @@ public partial class CharacterSelectView : Control
         header.AddThemeConstantOverride("separation", 12);
         AddChild(header);
 
-        string backScene = Standalone.Active ? "res://scenes/title.tscn" : "res://scenes/game_select.tscn";
+        string backScene = Standalone.Active ? Scenes.Title : Scenes.GameSelect;
         Button back = HeaderButton("BACK");
         back.Pressed += () => GetTree().ChangeSceneToFile(backScene);
         Register(back, _ => GetTree().ChangeSceneToFile(backScene));

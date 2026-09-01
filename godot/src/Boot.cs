@@ -25,7 +25,7 @@ public partial class Boot : Node
         RegisterActions();
 
         // Fail-safe for automation: never leave a stray window running.
-        string quitAfter = OS.GetEnvironment("BRAWLER_QUIT_AFTER");
+        string quitAfter = AutomationEnv.QuitAfter;
         if (quitAfter.Length > 0)
         {
             GetTree().CreateTimer(double.Parse(quitAfter)).Timeout += () => GetTree().Quit(2);
@@ -48,32 +48,30 @@ public partial class Boot : Node
         // — the menu's TEST STANDALONE GAME button enters the packaged flow instead.
         // BRAWLER_TITLE still forces title-screen routing for automation.
         if (Standalone.HasEmbeddedGame
-            && (!OS.HasFeature("editor") || OS.GetEnvironment("BRAWLER_TITLE").Length > 0))
+            && (!OS.HasFeature("editor") || AutomationEnv.Title.Length > 0))
         {
             Standalone.ApplyFirstRunDefaults();
-            CallDeferred(nameof(GoToScene), "res://scenes/title.tscn");
+            CallDeferred(nameof(GoToScene), Scenes.Title);
         }
 
         // Scene navigation for automation: BRAWLER_SCENE="evolve"|"manage" jumps there.
-        string scene = OS.GetEnvironment("BRAWLER_SCENE");
+        string scene = AutomationEnv.Scene;
         if (scene.Length > 0)
         {
-            CallDeferred(nameof(GoToScene), $"res://scenes/{scene}.tscn");
+            CallDeferred(nameof(GoToScene), Scenes.ForName(scene));
         }
 
         // Screen capture support: BRAWLER_SHOT (without autoplay/autoevolve, which handle
         // their own captures) saves whatever scene is up after a second, then quits.
-        string shot = OS.GetEnvironment("BRAWLER_SHOT");
+        string shot = AutomationEnv.Shot;
         if (shot.Length > 0
-            && OS.GetEnvironment("BRAWLER_AUTOPLAY").Length == 0
-            && OS.GetEnvironment("BRAWLER_AUTOEVOLVE").Length == 0)
+            && AutomationEnv.Autoplay.Length == 0
+            && AutomationEnv.AutoEvolve.Length == 0)
         {
-            GetTree().CreateTimer(1.0).Timeout += () =>
-            {
-                GetViewport().GetTexture().GetImage().SavePng(shot);
-                GD.Print($"shot saved: {shot}");
-                GetTree().Quit();
-            };
+            // Shared capture helper (approved automation-only fix): this path now
+            // awaits FramePostDraw like the arena/evolve captures do.
+            GetTree().CreateTimer(1.0).Timeout +=
+                () => _ = Screenshot.CaptureAsync(this, shot, quitWhenDone: true);
         }
     }
 
@@ -187,13 +185,13 @@ public partial class Boot : Node
 
     private void HandleAutoplay()
     {
-        string autoplay = OS.GetEnvironment("BRAWLER_AUTOPLAY");
+        string autoplay = AutomationEnv.Autoplay;
         if (autoplay.Length == 0)
         {
             return;
         }
 
-        string gamePath = OS.GetEnvironment("BRAWLER_GAME");
+        string gamePath = AutomationEnv.Game;
         MatchSession.Game = gamePath.Length > 0
             ? GameGenomeJson.Load(gamePath)
             : new GameRecord("generated", "autoplay",
@@ -208,12 +206,12 @@ public partial class Boot : Node
         else if (autoplay == "replay")
         {
             MatchSession.Mode = MatchMode.Replay;
-            MatchSession.Trace = BrawlerSim.Replay.InputTraceJson.Load(OS.GetEnvironment("BRAWLER_TRACE"));
+            MatchSession.Trace = BrawlerSim.Replay.InputTraceJson.Load(AutomationEnv.Trace);
         }
 
         // BRAWLER_RULES="timed:<seconds>" (2026-08-12): run the automated match under
         // the TIMED rule — visual verification of the KO counter + clock.
-        string rules = OS.GetEnvironment("BRAWLER_RULES");
+        string rules = AutomationEnv.Rules;
         if (rules.StartsWith("timed", System.StringComparison.Ordinal))
         {
             MatchSession.EndRule = BrawlerSim.Sim.MatchEndRule.Timed;
@@ -228,7 +226,7 @@ public partial class Boot : Node
 
     private void GoToArena()
     {
-        GetTree().ChangeSceneToFile("res://scenes/arena.tscn");
+        GetTree().ChangeSceneToFile(Scenes.Arena);
     }
 
     private void GoToScene(string path)

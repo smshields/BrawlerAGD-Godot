@@ -67,14 +67,14 @@ public partial class TitleView : Control
             dev.Pressed += () =>
             {
                 Standalone.ExitToDevMenu();
-                GetTree().ChangeSceneToFile("res://scenes/main_menu.tscn");
+                GetTree().ChangeSceneToFile(Scenes.MainMenu);
             };
             box.AddChild(dev);
         }
 
         // Automation (screenshot verification): BRAWLER_TITLE="play"|"credits"|"settings"
         // presses that button on load.
-        switch (OS.GetEnvironment("BRAWLER_TITLE"))
+        switch (AutomationEnv.Title)
         {
             case "play": CallDeferred(nameof(Play)); break;
             case "credits": CallDeferred(nameof(ToggleCredits)); break;
@@ -86,7 +86,7 @@ public partial class TitleView : Control
     {
         BuiltGameSession.Game = Standalone.Game;
         BuiltGameSession.Path = null; // embedded: read-only, never re-persisted
-        GetTree().ChangeSceneToFile("res://scenes/character_select.tscn");
+        GetTree().ChangeSceneToFile(Scenes.CharacterSelect);
     }
 
     private static void AddButton(VBoxContainer box, string text, System.Action onPressed)

@@ -48,17 +48,17 @@ public partial class MainMenu : Control
         AddButton(box, "PLAY — VS CPU", () => PickGame(MatchMode.HumanVsCpu));
         AddButton(box, "WATCH AI MATCH", () => PickGame(MatchMode.AiVsAi));
         AddButton(box, "WATCH REPLAY", () => PickGame(MatchMode.Replay));
-        AddButton(box, "PLAY GAME", () => GetTree().ChangeSceneToFile("res://scenes/game_select.tscn"));
-        AddButton(box, "BUILD GAME", () => GetTree().ChangeSceneToFile("res://scenes/game_builder.tscn"));
-        AddButton(box, "EVOLVE", () => GetTree().ChangeSceneToFile("res://scenes/evolve.tscn"));
-        AddButton(box, "MANAGE GAMES", () => GetTree().ChangeSceneToFile("res://scenes/manage.tscn"));
+        AddButton(box, "PLAY GAME", () => GetTree().ChangeSceneToFile(Scenes.GameSelect));
+        AddButton(box, "BUILD GAME", () => GetTree().ChangeSceneToFile(Scenes.GameBuilder));
+        AddButton(box, "EVOLVE", () => GetTree().ChangeSceneToFile(Scenes.Evolve));
+        AddButton(box, "MANAGE GAMES", () => GetTree().ChangeSceneToFile(Scenes.Manage));
         // Standalone testing (2026-08-17, designer): a dev copy of a packaged game
         // (godot/standalone_game.json, gitignored) no longer hijacks boot — this
         // button is the way into the packaged title flow from the dev menu.
         if (Standalone.HasEmbeddedGame)
         {
             AddButton(box, "TEST STANDALONE GAME",
-                () => GetTree().ChangeSceneToFile("res://scenes/title.tscn"));
+                () => GetTree().ChangeSceneToFile(Scenes.Title));
         }
         AddButton(box, "SETTINGS", OpenSettings);
         AddButton(box, "QUIT", () => GetTree().Quit());
@@ -88,7 +88,7 @@ public partial class MainMenu : Control
         });
 
         // Automation: BRAWLER_PICKER=1 opens the game picker on load (screenshots).
-        if (OS.GetEnvironment("BRAWLER_PICKER") == "1")
+        if (AutomationEnv.Picker)
         {
             CallDeferred(nameof(OpenPickerForAutomation));
         }
@@ -225,7 +225,7 @@ public partial class MainMenu : Control
 
     private void StartMatch()
     {
-        GetTree().ChangeSceneToFile("res://scenes/arena.tscn");
+        GetTree().ChangeSceneToFile(Scenes.Arena);
     }
 
     private void OpenSettings() => SettingsPopup.Open(this);

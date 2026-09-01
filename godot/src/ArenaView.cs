@@ -114,8 +114,8 @@ public partial class ArenaView : Node2D
         _pauseMenu.ResumeRequested += () => SetPaused(false);
         _pauseMenu.QuitRequested += BackToMenu;
 
-        _shotDir = OS.GetEnvironment("BRAWLER_SHOT_DIR");
-        string ticks = OS.GetEnvironment("BRAWLER_SHOT_TICKS");
+        _shotDir = AutomationEnv.ShotDir;
+        string ticks = AutomationEnv.ShotTicks;
         if (_shotDir.Length > 0 && ticks.Length > 0)
         {
             foreach (string tick in ticks.Split(','))
@@ -123,12 +123,12 @@ public partial class ArenaView : Node2D
                 _shotTicks.Enqueue(int.Parse(tick));
             }
         }
-        string fastForward = OS.GetEnvironment("BRAWLER_TICKS_PER_FRAME");
+        string fastForward = AutomationEnv.TicksPerFrame;
         if (fastForward.Length > 0)
         {
             _ticksPerFrame = int.Parse(fastForward);
         }
-        string pauseAt = OS.GetEnvironment("BRAWLER_PAUSE_AT");
+        string pauseAt = AutomationEnv.PauseAt;
         if (pauseAt.Length > 0)
         {
             _pauseAtTick = int.Parse(pauseAt); // automation: verify the pause menu
@@ -344,17 +344,8 @@ public partial class ArenaView : Node2D
         GD.Print($"match trace saved: {path} ({_trace.TickCount} ticks, hash {_world.StateHash()})");
     }
 
-    private async System.Threading.Tasks.Task CaptureAsync(string name, bool quitWhenDone)
-    {
-        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-        string path = System.IO.Path.Combine(_shotDir, $"{name}.png");
-        GetViewport().GetTexture().GetImage().SavePng(path);
-        GD.Print($"shot saved: {path}");
-        if (quitWhenDone)
-        {
-            GetTree().Quit();
-        }
-    }
+    private System.Threading.Tasks.Task CaptureAsync(string name, bool quitWhenDone)
+        => Screenshot.CaptureAsync(this, System.IO.Path.Combine(_shotDir, $"{name}.png"), quitWhenDone);
 
     private void BackToMenu()
     {
