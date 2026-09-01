@@ -24,8 +24,8 @@ internal static class Commands
         Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
         Console.WriteLine("           [--composition pinned|random|<attack,shield,dash,random x4>] [--type-reroll 0.2]");
         Console.WriteLine("           [--range \"schema.key=min:max;...\"]  (schemas: character|move|shield|dash|projectile|stage)");
-        Console.WriteLine("           [--fitness standard-v4|ffa-v1|standard-v3|standard-v2]  (default: v4 at 2P, ffa-v1 at 3/4P)");
-        Console.WriteLine("  evaluate --game <game.json> [--seed 7] [--rounds 5] [--fitness standard-v4|ffa-v1|standard-v3|standard-v2]");
+        Console.WriteLine("           [--fitness standard-v5|ffa-v2|standard-v4|ffa-v1|standard-v3|standard-v2]  (default: v5 at 2P, ffa-v2 at 3/4P)");
+        Console.WriteLine("  evaluate --game <game.json> [--seed 7] [--rounds 5] [--fitness standard-v5|ffa-v2|standard-v4|ffa-v1|standard-v3|standard-v2]");
         Console.WriteLine("           [--breakdown] [--max-seconds 60] [--target-seconds 45]");
         Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
         Console.WriteLine("  replay   --game <game.json> --trace <trace.json>");
@@ -143,7 +143,7 @@ internal static class Commands
                     MaxStunSeconds = GetFloat(opts, "max-stun", float.PositiveInfinity),
                 },
                 DiversityWeight = GetFloat(opts, "diversity-weight", 0f),
-                // Absent --fitness = auto: standard-v4 at 2 players, ffa-v1 at 3/4.
+                // Absent --fitness = auto: standard-v5 at 2 players, ffa-v2 at 3/4 (2026-09-01).
                 FitnessName = opts.GetValueOrDefault("fitness"),
                 FitnessCollisionScalar = opts.ContainsKey("collision-scalar")
                     ? GetFloat(opts, "collision-scalar", 0f) : null,
