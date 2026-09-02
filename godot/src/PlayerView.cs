@@ -21,6 +21,11 @@ public partial class PlayerView : Node2D
     private Vector2 _spriteBase = new(16f, 16f); // scale divisor: 16 (v1 parity) or the v2 rect size
     private int _flashClock; // cosmetic strobe phase (view-only, not sim state)
 
+    /// <summary>The stage light rig's fighter tint (backgrounds Phase 4): a ≤15%
+    /// shift toward the backdrop's ambient, multiplied UNDER the state tints. White
+    /// (default) = rig off — previews and legacy stages are untouched.</summary>
+    public Color LightTint { get; set; } = new(1f, 1f, 1f);
+
     // Motion trail (FEATURES.md §Movement Blur; re-rendered 2026-07-23, designer:
     // the in-quad UV smear could not draw OUTSIDE the sprite's own rect, so it read
     // as a faint dimming instead of a trail). AFTERIMAGES: ghost copies of the body
@@ -185,7 +190,11 @@ public partial class PlayerView : Node2D
             : _player.InvincibleTicksLeft > 0 ? 0.4f
             : _player.DashInvulnerable ? (_flashClock % 6 < 3 ? 1f : 0.6f)
             : 1f;
-        _body.Modulate = StateVocabulary.Color(_player.State) with { A = alpha };
+        // Light rig (backgrounds Phase 4): the ambient tint composes UNDER the state
+        // tint, capped at 15% so the state vocabulary stays unmistakable.
+        Color state = StateVocabulary.Color(_player.State);
+        _body.Modulate = new Color(
+            state.R * LightTint.R, state.G * LightTint.G, state.B * LightTint.B, alpha);
         UpdateTrail();
 
         _move.Visible = _player.HitboxActive;

@@ -37,6 +37,10 @@ public partial class BackgroundView : Node2D
     public float FarFactor { get; private set; } = 0.1f;
     public float MidFactor { get; private set; } = 0.4f;
 
+    /// <summary>The resolved layout (Phase 4's light rig derives from it); null on
+    /// legacy blank backdrops.</summary>
+    public BackgroundLayout? Layout { get; private set; }
+
     /// <summary>Builds the backdrop for the stage, or stays empty on a null gene.
     /// persistedRemap = a built game's settled SINGLE-image remap
     /// (BuiltStage.BackgroundRemap); composites carry their remap inside the gene.</summary>
@@ -47,6 +51,7 @@ public partial class BackgroundView : Node2D
         BackgroundSelector selector = BackgroundBank.Selector;
         ulong seed = BuiltGameNaming.NamingSeed(stage);
         BackgroundLayout? layout = selector.Layout(stage, seed, persistedRemap);
+        Layout = layout;
         if (layout is null)
         {
             return;

@@ -1,0 +1,18 @@
+{
+  // Stage light rig tuning (backgrounds track Phase 4, 2026-09-02). Tint and
+  // additive accent ONLY: the baked upper-left key light is never re-shaded,
+  // near-black outlines are never tinted. Code defaults in LightingConfig.cs
+  // match these values.
+  "ambientStrength": 0.35,
+  "capTintStrength": 0.45,
+  "fighterTintCap": 0.15,
+  "outlineValueMax": 40,
+  "capLumKneeLow": 0.55,
+  "capLumKneeHigh": 0.85,
+  "contrastFloor": 0.16,
+  "assumedBackdropDim": 0.85,
+  "capBaseLum": 0.82,
+  "accentBudget": 3,
+  "accentIntensity": 0.4,
+  "weatherAmplitudeCap": 0.08
+}

@@ -33,6 +33,10 @@ public partial class ArenaView : Node2D
     private PauseMenuView _pauseMenu = null!;
     private BackgroundView _background = null!;
     private WeatherSystem _weather = null!;
+    private StageView _stage = null!;
+    private LightAccentView _lightAccents = null!;
+    private BrawlerSim.Lighting.LightRigPlan _lightRig = BrawlerSim.Lighting.LightRigPlan.Neutral;
+    private ShaderMaterial? _tileRig;
     // KO edge detection for the flash (2026-08-12): the per-life ledger catches
     // stock decrements AND timed-mode deaths; the eliminated flag is the final KO.
     private int[] _prevDeaths = null!;
@@ -103,9 +107,14 @@ public partial class ArenaView : Node2D
         _weather = new WeatherSystem();
         AddChild(_weather);
 
-        var stage = new StageView();
-        AddChild(stage);
-        stage.Setup(_world, Ppu, MatchSession.Game.Genome.Stage); // themed tiles (M4d)
+        _stage = new StageView();
+        AddChild(_stage);
+        _stage.Setup(_world, Ppu, MatchSession.Game.Genome.Stage); // themed tiles (M4d)
+
+        // Point accents (backgrounds Phase 4): additive mood glows between the
+        // tiles and the fighters; empty until the rig is derived below.
+        _lightAccents = new LightAccentView();
+        AddChild(_lightAccents);
 
         _views = new PlayerView[players];
         for (int i = 0; i < players; i++)
@@ -136,6 +145,33 @@ public partial class ArenaView : Node2D
             MatchSession.StageBackgroundRemap);
         _weather.Setup(Ppu, MatchSession.Game!.Genome.Stage, _camera,
             _background.FarFactor, _background.MidFactor);
+
+        // Light rig (backgrounds Phase 4): ambient/cap tinting derived from the
+        // composited backdrop — tiles through tile_rig.gdshader (the tested C#
+        // contract's twin), fighters through the capped LightTint, mood through the
+        // accent glows. Neutral (legacy blank backdrop) applies nothing.
+        _lightRig = BrawlerSim.Lighting.LightRig.Derive(
+            _background.Layout, BackgroundBank.Palette, LightBank.Config);
+        if (_lightRig.AmbientStrength > 0f)
+        {
+            _tileRig = new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/tile_rig.gdshader") };
+            _tileRig.SetShaderParameter("ambient",
+                new Vector3(_lightRig.AmbientR, _lightRig.AmbientG, _lightRig.AmbientB));
+            _tileRig.SetShaderParameter("ambient_strength", _lightRig.AmbientStrength);
+            _tileRig.SetShaderParameter("cap_light",
+                new Vector3(_lightRig.CapR, _lightRig.CapG, _lightRig.CapB));
+            _tileRig.SetShaderParameter("cap_strength", _lightRig.CapStrength);
+            _tileRig.SetShaderParameter("outline_max", LightBank.Config.OutlineValueMax / 255f);
+            _tileRig.SetShaderParameter("knee_low", LightBank.Config.CapLumKneeLow);
+            _tileRig.SetShaderParameter("knee_high", LightBank.Config.CapLumKneeHigh);
+            _stage.Material = _tileRig;
+            (float tr, float tg, float tb) = BrawlerSim.Lighting.LightRig.FighterTint(_lightRig);
+            foreach (PlayerView view in _views)
+            {
+                view.LightTint = new Color(tr, tg, tb);
+            }
+            _lightAccents.Setup(Ppu, MatchSession.Game!.Genome.Stage, _lightRig, LightBank.Config);
+        }
 
         _minimap = new MinimapView();
         AddChild(_minimap);
@@ -227,6 +263,17 @@ public partial class ArenaView : Node2D
         _camera.BottomUiPixels = HudView.ReservedBottomPixels();
         _camera.Sync((float)delta);
         _weather.Sync(_world.TickCount);
+        // Weather nudges the rig's ambient within its hard amplitude cap (embers
+        // warm, precipitation darkens); the rig is otherwise static during play.
+        if (_tileRig is not null && _weather.Plan.Instances.Count > 0)
+        {
+            BrawlerSim.Weather.WeatherInstancePlan w = _weather.Plan.Instances[0];
+            float t = _world.TickCount / 60f;
+            _tileRig.SetShaderParameter("weather_mod",
+                BrawlerSim.Lighting.LightRig.WeatherModulation(
+                    _lightRig, w.Preset.Type,
+                    w.EpisodeGate.Evaluate(t) * w.Intensity.Evaluate(t)));
+        }
         _minimap.Sync();
         _hud.Sync(_inputs);
     }
