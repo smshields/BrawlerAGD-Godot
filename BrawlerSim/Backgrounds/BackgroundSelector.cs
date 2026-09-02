@@ -33,7 +33,7 @@ public sealed record BackgroundVariant(
 /// harmony scores the POST-remap group against the selected tile theme's group — the
 /// background follows the tile pick, never the reverse.
 /// </summary>
-public sealed class BackgroundSelector
+public sealed partial class BackgroundSelector
 {
     /// <summary>Private Pcg32 sequences: candidate draws, the remap settle, and the
     /// parametric variant — independent of naming/theme/sprite streams.</summary>
@@ -94,18 +94,32 @@ public sealed class BackgroundSelector
     public string PickRegister(ulong seed) =>
         StageThemeSelector.PickRegister(new NgPcg(seed, StageThemeSelector.ThemeSequence), _data);
 
-    /// <summary>Repair rule (the ThemeId pattern): re-resolve when the id is
-    /// missing/unknown, or the stage HAS salient traits and the entry's affinity
-    /// falls below the floor. A neutral stage contradicts nothing.</summary>
+    /// <summary>Repair rule (the ThemeId pattern): re-resolve when the gene is
+    /// missing/unparseable/unknown, or the stage HAS salient traits and the affinity
+    /// falls below the floor. A composite repairs AS A UNIT (brief decision 1): any
+    /// unknown layer, a now-illegal remap, a pairExclude hit, or a floor miss
+    /// re-resolves the WHOLE gene — children can never drift into illegal pairs.</summary>
     public bool NeedsRepair(Genome.StageGenome stage)
     {
-        BackgroundEntry? entry = Library.ById(stage.BackgroundId);
-        if (entry is null)
+        BackgroundSpec? spec = ParseGene(stage.BackgroundId);
+        if (spec is null)
         {
             return true;
         }
+        if (spec.IsComposite)
+        {
+            List<string?> shared = SharedRemapCandidates(spec.Far!, spec.Mid!);
+            if (!shared.Contains(spec.Remap) || PairExcluded(spec.Far!, spec.Mid!))
+            {
+                return true;
+            }
+            IReadOnlyList<SalientTrait> salientPair = Salient(stage);
+            return salientPair.Count > 0
+                && Math.Max(AffinityScore(spec.Far!, salientPair),
+                    AffinityScore(spec.Mid!, salientPair)) < Config.RepairFloor;
+        }
         IReadOnlyList<SalientTrait> salient = Salient(stage);
-        return salient.Count > 0 && AffinityScore(entry, salient) < Config.RepairFloor;
+        return salient.Count > 0 && AffinityScore(spec.Single!, salient) < Config.RepairFloor;
     }
 
     /// <summary>The tile theme's paletteGroup mapped into the background group
@@ -230,11 +244,12 @@ public sealed class BackgroundSelector
         return ordered;
     }
 
-    /// <summary>Resolve the BackgroundId GENE: the first candidate of the seeded sample.
-    /// The stage's own ThemeId feeds harmony (backgrounds resolve AFTER themes).</summary>
+    /// <summary>Resolve the BackgroundId GENE — the seeded spec's gene string (a
+    /// single entry id, or a composite since Phase 2). The stage's own ThemeId feeds
+    /// harmony (backgrounds resolve AFTER themes).</summary>
     public string ResolveBackgroundId(Genome.StageGenome stage, ulong seed,
         IReadOnlyDictionary<string, int>? priorUse = null) =>
-        SelectCandidates(stage, seed, stage.ThemeId, out _, priorUse)[0].Entry.Id;
+        ResolveSpec(stage, seed, stage.ThemeId, priorUse).Gene();
 
     /// <summary>Gene upkeep for the breeding pipeline: assigns a background to a stage
     /// that needs one using the content-derived seed, and returns the stage unchanged
@@ -282,20 +297,33 @@ public sealed class BackgroundSelector
         string? themeId, IReadOnlyDictionary<string, int>? priorUse = null,
         IReadOnlyList<byte[]>? usedDescriptors = null, string? inheritedBackgroundId = null)
     {
-        IReadOnlyList<BackgroundCandidate> candidates =
-            SelectCandidates(stage, seed, themeId, out string register, priorUse, usedDescriptors);
-        string backgroundId = candidates[0].Entry.Id;
-        if (inheritedBackgroundId is not null && Library.Contains(inheritedBackgroundId)
+        string register = PickRegister(seed);
+        BackgroundSpec? inherited = ParseGene(inheritedBackgroundId);
+        if (inherited is not null
             && !NeedsRepair(stage.WithBackgroundId(inheritedBackgroundId))
-            && (usedDescriptors is not { Count: > 0 }
-                || usedDescriptors.All(d => BackgroundEntry.DescriptorDistance(
-                    Library.ById(inheritedBackgroundId)!.Descriptor, d)
-                        >= Config.DescriptorMinDistance)))
+            && DistinctEnough(inherited, usedDescriptors))
         {
-            backgroundId = inheritedBackgroundId;
+            string? inheritedRemap = inherited.IsComposite
+                ? inherited.Remap
+                : PickRemap(inherited.Single!, themeId, seed);
+            return new BackgroundPresentation(inheritedBackgroundId!, inheritedRemap, register);
         }
-        BackgroundEntry entry = Library.ById(backgroundId)!;
-        return new BackgroundPresentation(backgroundId, PickRemap(entry, themeId, seed), register);
+        BackgroundSpec spec = ResolveSpec(stage, seed, themeId, priorUse, usedDescriptors);
+        return new BackgroundPresentation(spec.Gene(), spec.Remap, register);
+    }
+
+    /// <summary>Every entry of the spec clears the lineup descriptor-distance floor.</summary>
+    private bool DistinctEnough(BackgroundSpec spec, IReadOnlyList<byte[]>? usedDescriptors)
+    {
+        if (usedDescriptors is not { Count: > 0 })
+        {
+            return true;
+        }
+        IEnumerable<BackgroundEntry> parts = spec.IsComposite
+            ? new[] { spec.Far!, spec.Mid! }
+            : new[] { spec.Single! };
+        return parts.All(e => usedDescriptors.All(d =>
+            BackgroundEntry.DescriptorDistance(e.Descriptor, d) >= Config.DescriptorMinDistance));
     }
 
     /// <summary>The seeded parametric variant (brief Phase 1 step 5): a crop window

@@ -175,7 +175,7 @@ public class BackgroundSelectionTests
     public void GenerationResolvesAGeneAndItSurvivesRoundTrip()
     {
         GameGenome game = Game(11);
-        Assert.True(Library.Contains(game.Stage.BackgroundId));
+        Assert.NotNull(NewSelector().ParseGene(game.Stage.BackgroundId)); // single or composite
         Assert.True(ThemesLazy.Value.Contains(game.Stage.ThemeId)); // themes ride along
 
         string json = GameGenomeJson.Serialize(new GameRecord("bg", null, game));
@@ -243,8 +243,7 @@ public class BackgroundSelectionTests
             {
                 GameGenome child = GameGenomeOps.Breed(
                     pool[i], pool[(i + 1) % pool.Count], 0.5f, rng, config);
-                Assert.True(Library.Contains(child.Stage.BackgroundId),
-                    $"bred stage lost its background gene (gen {gen} idx {i})");
+                Assert.NotNull(NewSelector().ParseGene(child.Stage.BackgroundId));
                 pool[i] = child;
             }
         }
@@ -259,7 +258,7 @@ public class BackgroundSelectionTests
 
         StageGenome unknown = stage.WithBackgroundId("deleted_background");
         StageGenome repaired = selector.EnsureGene(unknown);
-        Assert.True(Library.Contains(repaired.BackgroundId));
+        Assert.NotNull(selector.ParseGene(repaired.BackgroundId));
         Assert.NotEqual("deleted_background", repaired.BackgroundId);
         Assert.Equal(repaired.BackgroundId, selector.EnsureGene(repaired).BackgroundId);
     }
@@ -289,13 +288,19 @@ public class BackgroundSelectionTests
         for (ulong seed = 1; seed <= 300; seed++)
         {
             StageGenome stage = Game(seed).Stage;
-            BackgroundEntry entry = Library.ById(stage.BackgroundId)!;
+            BackgroundSpec spec = selector.ParseGene(stage.BackgroundId)!;
+            if (spec.IsComposite)
+            {
+                // The UNIFIED remap must be one the pair legally shares.
+                Assert.Contains(spec.Remap, selector.SharedRemapCandidates(spec.Far!, spec.Mid!));
+                continue;
+            }
             string? remap = selector.PickRemap(
-                entry, stage.ThemeId, BackgroundSelector.BackgroundSeed(stage));
+                spec.Single!, stage.ThemeId, BackgroundSelector.BackgroundSeed(stage));
             if (remap is not null)
             {
-                Assert.Contains(remap, entry.Remaps);
-                Assert.Contains(remap, PaletteLazy.Value.TransitionsFor(entry.PaletteGroup));
+                Assert.Contains(remap, spec.Single!.Remaps);
+                Assert.Contains(remap, PaletteLazy.Value.TransitionsFor(spec.Single!.PaletteGroup));
             }
         }
     }
@@ -369,7 +374,8 @@ public class BackgroundSelectionTests
         for (ulong seed = 1; seed <= 100; seed++)
         {
             StageGenome stage = Game(seed).Stage;
-            BackgroundEntry entry = Library.ById(stage.BackgroundId)!;
+            BackgroundSpec spec = selector.ParseGene(stage.BackgroundId)!;
+            BackgroundEntry entry = spec.Single ?? spec.Far!; // the cropped layer
             ulong s = BackgroundSelector.BackgroundSeed(stage);
             BackgroundVariant v = selector.Variant(entry, stage, s);
             Assert.Equal(v, selector.Variant(entry, stage, s));
@@ -416,22 +422,30 @@ public class BackgroundSelectionTests
             game, NG.NameGenerator.CreateDefault(), null, NewThemeSelector(), NewSelector());
         Assert.True(changed > 0);
 
+        BackgroundSelector checkSelector = NewSelector();
         var descriptors = new List<byte[]>();
         foreach (BuiltStage s in game.Stages)
         {
             Assert.False(BuiltGameNaming.NeedsGeneratedName(s.DisplayName));
-            Assert.True(Library.Contains(s.BackgroundId));
+            BackgroundSpec spec = checkSelector.ParseGene(s.BackgroundId)!;
             Assert.True(ThemesLazy.Value.Contains(s.ThemeId));
             Assert.False(string.IsNullOrEmpty(s.Register));
-            BackgroundEntry entry = Library.ById(s.BackgroundId)!;
-            if (s.BackgroundRemap is { } remap)
+            if (spec.IsComposite)
             {
-                Assert.Contains(remap, entry.Remaps);
+                Assert.Contains(spec.Remap, checkSelector.SharedRemapCandidates(spec.Far!, spec.Mid!));
+            }
+            else if (s.BackgroundRemap is { } remap)
+            {
+                Assert.Contains(remap, spec.Single!.Remaps);
             }
             Assert.Equal(s.BackgroundId, s.Presented.BackgroundId); // views read Presented
-            if (entry.Descriptor.Length > 0)
+            foreach (BackgroundEntry entry in spec.IsComposite
+                ? new[] { spec.Far!, spec.Mid! } : new[] { spec.Single! })
             {
-                descriptors.Add(entry.Descriptor);
+                if (entry.Descriptor.Length > 0)
+                {
+                    descriptors.Add(entry.Descriptor);
+                }
             }
         }
         // No two stages in one game under the descriptor minimum (the brief's rule).

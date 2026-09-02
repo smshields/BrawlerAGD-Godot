@@ -166,17 +166,32 @@ public static class BuiltGamePresentation
         // file gaining backgrounds diverges its new picks from the kept ones.
         var backgroundUsage = new Dictionary<string, int>(StringComparer.Ordinal);
         var usedDescriptors = new List<byte[]>();
+        void CountBackground(string gene)
+        {
+            // Usage and descriptors are tracked per ENTRY: a composite gene counts
+            // its far and mid parts (that is what the overuse penalty scores).
+            Backgrounds.BackgroundSpec? spec = backgrounds!.ParseGene(gene);
+            if (spec is null)
+            {
+                return;
+            }
+            foreach (Backgrounds.BackgroundEntry e in spec.IsComposite
+                ? new[] { spec.Far!, spec.Mid! } : new[] { spec.Single! })
+            {
+                Count(backgroundUsage, e.Id);
+                if (e.Descriptor.Length > 0)
+                {
+                    usedDescriptors.Add(e.Descriptor);
+                }
+            }
+        }
         if (backgrounds is not null)
         {
             foreach (BuiltStage s in game.Stages)
             {
-                if (s.BackgroundId is { } id)
+                if (s.BackgroundId is { } gene)
                 {
-                    Count(backgroundUsage, id);
-                    if (backgrounds.Library.ById(id) is { } e && e.Descriptor.Length > 0)
-                    {
-                        usedDescriptors.Add(e.Descriptor);
-                    }
+                    CountBackground(gene);
                 }
             }
         }
@@ -188,7 +203,7 @@ public static class BuiltGamePresentation
             bool needsTheme = themes is not null
                 && (entry.ThemeId is null || !themes.Library.Contains(entry.ThemeId));
             bool needsBackground = backgrounds is not null
-                && (entry.BackgroundId is null || !backgrounds.Library.Contains(entry.BackgroundId));
+                && backgrounds.ParseGene(entry.BackgroundId) is null; // unset or unknown (composite-aware)
             if (!needsName && !needsTheme && !needsBackground)
             {
                 continue;
@@ -252,18 +267,17 @@ public static class BuiltGamePresentation
                 // Same lineup-distinctness rule for the background gene; the settled
                 // TILE THEME feeds palette harmony (backgrounds follow tiles).
                 string? inheritedBg = entry.BackgroundId ?? entry.Stage.BackgroundId;
-                if (inheritedBg is not null && backgroundUsage.ContainsKey(inheritedBg))
+                if (inheritedBg is not null && backgrounds!.ParseGene(inheritedBg) is { } inh
+                    && (inh.IsComposite
+                        ? backgroundUsage.ContainsKey(inh.Far!.Id) || backgroundUsage.ContainsKey(inh.Mid!.Id)
+                        : backgroundUsage.ContainsKey(inh.Single!.Id)))
                 {
                     inheritedBg = null;
                 }
                 Backgrounds.BackgroundPresentation bg = backgrounds!.Present(
                     entry.Stage, seed, entry.ThemeId ?? entry.Stage.ThemeId,
                     backgroundUsage, usedDescriptors, inheritedBg);
-                Count(backgroundUsage, bg.BackgroundId);
-                if (backgrounds.Library.ById(bg.BackgroundId) is { } be && be.Descriptor.Length > 0)
-                {
-                    usedDescriptors.Add(be.Descriptor);
-                }
+                CountBackground(bg.BackgroundId);
                 entry = entry with
                 {
                     BackgroundId = bg.BackgroundId,

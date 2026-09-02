@@ -93,9 +93,9 @@ public partial class ArenaView : Node2D
     {
         // Backdrop (backgrounds track, 2026-09-02): behind everything, covering the
         // kill box; empty for null-gene (pre-v14) stages — the legacy clear color.
+        // Set up AFTER the camera exists (parallax reads it) but added FIRST.
         _background = new BackgroundView();
         AddChild(_background);
-        _background.Setup(Ppu, MatchSession.Game!.Genome.Stage, MatchSession.StageBackgroundRemap);
 
         var stage = new StageView();
         AddChild(stage);
@@ -126,6 +126,8 @@ public partial class ArenaView : Node2D
         AddChild(_camera);
         _camera.BottomUiPixels = HudView.ReservedBottomPixels(); // frame above the HUD
         _camera.Setup(_world, Ppu);
+        _background.Setup(Ppu, MatchSession.Game!.Genome.Stage, _camera,
+            MatchSession.StageBackgroundRemap);
 
         _minimap = new MinimapView();
         AddChild(_minimap);

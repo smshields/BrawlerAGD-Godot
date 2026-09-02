@@ -22,5 +22,25 @@
   "blurScaleMax": 1.2,
   "baseDim": 0.85,
   "blurMaxRadius": 2.5,
-  "focalMarginWorld": 1.5
+  "focalMarginWorld": 1.5,
+  // Phase 2: parallax recombination
+  "recombinationProbability": 0.5,
+  "goofBudget": 0.10,
+  "sceneDistanceBonus": 0.2,
+  "atmosphericEpsilon": 0.03,
+  "orderingBonus": 0.1,
+  "farFactorMin": 0.05,
+  "farFactorMax": 0.15,
+  "midFactorMin": 0.30,
+  "midFactorMax": 0.50,
+  "accentProbability": 0.35,
+  "accentFactorMin": 0.7,
+  "accentFactorMax": 1.3,
+  "accentScaleMin": 0.12,
+  "accentScaleMax": 0.28,
+  "accentOpacity": 0.5,
+  "seamHazeBase": 0.25,
+  "seamHazeForced": 0.55,
+  "midBlurFraction": 0.45,
+  "accentBlurRadius": 5.0
 }

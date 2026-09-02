@@ -99,6 +99,56 @@ public sealed record BackgroundSelectionConfig
     /// derives the sharp focal band.</summary>
     public float FocalMarginWorld { get; init; } = 1.5f;
 
+    // ── Phase 2: parallax recombination (brief §Phase 2) ───────────────────────
+
+    /// <summary>Seeded chance a stage recombines a far + mid pair instead of taking
+    /// a single full-scene entry (brief start value).</summary>
+    public float RecombinationProbability { get; init; } = 0.5f;
+
+    /// <summary>Seeded chance a recombining stage enters the GOOF LANE: the register
+    /// -intersection predicate is waived (a nebula over a sunny meadow) and pair
+    /// scoring PREFERS scene-tag distance. Predicates (b)/(c) and pairExclude hold
+    /// in both lanes — a blocklist entry means broken, not funny.</summary>
+    public float GoofBudget { get; init; } = 0.10f;
+
+    /// <summary>Goof-lane score bonus per unit of scene-tag distance (1 = fully
+    /// disjoint scene tags) — the budget buys maximum surrealism per slot.</summary>
+    public float SceneDistanceBonus { get; init; } = 0.2f;
+
+    /// <summary>Atmospheric-ordering tolerance on stored valMean: the far layer
+    /// should read at least this close to as-light-as the mid; pairs that violate it
+    /// raise the seam haze instead of being rejected (predicate c).</summary>
+    public float AtmosphericEpsilon { get; init; } = 0.03f;
+
+    /// <summary>Score bonus for pairs that satisfy atmospheric ordering outright.</summary>
+    public float OrderingBonus { get; init; } = 0.1f;
+
+    /// <summary>Parallax factor ranges per layer (seeded per stage). Foreground = 1.</summary>
+    public float FarFactorMin { get; init; } = 0.05f;
+    public float FarFactorMax { get; init; } = 0.15f;
+    public float MidFactorMin { get; init; } = 0.30f;
+    public float MidFactorMax { get; init; } = 0.50f;
+
+    /// <summary>Optional L2 near-accent (bokeh plane): seeded chance, factor range,
+    /// scale range (fraction of the kill-box height), and its opacity cap — sparse,
+    /// heavily blurred, never over the platform envelope at readable opacity.</summary>
+    public float AccentProbability { get; init; } = 0.35f;
+    public float AccentFactorMin { get; init; } = 0.7f;
+    public float AccentFactorMax { get; init; } = 1.3f;
+    public float AccentScaleMin { get; init; } = 0.12f;
+    public float AccentScaleMax { get; init; } = 0.28f;
+    public float AccentOpacity { get; init; } = 0.5f;
+
+    /// <summary>Seam haze strengths at the mid skyline: the base value, and the
+    /// forced value when atmospheric ordering is violated (predicate c's remedy).</summary>
+    public float SeamHazeBase { get; init; } = 0.25f;
+    public float SeamHazeForced { get; init; } = 0.55f;
+
+    /// <summary>Mid-layer blur as a fraction of the far layer's blur (far reads
+    /// blurriest); the accent layer's fixed heavy blur radius in texture pixels.</summary>
+    public float MidBlurFraction { get; init; } = 0.45f;
+    public float AccentBlurRadius { get; init; } = 5f;
+
     public static readonly BackgroundSelectionConfig Default = new();
 
     public static BackgroundSelectionConfig Parse(string json) =>
