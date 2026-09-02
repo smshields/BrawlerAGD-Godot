@@ -86,6 +86,14 @@ public sealed record GenerationConfig
     /// content-seeded and RNG-free, like SpriteSelector.</summary>
     public Sprites.StageThemeSelector? StageThemeSelector { get; init; }
 
+    /// <summary>Background selection (backgrounds track, 2026-09-02 —
+    /// docs/background-implementation-brief.md). Null (default) = off: stages carry
+    /// BackgroundId = null and render the legacy blank backdrop, byte-identical to
+    /// pre-feature behavior. Non-null: fresh generations resolve a BackgroundId gene
+    /// (AFTER the theme resolve — harmony follows the tile pick) and breeding repairs
+    /// incoherent inherits — all content-seeded and RNG-free.</summary>
+    public Backgrounds.BackgroundSelector? BackgroundSelector { get; init; }
+
     /// <summary>The active range overrides, recorded in run.json (empty = stock schemas).</summary>
     public IReadOnlyList<RangeOverride> RangeOverrides { get; init; } = Array.Empty<RangeOverride>();
 

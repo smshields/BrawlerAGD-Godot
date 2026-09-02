@@ -116,7 +116,8 @@ internal static class Commands
         List<GenerationStats> history;
         if (opts.ContainsKey("resume"))
         {
-            (engine, config, history) = RunStore.Load(outDir, LoadSpriteSelector(opts), LoadStageThemeSelector(opts));
+            (engine, config, history) = RunStore.Load(outDir, LoadSpriteSelector(opts),
+                LoadStageThemeSelector(opts), LoadBackgroundSelector(opts));
             Console.WriteLine($"Resumed {outDir} at generation {engine.GenerationsCompleted}.");
         }
         else
@@ -136,14 +137,16 @@ internal static class Commands
                 FitnessName = opts.GetValueOrDefault("fitness"),
                 FitnessCollisionScalar = CollisionScalar(opts),
                 // Sprite selection (2026-08-22) + stage tile themes (M4d,
-                // 2026-09-01): on whenever the libraries are found — cosmetic,
-                // RNG-free, fitness-blind; --no-sprites turns both off.
+                // 2026-09-01) + backgrounds (2026-09-02): on whenever the libraries
+                // are found — cosmetic, RNG-free, fitness-blind; --no-sprites turns
+                // all three off.
                 Generation = opts.ContainsKey("no-sprites")
                     ? ParseGeneration(opts)
                     : ParseGeneration(opts) with
                     {
                         SpriteSelector = LoadSpriteSelector(opts),
                         StageThemeSelector = LoadStageThemeSelector(opts),
+                        BackgroundSelector = LoadBackgroundSelector(opts),
                     },
             };
             engine = new EvolutionEngine(config);
@@ -287,7 +290,8 @@ internal static class Commands
 
         var generator = NameGen.NameGenerator.CreateDefault();
         int changed = BuiltGamePresentation.EnsurePresented(
-            game, generator, LoadSpriteSelector(opts), LoadStageThemeSelector(opts));
+            game, generator, LoadSpriteSelector(opts), LoadStageThemeSelector(opts),
+            LoadBackgroundSelector(opts));
         BuiltGameJson.Save(game, Require(opts, "out"));
         Console.WriteLine($"prepared '{game.Name}': presented {changed} elements → {opts["out"]}");
         // The shell packager reads these two lines to brand the build.
@@ -347,6 +351,58 @@ internal static class Commands
             ? BrawlerSim.Sprites.StageThemeConfig.LoadFile(tuning)
             : BrawlerSim.Sprites.StageThemeConfig.Default;
         return new BrawlerSim.Sprites.StageThemeSelector(library, config);
+    }
+
+    /// <summary>The background library + palette data + tuning (backgrounds track,
+    /// 2026-09-02) — from --backgrounds <index.json> or found by walking up like the
+    /// other libraries; the palette/ramps/transition files and
+    /// background_selection.json ride alongside the index. The tile theme library
+    /// feeds palette harmony when present. Null (with a warning) = stages keep null
+    /// background genes.</summary>
+    internal static BrawlerSim.Backgrounds.BackgroundSelector? LoadBackgroundSelector(
+        Dictionary<string, string> opts)
+    {
+        string? index = opts.TryGetValue("backgrounds", out string? given)
+            ? given
+            : FindUpward(Path.Combine("godot", "assets", "backgrounds_v1", "backgrounds_v1_index.json"));
+        if (index is null || !File.Exists(index))
+        {
+            Console.Error.WriteLine(
+                "warning: background library not found (godot/assets/backgrounds_v1/"
+                + "backgrounds_v1_index.json; override with --backgrounds) — running "
+                + "without background selection.");
+            return null;
+        }
+        string dir = Path.GetDirectoryName(Path.GetFullPath(index))!;
+        string master = Path.Combine(dir, "master_palette.json");
+        string ramps = Path.Combine(dir, "background_ramps_bidir.json");
+        string transitions = Path.Combine(dir, "remap_transition_table.json");
+        if (!File.Exists(master) || !File.Exists(ramps) || !File.Exists(transitions))
+        {
+            Console.Error.WriteLine(
+                "warning: background palette data missing next to the index — running "
+                + "without background selection.");
+            return null;
+        }
+        var library = BrawlerSim.Backgrounds.BackgroundLibrary.LoadFile(index);
+        if (library.Refused.Count > 0)
+        {
+            Console.Error.WriteLine(
+                $"warning: background index refused {library.Refused.Count} entries "
+                + $"(license/attribution assertions), e.g. {library.Refused[0]}");
+        }
+        var palette = BrawlerSim.Backgrounds.BackgroundPalette.LoadFiles(master, ramps, transitions);
+        string tuning = Path.Combine(Path.GetDirectoryName(dir)!, "background_selection.json");
+        var config = File.Exists(tuning)
+            ? BrawlerSim.Backgrounds.BackgroundSelectionConfig.LoadFile(tuning)
+            : BrawlerSim.Backgrounds.BackgroundSelectionConfig.Default;
+        // Palette harmony follows the tile theme when that library is available.
+        string? tiles = FindUpward(Path.Combine("godot", "assets", "tiles_v2_slices.json"));
+        var themeLibrary = tiles is not null && File.Exists(tiles)
+            ? BrawlerSim.Sprites.StageThemeLibrary.LoadFile(tiles)
+            : null;
+        return new BrawlerSim.Backgrounds.BackgroundSelector(
+            library, palette, config, themeLibrary);
     }
 
     private static string? FindUpward(string relative)

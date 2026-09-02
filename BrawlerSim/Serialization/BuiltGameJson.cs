@@ -29,10 +29,15 @@ namespace BrawlerSim.Serialization;
 ///       "register" (the negotiated presentation, persisted once with the stage's
 ///       name by the game-open pass; omitted when null). ≤4 files load with nulls
 ///       and get both on their next open. ContentKey excludes the theme gene.
+///   6 — 2026-09-02 backgrounds: stage entries gained "backgroundId" +
+///       "backgroundRemap" (the negotiated bg-v1 entry + palette remap target,
+///       settled by the same pass after the tile theme; omitted when null). ≤5
+///       files load with nulls and get both on their next open. ContentKey excludes
+///       the background gene.
 /// </summary>
 public static class BuiltGameJson
 {
-    public const int CurrentFormatVersion = 5;
+    public const int CurrentFormatVersion = 6;
     private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = JsonOptions.Document;
@@ -58,6 +63,8 @@ public static class BuiltGameJson
                 Origin = s.Origin,
                 ThemeId = s.ThemeId,
                 Register = s.Register,
+                BackgroundId = s.BackgroundId,
+                BackgroundRemap = s.BackgroundRemap,
                 Stage = GameGenomeJson.ToStageDoc(s.Stage),
             }).ToList(),
         };
@@ -97,7 +104,9 @@ public static class BuiltGameJson
                     s.Stage ?? throw new JsonException("built game entry is missing its stage."),
                     config),
                 s.ThemeId,
-                s.Register));
+                s.Register,
+                s.BackgroundId,
+                s.BackgroundRemap));
         }
         return game;
     }
@@ -135,6 +144,8 @@ public static class BuiltGameJson
         public string? Origin { get; set; }
         public string? ThemeId { get; set; }  // v5+; omitted when null
         public string? Register { get; set; } // v5+; omitted when null
+        public string? BackgroundId { get; set; }    // v6+; omitted when null
+        public string? BackgroundRemap { get; set; } // v6+; omitted when null
         public GameGenomeJson.StageDoc? Stage { get; set; }
     }
 }

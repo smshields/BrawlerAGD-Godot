@@ -60,10 +60,16 @@ namespace BrawlerSim.Serialization;
 ///       load with themeId = null — the M4 legacy stance: null renders the v1
 ///       Kenney tiles and is resolved fresh only in a theme-enabled pipeline.
 ///       Purely cosmetic — replays and match goldens untouched.
+///  14 — 2026-09-02 backgrounds (docs/background-implementation-brief.md): the stage
+///       gained "backgroundId" (the bg-v1 background gene), omitted when null. ≤13
+///       files load with backgroundId = null — the M4/M4d legacy stance: null
+///       renders the blank pre-feature backdrop and is resolved fresh only in a
+///       background-enabled pipeline. Purely cosmetic — replays and match goldens
+///       untouched.
 /// </summary>
 public static class GameGenomeJson
 {
-    public const int CurrentFormatVersion = 13; // 2026-09-01 stage tile themes (see header)
+    public const int CurrentFormatVersion = 14; // 2026-09-02 backgrounds (see header)
     private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = JsonOptions.Document;
@@ -110,6 +116,7 @@ public static class GameGenomeJson
     internal static StageDoc ToStageDoc(StageGenome stage) => new()
     {
         ThemeId = stage.ThemeId,
+        BackgroundId = stage.BackgroundId,
         Params = stage.Params.ToDictionary(),
         Platforms = stage.Platforms
             // Thin is written only when TRUE (null suppression): solid platforms
@@ -193,7 +200,8 @@ public static class GameGenomeJson
         return new StageGenome(platforms, doc.Params is null
             ? StageRules.LegacyParams(platforms, config.StageSchema)
             : ParamSet.FromDictionary(config.StageSchema, WithStageDefaults(doc.Params, platforms)),
-            doc.ThemeId); // absent (≤v12) → null: legacy v1-tile rendering
+            doc.ThemeId,        // absent (≤v12) → null: legacy v1-tile rendering
+            doc.BackgroundId);  // absent (≤v13) → null: legacy blank backdrop
     }
 
     public static void Save(GameRecord record, string path)
@@ -302,6 +310,7 @@ public static class GameGenomeJson
     internal sealed class StageDoc
     {
         public string? ThemeId { get; set; } // v13+; omitted when null
+        public string? BackgroundId { get; set; } // v14+; omitted when null
         public Dictionary<string, float>? Params { get; set; } // absent in ≤ v6 files
         public List<PlatformDoc>? Platforms { get; set; }
     }

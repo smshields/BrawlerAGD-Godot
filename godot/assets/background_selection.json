@@ -1,0 +1,23 @@
+{
+  // Background selection tuning (backgrounds track Phase 1, 2026-09-02).
+  // Hot-editable; code defaults in BackgroundSelectionConfig.cs match these values.
+  "softmaxTemperature": 0.35,
+  "maxEntryShare": 0.02,
+  "repairFloor": 0.05,
+  "registerPoolFloor": 20,
+  "overusePenalty": 0.5,
+  "candidateCount": 4,
+  "descriptorMinDistance": 0.05,
+  "harmonySameBonus": 0.30,
+  "harmonyAdjacentBonus": 0.15,
+  "contrastBandCeiling": 32.0,
+  "contrastPenaltyWeight": 0.25,
+  "remapNoneBonus": 0.05,
+  "themeGroupAliases": { "black": "night", "bone": "grey" },
+  "horizonBandMin": 0.35,
+  "horizonBandMax": 0.60,
+  "brightnessJitter": 0.06,
+  "contrastJitter": 0.04,
+  "blurScaleMin": 0.8,
+  "blurScaleMax": 1.2
+}

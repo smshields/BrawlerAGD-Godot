@@ -80,6 +80,7 @@ public static class RunStore
             // (M4d, 2026-09-01) record the same way.
             Sprites = config.Generation.SpriteSelector is null ? null : true,
             Themes = config.Generation.StageThemeSelector is null ? null : true,
+            Backgrounds = config.Generation.BackgroundSelector is null ? null : true,
             GenerationsCompleted = engine.GenerationsCompleted,
             RngState = state,
             RngInc = inc,
@@ -97,7 +98,8 @@ public static class RunStore
 
     private static GenerationConfig WithSelectors(GenerationConfig generation,
         RunManifest manifest, Sprites.SpriteSelector? spriteSelector,
-        Sprites.StageThemeSelector? themeSelector)
+        Sprites.StageThemeSelector? themeSelector,
+        Backgrounds.BackgroundSelector? backgroundSelector)
     {
         if (manifest.Sprites == true && spriteSelector is not null)
         {
@@ -106,6 +108,10 @@ public static class RunStore
         if (manifest.Themes == true && themeSelector is not null)
         {
             generation = generation with { StageThemeSelector = themeSelector };
+        }
+        if (manifest.Backgrounds == true && backgroundSelector is not null)
+        {
+            generation = generation with { BackgroundSelector = backgroundSelector };
         }
         return generation;
     }
@@ -118,13 +124,14 @@ public static class RunStore
         InputTraceJson.Save(trace, Path.Combine(runDir, BestTraceFileName));
     }
 
-    /// <summary>Resumes a checkpoint. spriteSelector/themeSelector re-attach sprite
-    /// and stage-theme selection to runs that recorded them (run.json "sprites" /
-    /// "themes"); callers own locating the libraries — null degrades gracefully (new
-    /// children keep null genes, everything else exact).</summary>
+    /// <summary>Resumes a checkpoint. spriteSelector/themeSelector/backgroundSelector
+    /// re-attach the semantic selectors to runs that recorded them (run.json "sprites"
+    /// / "themes" / "backgrounds"); callers own locating the libraries — null degrades
+    /// gracefully (new children keep null genes, everything else exact).</summary>
     public static (EvolutionEngine Engine, EvolutionConfig Config, List<GenerationStats> History) Load(
         string runDir, Sprites.SpriteSelector? spriteSelector = null,
-        Sprites.StageThemeSelector? themeSelector = null)
+        Sprites.StageThemeSelector? themeSelector = null,
+        Backgrounds.BackgroundSelector? backgroundSelector = null)
     {
         string manifestPath = Path.Combine(runDir, ManifestFileName);
         RunManifest manifest = JsonSerializer.Deserialize<RunManifest>(File.ReadAllText(manifestPath), Options)
@@ -159,7 +166,7 @@ public static class RunStore
             },
             DiversityWeight = manifest.DiversityWeight ?? 0f,
             Generation = WithSelectors(BuildGenerationConfig(manifest), manifest,
-                spriteSelector, themeSelector),
+                spriteSelector, themeSelector, backgroundSelector),
         };
 
         var population = new List<GameGenome>(manifest.PopulationSize);
@@ -230,6 +237,7 @@ public static class RunStore
         public int? Players { get; set; } // 2026-08-12 four-player; absent = 2
         public bool? Sprites { get; set; } // 2026-08-22 sprite selection; absent = off
         public bool? Themes { get; set; }  // 2026-09-01 stage tile themes (M4d); absent = off
+        public bool? Backgrounds { get; set; } // 2026-09-02 backgrounds track; absent = off
         public List<string>? Composition { get; set; }
         public float? TypeRerollRate { get; set; }
         public List<RangeOverrideDoc>? RangeOverrides { get; set; }

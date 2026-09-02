@@ -36,7 +36,8 @@ public static class GameGenomeOps
         // Stage theme repair follows the same rule (M4d, 2026-09-01).
         GameGenome.ResolveSprites(children, config);
         return new GameGenome(children,
-            GameGenome.ResolveStageTheme(GameGenome.FitStage(stage, children), config));
+            GameGenome.ResolveStageBackground(
+                GameGenome.ResolveStageTheme(GameGenome.FitStage(stage, children), config), config));
     }
 
     public static GameGenome Mutate(GameGenome genome, Pcg32 rng, GenerationConfig? config = null)
@@ -68,8 +69,8 @@ public static class GameGenomeOps
                 character.SpriteId));
         }
         GameGenome.ResolveSprites(mutated, config);
-        return new GameGenome(mutated, GameGenome.ResolveStageTheme(
-            GameGenome.FitStage(MutateStage(genome.Stage, config, rng), mutated), config));
+        return new GameGenome(mutated, GameGenome.ResolveStageBackground(GameGenome.ResolveStageTheme(
+            GameGenome.FitStage(MutateStage(genome.Stage, config, rng), mutated), config), config));
     }
 
     /// <summary>
@@ -127,13 +128,16 @@ public static class GameGenomeOps
                     (StageParams.Spawn2X, s2.X), (StageParams.Spawn2Y, s2.Y),
                     (StageParams.Spawn3X, s3.X), (StageParams.Spawn3Y, s3.Y),
                     (StageParams.Spawn4X, -s3.X), (StageParams.Spawn4Y, s3.Y));
-                // Theme gene is heredity through mutation (2026-09-01, M4d, the
-                // SpriteId pattern) — the repair pass re-resolves it only if the
-                // mutated stage's salient traits contradict it.
-                return new StageGenome(transformed, symmetricSpawns, stage.ThemeId);
+                // Theme + background genes are heredity through mutation (2026-09-01
+                // M4d / 2026-09-02 backgrounds, the SpriteId pattern) — the repair
+                // pass re-resolves them only if the mutated stage's salient traits
+                // contradict them.
+                return new StageGenome(transformed, symmetricSpawns, stage.ThemeId,
+                    stage.BackgroundId);
             }
         }
-        return config.CreateStageGenerator().Regenerate(mutated, rng).WithThemeId(stage.ThemeId);
+        return config.CreateStageGenerator().Regenerate(mutated, rng)
+            .WithThemeId(stage.ThemeId).WithBackgroundId(stage.BackgroundId);
     }
 
     /// <summary>

@@ -35,13 +35,21 @@ public sealed class StageGenome
     /// generation runs without a theme library; null renders the legacy v1 tiles.</summary>
     public string? ThemeId { get; }
 
+    /// <summary>Semantic background gene (2026-09-02, backgrounds track —
+    /// docs/background-implementation-brief.md): an id into the bg-v1 background
+    /// index. The exact ThemeId pattern: structural, 50/50 crossover coin (RNG-gated),
+    /// heredity through mutation, repaired below the affinity floor. Null on pre-v14
+    /// files and when generation runs without a background library; null renders the
+    /// legacy blank backdrop, unchanged.</summary>
+    public string? BackgroundId { get; }
+
     public StageGenome(IEnumerable<PlatformGene> platforms)
         : this(platforms, null)
     {
     }
 
     public StageGenome(IEnumerable<PlatformGene> platforms, ParamSet? stageParams,
-        string? themeId = null)
+        string? themeId = null, string? backgroundId = null)
     {
         _platforms = platforms.ToArray();
         if (_platforms.Length == 0)
@@ -50,11 +58,18 @@ public sealed class StageGenome
         }
         Params = stageParams ?? StageRules.LegacyParams(_platforms);
         ThemeId = themeId;
+        BackgroundId = backgroundId;
     }
 
     /// <summary>Copy with a different theme gene (selection/repair).</summary>
     public StageGenome WithThemeId(string? themeId) =>
-        themeId == ThemeId ? this : new StageGenome(_platforms, Params, themeId);
+        themeId == ThemeId ? this : new StageGenome(_platforms, Params, themeId, BackgroundId);
+
+    /// <summary>Copy with a different background gene (selection/repair).</summary>
+    public StageGenome WithBackgroundId(string? backgroundId) =>
+        backgroundId == BackgroundId
+            ? this
+            : new StageGenome(_platforms, Params, ThemeId, backgroundId);
 
     public IReadOnlyList<PlatformGene> Platforms => _platforms;
 
@@ -86,11 +101,19 @@ public sealed class StageGenome
         {
             themeId = rng.NextInt(2) == 0 ? a.ThemeId : b.ThemeId;
         }
+        // Background gene (2026-09-02, backgrounds track): the same RNG-gated coin —
+        // background-less populations (every pre-backgrounds run) stay bit-exact.
+        string? backgroundId = a.BackgroundId ?? b.BackgroundId;
+        if (a.BackgroundId is not null && b.BackgroundId is not null)
+        {
+            backgroundId = rng.NextInt(2) == 0 ? a.BackgroundId : b.BackgroundId;
+        }
         // Platforms legal under a parent's box genes may violate the CHILD's playable
         // box (2026-08-13, designer containment rule) — clamp them in, then repair the
         // spawn genes against the repaired layout. Identity for legal stages; never
         // runs at sim time.
         child = StageRules.RepairPlatforms(child, childParams);
-        return new StageGenome(child, StageRules.RepairSpawns(child, childParams), themeId);
+        return new StageGenome(child, StageRules.RepairSpawns(child, childParams), themeId,
+            backgroundId);
     }
 }

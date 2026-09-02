@@ -70,6 +70,13 @@ public class Phase1PipelineTests
     [Fact]
     public void PopulationFingerprintMatchesGoldenValue()
     {
+        // Re-pinned 2026-09-02: BACKGROUNDS (backgrounds track Phase 1,
+        // docs/background-implementation-brief.md) — game.json is v14 ("formatVersion"
+        // in the serialized bytes; stage backgroundId omitted when null). BYTES ONLY,
+        // the v13 precedent verbatim: GenerationConfig.Default has no background
+        // library, so BackgroundId stays null and the crossover background coin is
+        // RNG-GATED on a background actually existing — every draw stream is
+        // untouched. All other goldens unmoved. Prior pin: 7918250599314887397.
         // Re-pinned 2026-09-01 (2nd): STAGE TILE THEMES (M4d,
         // docs/features/stage-tile-selection.md) — game.json is v13 ("formatVersion"
         // in the serialized bytes; stage themeId omitted when null). BYTES ONLY, the
@@ -139,6 +146,6 @@ public class Phase1PipelineTests
         // (fast fall/crouch/DI), 16079587979934170348 (dash slot),
         // 10607725140721060960 (shield), 5432710911100783110 (two moves),
         // 13551893661434631362, 9300943650238635838.
-        Assert.Equal(7918250599314887397UL, RunPipeline(20260707));
+        Assert.Equal(659201438368982369UL, RunPipeline(20260707));
     }
 }

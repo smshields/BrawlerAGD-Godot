@@ -29,9 +29,11 @@ public sealed record ThemePresentation(string ThemeId, string DisplayName, strin
 /// </summary>
 public sealed class StageThemeSelector
 {
-    /// <summary>Private Pcg32 sequence for theme draws — independent of the naming
-    /// stream and of every sprite sequence, even under related seeds.</summary>
-    private const ulong ThemeSequence = 0x5354475448454d45UL; // "STGTHEME"
+    /// <summary>Pcg32 sequence for theme draws — independent of the naming stream and
+    /// of every sprite sequence, even under related seeds. Internal because the
+    /// backgrounds track (2026-09-02) recomputes the SAME register pick from the same
+    /// stream head, so name, tiles, and background can never disagree by construction.</summary>
+    internal const ulong ThemeSequence = 0x5354475448454d45UL; // "STGTHEME"
 
     private readonly NameGenData _data;
     private readonly FeatureExtractor _extractor;
@@ -186,10 +188,15 @@ public sealed class StageThemeSelector
     // ── The SpriteSelector primitives, over themes (kept local: the two selectors
     // share a shape, not a base class — their pools and shaping knobs differ). ──────
 
-    private string PickRegister(NgPcg rng)
+    private string PickRegister(NgPcg rng) => PickRegister(rng, _data);
+
+    /// <summary>The shared stage-register pick (first draw on the STGTHEME stream) —
+    /// used verbatim by BackgroundSelector so every selector derives the same register
+    /// from the same seed. Behavior-identical to the pre-backgrounds instance method.</summary>
+    internal static string PickRegister(NgPcg rng, NameGenData data)
     {
         double total = 0;
-        foreach (RegisterDef def in _data.Registers)
+        foreach (RegisterDef def in data.Registers)
         {
             if (def.Weight > 0)
             {
@@ -198,7 +205,7 @@ public sealed class StageThemeSelector
         }
         double roll = rng.NextDouble() * total;
         double acc = 0;
-        foreach (RegisterDef def in _data.Registers)
+        foreach (RegisterDef def in data.Registers)
         {
             if (def.Weight <= 0)
             {
@@ -210,7 +217,7 @@ public sealed class StageThemeSelector
                 return def.Name;
             }
         }
-        return _data.Registers[_data.Registers.Count - 1].Name;
+        return data.Registers[data.Registers.Count - 1].Name;
     }
 
     private static double[] Softmax(double[] scores, float temperature)

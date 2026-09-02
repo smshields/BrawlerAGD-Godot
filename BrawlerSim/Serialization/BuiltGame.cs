@@ -42,13 +42,23 @@ public sealed record BuiltCharacter(string DisplayName, string? Origin, Characte
 /// <summary>One stage entry. ThemeId + Register (2026-09-01, M4d —
 /// stage-tile-selection.md) are the NEGOTIATED presentation, settled with the stage's
 /// generated name by the game-open pass and persisted once, like BuiltCharacter's
-/// sprite fields; the stored genome stays untouched.</summary>
+/// sprite fields; the stored genome stays untouched. BackgroundId + BackgroundRemap
+/// (2026-09-02, backgrounds track) join the same pass: the settled bg-v1 entry and
+/// its palette remap target (null remap = the entry's native palette).</summary>
 public sealed record BuiltStage(string DisplayName, string? Origin, StageGenome Stage,
-    string? ThemeId = null, string? Register = null)
+    string? ThemeId = null, string? Register = null,
+    string? BackgroundId = null, string? BackgroundRemap = null)
 {
-    /// <summary>The stage as this game presents it: the negotiated theme injected
-    /// over the inherited gene — views and match launches read this.</summary>
-    public StageGenome Presented => ThemeId is null ? Stage : Stage.WithThemeId(ThemeId);
+    /// <summary>The stage as this game presents it: the negotiated theme + background
+    /// injected over the inherited genes — views and match launches read this.</summary>
+    public StageGenome Presented
+    {
+        get
+        {
+            StageGenome presented = ThemeId is null ? Stage : Stage.WithThemeId(ThemeId);
+            return BackgroundId is null ? presented : presented.WithBackgroundId(BackgroundId);
+        }
+    }
 }
 
 /// <summary>
@@ -139,6 +149,8 @@ public sealed class BuiltGame
         doc.ThemeId = null; // theme is presentation, not identity (2026-09-01, M4d) —
                             // and the stage naming seed derives from this key, so it
                             // must not shift when selection or repair changes the look
+        doc.BackgroundId = null; // background is presentation too (2026-09-02) —
+                                 // same rule, same reason
         return JsonSerializer.Serialize(doc, ContentKeyOptions);
     }
 

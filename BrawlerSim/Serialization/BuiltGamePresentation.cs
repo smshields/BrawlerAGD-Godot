@@ -26,7 +26,7 @@ public static class BuiltGamePresentation
     /// <summary>Runs the pass in place; returns how many elements changed. A null
     /// selector (library unavailable) degrades that half to the pure naming pass.</summary>
     public static int EnsurePresented(BuiltGame game, NG.NameGenerator generator, SpriteSelector? selector,
-        StageThemeSelector? themes = null)
+        StageThemeSelector? themes = null, Backgrounds.BackgroundSelector? backgrounds = null)
     {
         var session = new NG.UniqueNameSession(generator);
         var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -161,64 +161,123 @@ public static class BuiltGamePresentation
             }
         }
 
+        // Backgrounds settled on this game pre-count into the overuse penalty AND the
+        // lineup descriptor-distance rule (2026-09-02, backgrounds track), so a v5
+        // file gaining backgrounds diverges its new picks from the kept ones.
+        var backgroundUsage = new Dictionary<string, int>(StringComparer.Ordinal);
+        var usedDescriptors = new List<byte[]>();
+        if (backgrounds is not null)
+        {
+            foreach (BuiltStage s in game.Stages)
+            {
+                if (s.BackgroundId is { } id)
+                {
+                    Count(backgroundUsage, id);
+                    if (backgrounds.Library.ById(id) is { } e && e.Descriptor.Length > 0)
+                    {
+                        usedDescriptors.Add(e.Descriptor);
+                    }
+                }
+            }
+        }
+
         for (int i = 0; i < game.Stages.Count; i++)
         {
             BuiltStage entry = game.Stages[i];
             bool needsName = BuiltGameNaming.NeedsGeneratedName(entry.DisplayName);
             bool needsTheme = themes is not null
                 && (entry.ThemeId is null || !themes.Library.Contains(entry.ThemeId));
-            if (!needsName && !needsTheme)
+            bool needsBackground = backgrounds is not null
+                && (entry.BackgroundId is null || !backgrounds.Library.Contains(entry.BackgroundId));
+            if (!needsName && !needsTheme && !needsBackground)
             {
                 continue;
             }
             ulong seed = BuiltGameNaming.NamingSeed(entry.Stage);
+            bool entryChanged = false;
 
-            // Lineup distinctness beats heredity (the roster rule, applied to
-            // stages): an inherited theme already worn by an earlier stage loses its
-            // privilege and this entry selects fresh, steered by the usage penalty.
-            string? inherited = entry.ThemeId ?? entry.Stage.ThemeId;
-            if (inherited is not null && themeUsage.ContainsKey(inherited))
+            if (needsName || needsTheme)
             {
-                inherited = null;
-            }
-
-            if (themes is not null)
-            {
-                ThemePresentation presented = themes.Present(
-                    entry.Stage, seed, generator, themeUsage, inherited);
-                string stageName = entry.DisplayName;
-                if (needsName)
+                // Lineup distinctness beats heredity (the roster rule, applied to
+                // stages): an inherited theme already worn by an earlier stage loses its
+                // privilege and this entry selects fresh, steered by the usage penalty.
+                string? inherited = entry.ThemeId ?? entry.Stage.ThemeId;
+                if (inherited is not null && themeUsage.ContainsKey(inherited))
                 {
-                    stageName = presented.DisplayName;
-                    if (taken.Contains(stageName))
-                    {
-                        stageName = session.GenerateStageName(
-                            StageThemeSelector.Map(entry.Stage),
-                            new NG.NameOptions { Seed = seed, Register = presented.Register }).Display;
-                    }
-                    else
-                    {
-                        session.Reserve(stageName);
-                    }
-                    taken.Add(stageName);
+                    inherited = null;
                 }
-                Count(themeUsage, presented.ThemeId);
-                game.Stages[i] = entry with
+
+                if (themes is not null)
                 {
-                    DisplayName = stageName,
-                    ThemeId = presented.ThemeId,
-                    Register = presented.Register,
-                };
-                changed++;
-                continue;
+                    ThemePresentation presented = themes.Present(
+                        entry.Stage, seed, generator, themeUsage, inherited);
+                    string stageName = entry.DisplayName;
+                    if (needsName)
+                    {
+                        stageName = presented.DisplayName;
+                        if (taken.Contains(stageName))
+                        {
+                            stageName = session.GenerateStageName(
+                                StageThemeSelector.Map(entry.Stage),
+                                new NG.NameOptions { Seed = seed, Register = presented.Register }).Display;
+                        }
+                        else
+                        {
+                            session.Reserve(stageName);
+                        }
+                        taken.Add(stageName);
+                    }
+                    Count(themeUsage, presented.ThemeId);
+                    entry = entry with
+                    {
+                        DisplayName = stageName,
+                        ThemeId = presented.ThemeId,
+                        Register = presented.Register,
+                    };
+                    entryChanged = true;
+                }
+                else if (needsName)
+                {
+                    // No theme library: the pre-feature stage naming pass, byte-for-byte.
+                    string name = session.GenerateStageName(
+                        StageThemeSelector.Map(entry.Stage),
+                        new NG.NameOptions { Seed = seed }).Display;
+                    entry = entry with { DisplayName = name };
+                    entryChanged = true;
+                }
             }
 
-            // No theme library: the pre-feature stage naming pass, byte-for-byte.
-            string name = session.GenerateStageName(
-                StageThemeSelector.Map(entry.Stage),
-                new NG.NameOptions { Seed = seed }).Display;
-            game.Stages[i] = entry with { DisplayName = name };
-            changed++;
+            if (needsBackground)
+            {
+                // Same lineup-distinctness rule for the background gene; the settled
+                // TILE THEME feeds palette harmony (backgrounds follow tiles).
+                string? inheritedBg = entry.BackgroundId ?? entry.Stage.BackgroundId;
+                if (inheritedBg is not null && backgroundUsage.ContainsKey(inheritedBg))
+                {
+                    inheritedBg = null;
+                }
+                Backgrounds.BackgroundPresentation bg = backgrounds!.Present(
+                    entry.Stage, seed, entry.ThemeId ?? entry.Stage.ThemeId,
+                    backgroundUsage, usedDescriptors, inheritedBg);
+                Count(backgroundUsage, bg.BackgroundId);
+                if (backgrounds.Library.ById(bg.BackgroundId) is { } be && be.Descriptor.Length > 0)
+                {
+                    usedDescriptors.Add(be.Descriptor);
+                }
+                entry = entry with
+                {
+                    BackgroundId = bg.BackgroundId,
+                    BackgroundRemap = bg.Remap,
+                    Register = entry.Register ?? bg.Register,
+                };
+                entryChanged = true;
+            }
+
+            if (entryChanged)
+            {
+                game.Stages[i] = entry;
+                changed++;
+            }
         }
         return changed;
     }

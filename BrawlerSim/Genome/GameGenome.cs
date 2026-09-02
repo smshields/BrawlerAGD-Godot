@@ -297,7 +297,8 @@ public sealed class GameGenome
         // traverse and no gap is asymmetrically passable. Deterministic, RNG-free — the
         // stream stays aligned (docs/features/spawn-and-polish.md §Platform fit).
         ResolveSprites(characters, config);
-        return new GameGenome(characters, ResolveStageTheme(FitStage(stage, characters), config));
+        return new GameGenome(characters,
+            ResolveStageBackground(ResolveStageTheme(FitStage(stage, characters), config), config));
     }
 
     /// <summary>Stage theme gene upkeep (M4d, 2026-09-01, stage-tile-selection.md):
@@ -307,6 +308,14 @@ public sealed class GameGenome
     /// No-op without a theme library on the config.</summary>
     internal static StageGenome ResolveStageTheme(StageGenome stage, GenerationConfig config) =>
         config.StageThemeSelector is { } selector ? selector.EnsureGene(stage) : stage;
+
+    /// <summary>Background gene upkeep (backgrounds track, 2026-09-02 —
+    /// docs/background-implementation-brief.md): assigns/repairs the stage's
+    /// BackgroundId via the content-seeded selector. Runs AFTER the theme resolve so
+    /// palette harmony reads the settled tile theme (backgrounds harmonize with tiles,
+    /// never the reverse). RNG-free. No-op without a background library.</summary>
+    internal static StageGenome ResolveStageBackground(StageGenome stage, GenerationConfig config) =>
+        config.BackgroundSelector is { } selector ? selector.EnsureGene(stage) : stage;
 
     /// <summary>Sprite-gene upkeep over a whole game (2026-08-22, sprite-selection.md;
     /// melee move genes added 2026-08-23, attack-sprite-selection.md): assigns/repairs
