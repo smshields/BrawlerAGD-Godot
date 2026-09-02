@@ -1,0 +1,1 @@
+godot/assets/backgrounds_v1/**/*.png filter=lfs diff=lfs merge=lfs -text

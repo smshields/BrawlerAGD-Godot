@@ -1,0 +1,50 @@
+{
+ "red": [
+  "orange",
+  "violet",
+  "grey",
+  "night"
+ ],
+ "orange": [
+  "red",
+  "gold",
+  "grey",
+  "night"
+ ],
+ "gold": [
+  "orange",
+  "green",
+  "grey",
+  "night"
+ ],
+ "green": [
+  "gold",
+  "teal",
+  "grey",
+  "night"
+ ],
+ "teal": [
+  "green",
+  "blue",
+  "grey",
+  "night"
+ ],
+ "blue": [
+  "teal",
+  "violet",
+  "grey",
+  "night"
+ ],
+ "violet": [
+  "blue",
+  "red",
+  "grey",
+  "night"
+ ],
+ "grey": [
+  "blue",
+  "violet",
+  "red",
+  "night"
+ ]
+}

@@ -1,0 +1,193 @@
+{
+ "_comment": "Master attribution record for the backgrounds corpus. Seeds tools/sprite-pipeline/backgrounds/sources.json. courtesy=true means license requires nothing but we credit anyway.",
+ "packs": [
+  {
+   "id": "sbs-catalog",
+   "title": "Background/skybox/planet/horror packs (9 packs, 581 images)",
+   "author": "Screaming Brain Studios",
+   "url": "https://screamingbrainstudios.itch.io/",
+   "license": "CC0-1.0",
+   "licenseEvidence": "profile statement + per-archive License.txt",
+   "courtesy": true
+  },
+  {
+   "id": "ansimuz-itch-cc0",
+   "title": "Sunny Land, Sunny Land Forest, Sunny Land Woods, Warped City, Warped Caves, Magic Cliffs, Mountain Dusk",
+   "author": "Luis Zuno (ansimuz)",
+   "url": "https://ansimuz.itch.io/",
+   "license": "CC0-1.0",
+   "licenseEvidence": "itch Asset license field per pack",
+   "courtesy": true
+  },
+  {
+   "id": "ansimuz-industrial",
+   "title": "Industrial Parallax background",
+   "author": "Luis Zuno (ansimuz)",
+   "url": "https://ansimuz.itch.io/industrial-parallax-background",
+   "license": "CC-BY-4.0",
+   "required_attribution": "Industrial Parallax background by Luis Zuno (ansimuz), CC-BY 4.0",
+   "courtesy": false
+  },
+  {
+   "id": "gothicvania-oga",
+   "title": "GothicVania Town / Cemetery / Church / Swamp / Rocky Pass / Bridge Expansion / Junk Wasteland",
+   "author": "Luis Zuno (ansimuz)",
+   "url": "https://opengameart.org/users/ansimuz",
+   "license": "CC0-1.0",
+   "licenseEvidence": "OGA license field per page",
+   "courtesy": true
+  },
+  {
+   "id": "kenney",
+   "title": "Background elements (+remastered), jumper pack, platformer packs, abstract/physics/voxel sets",
+   "author": "Kenney (Kenney Vleugels)",
+   "url": "https://kenney.nl",
+   "license": "CC0-1.0",
+   "courtesy": true
+  },
+  {
+   "id": "oga-backgrounds",
+   "title": "Backgrounds (8 scenes)",
+   "author": "pauliuw",
+   "url": "https://opengameart.org/content/backgrounds",
+   "license": "CC0-1.0",
+   "courtesy": true
+  },
+  {
+   "id": "oga-drybrush",
+   "title": "Dry brush landscape photos (34)",
+   "author": "pauliuw / BurningWell photographers",
+   "url": "https://opengameart.org/content/dry-brush-landscape-photos",
+   "license": "CC0-1.0",
+   "courtesy": true
+  },
+  {
+   "id": "oga-oilpaint",
+   "title": "Oil painting landscapes (4)",
+   "author": "JAP",
+   "url": "https://opengameart.org/content/oil-painting-landscapes",
+   "license": "CC0-1.0",
+   "courtesy": true
+  },
+  {
+   "id": "oga-meadow",
+   "title": "Meadow background",
+   "author": "bart",
+   "url": "https://opengameart.org/content/meadow-background",
+   "license": "CC0-1.0",
+   "courtesy": true
+  },
+  {
+   "id": "oga-nebula",
+   "title": "Spacy cloud/nebula backgrounds (5)",
+   "author": "Treeform",
+   "url": "https://opengameart.org/content/spacy-cloudnebula-backgrounds",
+   "license": "CC0-1.0",
+   "courtesy": true
+  },
+  {
+   "id": "oga-spacebackdrop",
+   "title": "Space backdrop",
+   "author": "beren77",
+   "url": "https://opengameart.org/content/space-backdrop",
+   "license": "CC0-1.0",
+   "courtesy": true
+  },
+  {
+   "id": "oga-spacebg",
+   "title": "Space background (Hubble-derived)",
+   "author": "Cuzco",
+   "url": "https://opengameart.org/content/space-background",
+   "license": "CC0-1.0",
+   "courtesy": true
+  },
+  {
+   "id": "oga-cityparallax",
+   "title": "City Parallax pixel art",
+   "author": "Gustavo Saraiva",
+   "url": "https://opengameart.org/content/city-parallax-pixel-art",
+   "license": "CC0-1.0",
+   "courtesy": true
+  },
+  {
+   "id": "oga-citynight",
+   "title": "Parallax City - Night (4 Colors)",
+   "author": "FisherG",
+   "url": "https://opengameart.org/content/parallax-city-night-4-colors",
+   "license": "CC0-1.0",
+   "courtesy": true,
+   "note": "author requests credit with OGA profile link"
+  },
+  {
+   "id": "craftpix-cyberpunk",
+   "title": "Cyberpunk Backgrounds Pixel Art (8 scenes)",
+   "author": "CraftPix.net 2D Game Assets",
+   "url": "https://opengameart.org/content/cyberpunk-backgrounds-pixel-art",
+   "license": "OGA-BY-3.0",
+   "required_attribution": "Cyberpunk city backgrounds by CraftPix.net 2D Game Assets, OGA-BY 3.0",
+   "courtesy": false
+  },
+  {
+   "id": "craftpix-oga-pixel-series",
+   "title": "OGA pixel background series (19 packs: mountains, winter, underwater, seas, meadows, village, sunsets)",
+   "author": "CraftPix.net 2D Game Assets",
+   "url": "https://opengameart.org/users/craftpixnet-2d-game-assets",
+   "license": "OGA-BY-3.0",
+   "required_attribution": "Pixel background series by CraftPix.net 2D Game Assets, OGA-BY 3.0",
+   "courtesy": false
+  },
+  {
+   "id": "carra-multilayer",
+   "title": "Multilayer scroll backgrounds (desert + tropical mountains, 4 layers each)",
+   "author": "Carra (Vircon32)",
+   "url": "https://opengameart.org/content/multilayer-scroll-backgrounds",
+   "license": "CC-BY-4.0",
+   "required_attribution": "Multilayer scroll backgrounds by Carra / Vircon32 project, CC-BY 4.0",
+   "courtesy": false
+  },
+  {
+   "id": "ansimuz-underwater-fantasy",
+   "title": "Underwater Fantasy (3 parallax layers)",
+   "author": "Luis Zuno (ansimuz)",
+   "url": "https://opengameart.org/content/underwater-fantasy",
+   "license": "CC-BY-3.0",
+   "required_attribution": "Underwater Fantasy by Luis Zuno (ansimuz), CC-BY 3.0",
+   "courtesy": false
+  },
+  {
+   "id": "ansimuz-underwater-diving",
+   "title": "Underwater Diving Pack",
+   "author": "Luis Zuno (ansimuz)",
+   "url": "https://opengameart.org/content/underwater-diving-pack",
+   "license": "CC0-1.0",
+   "courtesy": true
+  },
+  {
+   "id": "emcee-rocky-desert",
+   "title": "Rocky desert landscape (layered, looping)",
+   "author": "Emcee Flesher (after Quantiset)",
+   "url": "https://opengameart.org/content/rocky-desert-landscape-layered-looping",
+   "license": "CC0-1.0",
+   "courtesy": true
+  },
+  {
+   "id": "emcee-desert-moon",
+   "title": "Desert moon background (layered, looping)",
+   "author": "Emcee Flesher",
+   "url": "https://opengameart.org/content/desert-moon-background-layered-looping",
+   "license": "CC-BY-4.0",
+   "required_attribution": "Desert moon background by Emcee Flesher, CC-BY 4.0",
+   "courtesy": false
+  }
+ ],
+ "rejected_postverification": [
+  {
+   "id": "oga-pyramid",
+   "title": "Pyramid background",
+   "author": "bart",
+   "url": "https://opengameart.org/content/pyramid-background",
+   "license": "CC-BY-SA-3.0/GPL",
+   "reason": "share-alike; mirror SOURCE.md wrongly claimed CC0. Removed from test set; never entered corpus. Mirror license claims must always be re-verified at source."
+  }
+ ]
+}
