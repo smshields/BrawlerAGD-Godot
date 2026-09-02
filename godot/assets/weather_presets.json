@@ -1,0 +1,183 @@
+{
+  // Weather tuning (backgrounds track Phase 3, 2026-09-02). Hot-editable: the
+  // trait -> preset envelope table, the clear-stage probability (weather is
+  // seasoning — 60-75% of stages stay clear), and the readability budgets the
+  // planner enforces from schedule static maxima. Envelopes are [min, max],
+  // sampled per keyframe from the stage seed. "lightning" stays flag-disabled
+  // until the M5 shader track settles flash vocabulary.
+  "clearProbability": 0.675,
+  "secondInstanceProbability": 0.30,
+  "globalBudget": 0.9,
+  "actionBandBudget": 0.12,
+  "nearFactor": 1.3,
+  "lightningEnabled": false,
+  "presets": [
+    {
+      "name": "rain",
+      "type": "rain",
+      "paletteRamp": "blue",
+      "traits": ["vast", "shifting"],
+      "baseDeg": [245, 295], "driftDegPerMin": [2, 12], "oscAmpDeg": [4, 14], "oscPeriodS": [6, 14],
+      "speed": [220, 420], "speedChangeEveryS": [4, 20], "speedTweenDurS": [1.5, 6],
+      "speedEasing": ["cubicInOut", "sineIn"],
+      "intensity": [0.3, 1.0], "intensityChangeEveryS": [10, 45], "intensityTweenDurS": [2, 8],
+      "persistent": false, "episodeDurS": [20, 70], "episodeGapS": [8, 40],
+      "rampInS": 4, "rampOutS": 6, "episodeEasing": "cubicOut",
+      "layerPhaseOffsetS": 0.8,
+      "layers": [
+        { "layer": "far", "density": 0.15, "sizeScale": 0.5, "opacityCap": 0.35 },
+        { "layer": "mid", "density": 0.45, "sizeScale": 0.8, "opacityCap": 0.45 },
+        { "layer": "action", "density": 0.10, "sizeScale": 1.0, "opacityCap": 0.15 },
+        { "layer": "near", "density": 0.04, "sizeScale": 2.5, "opacityCap": 0.30, "blur": 0.7 }
+      ]
+    },
+    {
+      "name": "bloodrain",
+      "type": "rain",
+      "paletteRamp": "red",
+      "traits": ["deadly"],
+      "registers": ["horror"],
+      "requiresTraits": ["deadly"],
+      "baseDeg": [255, 285], "driftDegPerMin": [0, 8], "oscAmpDeg": [2, 8], "oscPeriodS": [8, 16],
+      "speed": [180, 360], "speedChangeEveryS": [6, 24], "speedTweenDurS": [2, 6],
+      "intensity": [0.4, 1.0], "intensityChangeEveryS": [12, 40], "intensityTweenDurS": [3, 8],
+      "persistent": true,
+      "layerPhaseOffsetS": 1.0,
+      "layers": [
+        { "layer": "mid", "density": 0.35, "sizeScale": 0.8, "opacityCap": 0.40 },
+        { "layer": "action", "density": 0.08, "sizeScale": 1.0, "opacityCap": 0.12 },
+        { "layer": "near", "density": 0.03, "sizeScale": 2.5, "opacityCap": 0.28, "blur": 0.7 }
+      ]
+    },
+    {
+      "name": "snow",
+      "type": "snow",
+      "paletteRamp": "grey",
+      "traits": ["towering", "vast", "forgiving"],
+      "baseDeg": [255, 285], "driftDegPerMin": [4, 16], "oscAmpDeg": [10, 25], "oscPeriodS": [5, 12],
+      "speed": [40, 120], "speedChangeEveryS": [6, 25], "speedTweenDurS": [2, 8],
+      "intensity": [0.3, 1.0], "intensityChangeEveryS": [15, 50], "intensityTweenDurS": [4, 10],
+      "persistent": true,
+      "layerPhaseOffsetS": 1.2,
+      "layers": [
+        { "layer": "far", "density": 0.20, "sizeScale": 0.5, "opacityCap": 0.40 },
+        { "layer": "mid", "density": 0.40, "sizeScale": 0.8, "opacityCap": 0.50 },
+        { "layer": "action", "density": 0.10, "sizeScale": 1.0, "opacityCap": 0.18 },
+        { "layer": "near", "density": 0.05, "sizeScale": 2.8, "opacityCap": 0.30, "blur": 0.8 }
+      ]
+    },
+    {
+      "name": "ash",
+      "type": "ash",
+      "paletteRamp": "grey",
+      "traits": ["deadly", "shattered", "barren"],
+      "baseDeg": [235, 305], "driftDegPerMin": [4, 18], "oscAmpDeg": [8, 20], "oscPeriodS": [6, 14],
+      "speed": [30, 100], "speedChangeEveryS": [8, 30], "speedTweenDurS": [3, 9],
+      "intensity": [0.3, 0.9], "intensityChangeEveryS": [12, 45], "intensityTweenDurS": [3, 9],
+      "persistent": true,
+      "layerPhaseOffsetS": 1.0,
+      "layers": [
+        { "layer": "far", "density": 0.15, "sizeScale": 0.5, "opacityCap": 0.30 },
+        { "layer": "mid", "density": 0.30, "sizeScale": 0.8, "opacityCap": 0.40 },
+        { "layer": "action", "density": 0.08, "sizeScale": 1.0, "opacityCap": 0.12 }
+      ]
+    },
+    {
+      "name": "embers",
+      "type": "embers",
+      "paletteRamp": "orange",
+      "traits": ["deadly", "cramped"],
+      "baseDeg": [70, 110], "driftDegPerMin": [2, 10], "oscAmpDeg": [10, 25], "oscPeriodS": [4, 10],
+      "speed": [30, 90], "speedChangeEveryS": [5, 18], "speedTweenDurS": [2, 6],
+      "speedEasing": ["sineInOut", "expoOut"],
+      "intensity": [0.25, 0.85], "intensityChangeEveryS": [8, 30], "intensityTweenDurS": [2, 6],
+      "persistent": false, "episodeDurS": [25, 80], "episodeGapS": [10, 45],
+      "rampInS": 5, "rampOutS": 8, "episodeEasing": "sineInOut",
+      "layerPhaseOffsetS": 0.6,
+      "layers": [
+        { "layer": "mid", "density": 0.20, "sizeScale": 0.7, "opacityCap": 0.45 },
+        { "layer": "action", "density": 0.06, "sizeScale": 1.0, "opacityCap": 0.15 },
+        { "layer": "near", "density": 0.03, "sizeScale": 2.2, "opacityCap": 0.35, "blur": 0.6 }
+      ]
+    },
+    {
+      "name": "dustmotes",
+      "type": "dust",
+      "paletteRamp": "gold",
+      "traits": ["sanctuary", "forgiving"],
+      "baseDeg": [0, 360], "driftDegPerMin": [1, 6], "oscAmpDeg": [15, 40], "oscPeriodS": [8, 18],
+      "speed": [8, 35], "speedChangeEveryS": [10, 30], "speedTweenDurS": [4, 10],
+      "intensity": [0.3, 0.8], "intensityChangeEveryS": [15, 50], "intensityTweenDurS": [5, 12],
+      "persistent": true,
+      "layerPhaseOffsetS": 1.5,
+      "layers": [
+        { "layer": "mid", "density": 0.18, "sizeScale": 0.7, "opacityCap": 0.35 },
+        { "layer": "action", "density": 0.06, "sizeScale": 1.0, "opacityCap": 0.12 },
+        { "layer": "near", "density": 0.03, "sizeScale": 2.0, "opacityCap": 0.30, "blur": 0.6 }
+      ]
+    },
+    {
+      "name": "fog",
+      "type": "fog",
+      "paletteRamp": "grey",
+      "traits": ["shifting", "twin"],
+      "baseDeg": [-10, 10], "driftDegPerMin": [1, 5], "oscAmpDeg": [2, 6], "oscPeriodS": [10, 20],
+      "speed": [15, 60], "speedChangeEveryS": [10, 35], "speedTweenDurS": [5, 12],
+      "intensity": [0.3, 0.9], "intensityChangeEveryS": [12, 40], "intensityTweenDurS": [6, 14],
+      "persistent": false, "episodeDurS": [30, 90], "episodeGapS": [15, 50],
+      "rampInS": 8, "rampOutS": 10, "episodeEasing": "sineInOut",
+      "layerPhaseOffsetS": 2.0,
+      "layers": [
+        { "layer": "far", "density": 0.10, "sizeScale": 6.0, "opacityCap": 0.30 },
+        { "layer": "mid", "density": 0.12, "sizeScale": 8.0, "opacityCap": 0.35 },
+        { "layer": "action", "density": 0.04, "sizeScale": 10.0, "opacityCap": 0.10 }
+      ]
+    },
+    {
+      "name": "petals",
+      "type": "petals",
+      "paletteRamp": "violet",
+      "traits": ["sanctuary", "forgiving", "twin"],
+      "registers": ["fantasy", "fey", "normal"],
+      "baseDeg": [225, 315], "driftDegPerMin": [4, 15], "oscAmpDeg": [15, 35], "oscPeriodS": [4, 10],
+      "speed": [30, 90], "speedChangeEveryS": [5, 20], "speedTweenDurS": [2, 7],
+      "intensity": [0.25, 0.8], "intensityChangeEveryS": [10, 35], "intensityTweenDurS": [3, 8],
+      "persistent": false, "episodeDurS": [20, 60], "episodeGapS": [10, 40],
+      "rampInS": 4, "rampOutS": 6, "episodeEasing": "cubicOut",
+      "layerPhaseOffsetS": 0.7,
+      "layers": [
+        { "layer": "mid", "density": 0.20, "sizeScale": 0.8, "opacityCap": 0.40 },
+        { "layer": "action", "density": 0.06, "sizeScale": 1.0, "opacityCap": 0.14 },
+        { "layer": "near", "density": 0.03, "sizeScale": 2.4, "opacityCap": 0.32, "blur": 0.7 }
+      ]
+    },
+    {
+      "name": "sand",
+      "type": "sand",
+      "paletteRamp": "gold",
+      "traits": ["barren", "vast"],
+      "baseDeg": [-15, 15], "driftDegPerMin": [3, 14], "oscAmpDeg": [5, 15], "oscPeriodS": [4, 9],
+      "speed": [120, 320], "speedChangeEveryS": [3, 12], "speedTweenDurS": [1, 4],
+      "speedEasing": ["expoOut", "cubicInOut"],
+      "intensity": [0.3, 1.0], "intensityChangeEveryS": [6, 25], "intensityTweenDurS": [2, 6],
+      "persistent": false, "episodeDurS": [15, 55], "episodeGapS": [8, 35],
+      "rampInS": 3, "rampOutS": 5, "episodeEasing": "cubicOut",
+      "layerPhaseOffsetS": 0.5,
+      "layers": [
+        { "layer": "far", "density": 0.12, "sizeScale": 0.5, "opacityCap": 0.30 },
+        { "layer": "mid", "density": 0.30, "sizeScale": 0.7, "opacityCap": 0.40 },
+        { "layer": "action", "density": 0.08, "sizeScale": 1.0, "opacityCap": 0.12 }
+      ]
+    },
+    {
+      "name": "lightning",
+      "type": "lightning",
+      "paletteRamp": "grey",
+      "traits": ["deadly", "shifting"],
+      "persistent": false, "episodeDurS": [1, 3], "episodeGapS": [20, 90],
+      "rampInS": 0.1, "rampOutS": 0.6, "episodeEasing": "expoOut",
+      "layerPhaseOffsetS": 0,
+      "layers": []
+    }
+  ]
+}

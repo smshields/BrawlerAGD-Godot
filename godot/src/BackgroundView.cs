@@ -32,6 +32,11 @@ public partial class BackgroundView : Node2D
     /// designer 2026-09-02), null when nothing is rendered.</summary>
     public string? AttributionLine { get; private set; }
 
+    /// <summary>The stage's parallax depths, consumed by the weather rows (Phase 3);
+    /// sensible defaults stand when the stage has no backdrop.</summary>
+    public float FarFactor { get; private set; } = 0.1f;
+    public float MidFactor { get; private set; } = 0.4f;
+
     /// <summary>Builds the backdrop for the stage, or stays empty on a null gene.
     /// persistedRemap = a built game's settled SINGLE-image remap
     /// (BuiltStage.BackgroundRemap); composites carry their remap inside the gene.</summary>
@@ -47,6 +52,8 @@ public partial class BackgroundView : Node2D
             return;
         }
         BackgroundSelectionConfig config = selector.Config;
+        FarFactor = layout.FarFactor;
+        MidFactor = layout.Mid is null ? MidFactor : layout.MidFactor;
         BrawlerSim.Determinism.Vec2 blast = StageRules.BlastHalfExtents(stage.Params);
         float boxW = blast.X * 2f * ppu;
         float boxH = blast.Y * 2f * ppu;
@@ -151,6 +158,9 @@ public partial class BackgroundView : Node2D
         }
 
         AttributionLine = BuildAttribution(layout);
+        GD.Print($"backdrop: {stage.BackgroundId}"
+            + (layout.Remap is { } r ? $" (remap {r})" : "")
+            + (layout.Accent is { } a ? $" + accent {a.Element.Id}" : ""));
 
         // The sharp focal band = the platform envelope (world units), pinned here in
         // LOCAL pixels; _Process converts it through the live camera transform.

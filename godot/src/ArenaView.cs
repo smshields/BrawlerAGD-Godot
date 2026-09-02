@@ -32,6 +32,7 @@ public partial class ArenaView : Node2D
     private DeathFlashView _deathFlash = null!;
     private PauseMenuView _pauseMenu = null!;
     private BackgroundView _background = null!;
+    private WeatherSystem _weather = null!;
     // KO edge detection for the flash (2026-08-12): the per-life ledger catches
     // stock decrements AND timed-mode deaths; the eliminated flag is the final KO.
     private int[] _prevDeaths = null!;
@@ -97,6 +98,11 @@ public partial class ArenaView : Node2D
         _background = new BackgroundView();
         AddChild(_background);
 
+        // Weather (backgrounds Phase 3): far/mid rows ride the backdrop depths;
+        // the action/near rows lift themselves with ZIndex. Set up after the camera.
+        _weather = new WeatherSystem();
+        AddChild(_weather);
+
         var stage = new StageView();
         AddChild(stage);
         stage.Setup(_world, Ppu, MatchSession.Game.Genome.Stage); // themed tiles (M4d)
@@ -128,6 +134,8 @@ public partial class ArenaView : Node2D
         _camera.Setup(_world, Ppu);
         _background.Setup(Ppu, MatchSession.Game!.Genome.Stage, _camera,
             MatchSession.StageBackgroundRemap);
+        _weather.Setup(Ppu, MatchSession.Game!.Genome.Stage, _camera,
+            _background.FarFactor, _background.MidFactor);
 
         _minimap = new MinimapView();
         AddChild(_minimap);
@@ -218,6 +226,7 @@ public partial class ArenaView : Node2D
         // each frame so the pause-menu debug toggle re-frames immediately.
         _camera.BottomUiPixels = HudView.ReservedBottomPixels();
         _camera.Sync((float)delta);
+        _weather.Sync(_world.TickCount);
         _minimap.Sync();
         _hud.Sync(_inputs);
     }
