@@ -341,6 +341,7 @@ public partial class CharacterSelectView : Control
             _game.Name,
             $"built:{System.IO.Path.GetFileName(_path)}/stage{_stageIndex}",
             new GameGenome(fighters, stage.Presented)); // negotiated theme rides in (M4d)
+        MatchSession.StageBackgroundRemap = stage.BackgroundRemap; // settled remap (2026-09-02)
         MatchSession.PlayerSpecs = specs;
         MatchSession.Mode = specs.Any(s => s.Human) ? MatchMode.HumanVsCpu : MatchMode.AiVsAi;
         MatchSession.EndRule = _mode;

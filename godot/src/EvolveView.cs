@@ -253,6 +253,7 @@ public partial class EvolveView : Control
             CharacterCount = _numPlayers.Selected + 2, // 2026-08-12 four-player
             SpriteSelector = SpriteBank.Selector, // 2026-08-22 sprite selection (cosmetic, RNG-free)
             StageThemeSelector = ThemeBank.Selector, // M4d stage tile themes (2026-09-01)
+            BackgroundSelector = BackgroundBank.Selector, // backgrounds track (2026-09-02)
         };
         if (_compositionMode.Selected == 1)
         {

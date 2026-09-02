@@ -85,6 +85,20 @@ public sealed record BackgroundSelectionConfig
     public float BlurScaleMin { get; init; } = 0.8f;
     public float BlurScaleMax { get; init; } = 1.2f;
 
+    /// <summary>Runtime dim multiplier over the (already pipeline-compressed)
+    /// background — platforms and fighters must always win local contrast. The M-BG1
+    /// coherence experiment validated 0.88 on bare compositions; the live arena adds
+    /// a HUD band, so ship slightly darker.</summary>
+    public float BaseDim { get; init; } = 0.85f;
+
+    /// <summary>Maximum tilt-shift blur radius in SOURCE-texture pixels at the screen
+    /// edge (scaled by the variant's BlurScale; 0 inside the focal band).</summary>
+    public float BlurMaxRadius { get; init; } = 2.5f;
+
+    /// <summary>World-unit margin added around the platform envelope when the view
+    /// derives the sharp focal band.</summary>
+    public float FocalMarginWorld { get; init; } = 1.5f;
+
     public static readonly BackgroundSelectionConfig Default = new();
 
     public static BackgroundSelectionConfig Parse(string json) =>

@@ -7,6 +7,7 @@ public static class Scenes
 {
     public const string Arena = "res://scenes/arena.tscn";
     public const string CharacterSelect = "res://scenes/character_select.tscn";
+    public const string Credits = "res://scenes/credits.tscn";
     public const string Evolve = "res://scenes/evolve.tscn";
     public const string GameBuilder = "res://scenes/game_builder.tscn";
     public const string GameSelect = "res://scenes/game_select.tscn";

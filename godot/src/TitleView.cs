@@ -171,10 +171,13 @@ public partial class TitleView : Control
             + "(Shields Games and Research).");
         Line("Built on \"Searching for Balanced 2D Brawler Games: Successes and Failures "
             + "of Automated Evaluation\" (Shields, Mawhorter, Melcer, Mateas — AIIDE 2022).");
-        Line("Engine: Godot. Character and attack sprites: Dungeon Crawl Stone Soup "
-            + "tiles (CC0 — thank you to the DCSS artists; github.com/crawl/tiles). "
-            + "Tile sprites: Kenney 1-bit pack (kenney.nl). "
-            + "Fighter and stage names: namegen.");
+        Line(CreditsUi.CourtesyBlock);
+        text.AddChild(new Control { CustomMinimumSize = new Vector2(0f, 10f) });
+
+        // Backgrounds (2026-09-02): the shipped corpus carries attribution-bearing
+        // licenses (CC-BY / OGA-BY) — this section is a LEGAL requirement and is
+        // generated from the same index the renderer uses, so it cannot drift.
+        CreditsUi.AddBackgroundsSection(text);
         text.AddChild(new Control { CustomMinimumSize = new Vector2(0f, 14f) });
 
         var back = new Button { Text = "BACK", CustomMinimumSize = new Vector2(200f, 40f) };

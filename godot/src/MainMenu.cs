@@ -27,9 +27,9 @@ public partial class MainMenu : Control
             AnchorLeft = 0.5f, AnchorRight = 0.5f, AnchorTop = 0.5f, AnchorBottom = 0.5f,
             GrowHorizontal = GrowDirection.Both, GrowVertical = GrowDirection.Both,
         };
-        // 11 rows since TEST STANDALONE GAME (2026-08-17): tighter spacing keeps the
-        // centered column clear of the bottom key-layout hint at 720 px.
-        box.AddThemeConstantOverride("separation", 6);
+        // 12-13 rows since CREDITS (2026-09-02): tighter spacing + shorter buttons
+        // keep the centered column clear of the bottom key-layout hint at 720 px.
+        box.AddThemeConstantOverride("separation", 4);
         AddChild(box);
 
         var title = new Label { Text = "BRAWLER AGD", HorizontalAlignment = HorizontalAlignment.Center };
@@ -62,6 +62,7 @@ public partial class MainMenu : Control
                 () => GetTree().ChangeSceneToFile(Scenes.Title));
         }
         AddButton(box, "SETTINGS", OpenSettings);
+        AddButton(box, "CREDITS", () => GetTree().ChangeSceneToFile(Scenes.Credits));
         AddButton(box, "QUIT", () => GetTree().Quit());
 
         _hint = new Label
@@ -238,7 +239,7 @@ public partial class MainMenu : Control
 
     private static Button AddButton(VBoxContainer box, string text, System.Action onPressed)
     {
-        var button = new Button { Text = text, CustomMinimumSize = new Vector2(340f, 38f) };
+        var button = new Button { Text = text, CustomMinimumSize = new Vector2(340f, 34f) };
         button.Pressed += () => onPressed();
         box.AddChild(button);
         return button;

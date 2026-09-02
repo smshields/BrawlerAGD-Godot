@@ -31,6 +31,7 @@ public partial class ArenaView : Node2D
     private SpawnPadView _spawnPads = null!;
     private DeathFlashView _deathFlash = null!;
     private PauseMenuView _pauseMenu = null!;
+    private BackgroundView _background = null!;
     // KO edge detection for the flash (2026-08-12): the per-life ledger catches
     // stock decrements AND timed-mode deaths; the eliminated flag is the final KO.
     private int[] _prevDeaths = null!;
@@ -90,6 +91,12 @@ public partial class ArenaView : Node2D
     /// menu.</summary>
     private void BuildViewStack(int players)
     {
+        // Backdrop (backgrounds track, 2026-09-02): behind everything, covering the
+        // kill box; empty for null-gene (pre-v14) stages — the legacy clear color.
+        _background = new BackgroundView();
+        AddChild(_background);
+        _background.Setup(Ppu, MatchSession.Game!.Genome.Stage, MatchSession.StageBackgroundRemap);
+
         var stage = new StageView();
         AddChild(stage);
         stage.Setup(_world, Ppu, MatchSession.Game.Genome.Stage); // themed tiles (M4d)
@@ -145,6 +152,8 @@ public partial class ArenaView : Node2D
         AddChild(_pauseMenu);
         _pauseMenu.ResumeRequested += () => SetPaused(false);
         _pauseMenu.QuitRequested += BackToMenu;
+        // AddChild already ran _Ready — the credit label exists now.
+        _pauseMenu.SetBackdropCredit(_background.AttributionLine);
     }
 
     public override void _PhysicsProcess(double delta)
@@ -358,6 +367,7 @@ public partial class ArenaView : Node2D
     {
         MatchSession.Trace = null;
         MatchSession.PlayerSpecs = null; // a quick match after a Game Player match is clean
+        MatchSession.StageBackgroundRemap = null;
         GetTree().ChangeSceneToFile(Standalone.MenuScene());
     }
 

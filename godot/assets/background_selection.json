@@ -19,5 +19,8 @@
   "brightnessJitter": 0.06,
   "contrastJitter": 0.04,
   "blurScaleMin": 0.8,
-  "blurScaleMax": 1.2
+  "blurScaleMax": 1.2,
+  "baseDim": 0.85,
+  "blurMaxRadius": 2.5,
+  "focalMarginWorld": 1.5
 }

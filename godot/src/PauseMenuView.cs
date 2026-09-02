@@ -18,6 +18,7 @@ public partial class PauseMenuView : CanvasLayer
     private Control _root = null!;
     private Button _debugButton = null!;
     private Button? _firstButton;
+    private Label _backdropCredit = null!;
 
     public override void _Ready()
     {
@@ -62,6 +63,23 @@ public partial class PauseMenuView : CanvasLayer
         Label hint = UiWidgets.Hint("ESC resume · Q quit to menu");
         hint.HorizontalAlignment = HorizontalAlignment.Center;
         box.AddChild(hint);
+
+        // Backdrop attribution (backgrounds track, 2026-09-02, designer: the pause
+        // menu credits the SPECIFIC art in the current match). Empty until the arena
+        // reports what it rendered.
+        _backdropCredit = UiWidgets.Hint("");
+        _backdropCredit.HorizontalAlignment = HorizontalAlignment.Center;
+        _backdropCredit.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        _backdropCredit.CustomMinimumSize = new Vector2(420f, 0f);
+        _backdropCredit.Visible = false;
+        box.AddChild(_backdropCredit);
+    }
+
+    /// <summary>The current match's backdrop credit line (null = no backdrop).</summary>
+    public void SetBackdropCredit(string? line)
+    {
+        _backdropCredit.Text = line is null ? "" : $"BACKDROP: {line}";
+        _backdropCredit.Visible = line is not null;
     }
 
     private static string DebugLabel() =>

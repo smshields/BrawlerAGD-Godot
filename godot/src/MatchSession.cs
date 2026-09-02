@@ -45,4 +45,10 @@ public static class MatchSession
     /// builds one source per spec (index = player index) instead of the quick-match
     /// modes. Cleared when the arena returns to the menu.</summary>
     public static System.Collections.Generic.List<PlayerSpec>? PlayerSpecs;
+
+    /// <summary>A built game's settled background remap for the launched stage
+    /// (BuiltStage.BackgroundRemap, 2026-09-02) — the genome carries only the
+    /// BackgroundId gene. Null = derive the remap from the seed (identical under the
+    /// shipped tuning). Cleared when the arena returns to the menu.</summary>
+    public static string? StageBackgroundRemap;
 }
