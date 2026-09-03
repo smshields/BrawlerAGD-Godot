@@ -533,7 +533,8 @@ public partial class CharacterSelectView : Control
             };
             var v = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
             card.AddChild(v);
-            var thumb = new StageThumb(_game.Stages[i].Stage)
+            var thumb = new StageThumb( // presented look incl. backdrop (2026-09-02)
+                _game.Stages[i].Presented, _game.Stages[i].BackgroundRemap)
             {
                 SizeFlagsVertical = SizeFlags.ExpandFill,
                 CustomMinimumSize = new Vector2(0f, 56f),
@@ -618,7 +619,8 @@ public partial class CharacterSelectView : Control
         }
         if (_stageIndex >= 0)
         {
-            _stagePreview.SetStage(_game.Stages[_stageIndex].Stage);
+            _stagePreview.SetStage(
+                _game.Stages[_stageIndex].Presented, _game.Stages[_stageIndex].BackgroundRemap);
             _stagePreviewName.Text = _game.Stages[_stageIndex].DisplayName.ToUpperInvariant();
         }
 

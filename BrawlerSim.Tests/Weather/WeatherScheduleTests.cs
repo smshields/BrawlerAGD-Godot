@@ -107,7 +107,7 @@ public class WeatherScheduleTests
     }
 
     [Fact]
-    public void EpisodeDurationsAndGapsStayInsideTheirEnvelopes()
+    public void EpisodesStartActiveAndDurationsAndGapsStayInsideTheirEnvelopes()
     {
         var dur = new Envelope(20f, 70f);
         var gap = new Envelope(8f, 40f);
@@ -115,11 +115,17 @@ public class WeatherScheduleTests
         {
             KeyframeSchedule gate = KeyframeSchedule.Episodes(
                 persistent: false, dur, gap, 4f, 6f, "cubicOut", new NgPcg(seed, 11), 600f);
-            // Segments alternate ramp-up / ramp-down; reconstruct episode extents.
+            // Weather is PRESENT at t = 0 (designer 2026-09-02): the first episode
+            // is already running and its ramp-down ends within the dur envelope.
+            Assert.Equal(1f, gate.Evaluate(0f));
             var segments = gate.Segments;
-            Assert.True(segments.Count >= 2 && segments.Count % 2 == 0);
-            float prevEnd = 0f;
-            for (int i = 0; i < segments.Count; i += 2)
+            Assert.True(segments.Count >= 3 && segments.Count % 2 == 1);
+            ScheduleSegment firstDown = segments[0];
+            Assert.Equal(1f, firstDown.Start);
+            Assert.True(dur.Contains(firstDown.T1, 0.51f),
+                $"first episode ends at {firstDown.T1}, outside the dur envelope");
+            float prevEnd = firstDown.T1;
+            for (int i = 1; i < segments.Count; i += 2)
             {
                 ScheduleSegment up = segments[i];
                 ScheduleSegment down = segments[i + 1];

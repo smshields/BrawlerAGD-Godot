@@ -46,6 +46,10 @@ public partial class WeatherSystem : Node2D
         float halfW = blast.X * ppu;
         float halfH = blast.Y * ppu;
         float areaScale = Mathf.Clamp(halfW * halfH * 4f / (1280f * 720f), 0.4f, 4f);
+        // Particles live in WORLD space, so on big maps (zoomed-out cameras) they
+        // shrink toward sub-pixel. Scale their size with the map (360 px = the
+        // legacy 5-unit half height) so weather reads at any framing.
+        float sizeFactor = Mathf.Clamp(halfH / 360f, 1f, 3f);
 
         foreach (WeatherInstancePlan instance in Plan.Instances)
         {
@@ -58,8 +62,8 @@ public partial class WeatherSystem : Node2D
                     EmissionBoxExtents = new Vector3(halfW * 1.2f, halfH * 1.2f, 0f),
                     Gravity = Vector3.Zero,
                     Spread = 12f,
-                    ScaleMin = layer.Row.SizeScale * 0.8f,
-                    ScaleMax = layer.Row.SizeScale * 1.25f,
+                    ScaleMin = layer.Row.SizeScale * sizeFactor * 0.8f,
+                    ScaleMax = layer.Row.SizeScale * sizeFactor * 1.25f,
                 };
                 var particles = new GpuParticles2D
                 {
@@ -81,11 +85,16 @@ public partial class WeatherSystem : Node2D
                         instance.Preset.Type, instance.Preset.PaletteRamp)
                         with { A = 0f },
                 };
-                var holder = new Node2D();
-                AddChild(holder);
-                holder.AddChild(particles);
-                _emitters.Add(new Emitter(holder, particles, material, instance, layer, i,
-                    layer.Row.OpacityCap));
+                var emitter = new Emitter(new Node2D(), particles, material, instance, layer, i,
+                    layer.Row.OpacityCap);
+                // Evaluate the schedules at t = 0 BEFORE the node enters the tree,
+                // so Preprocess pre-fills an already-moving storm — weather is
+                // present from the first frame (designer 2026-09-02), never fading
+                // in from an empty sky.
+                UpdateEmitter(emitter, 0f);
+                AddChild(emitter.Holder);
+                emitter.Holder.AddChild(particles);
+                _emitters.Add(emitter);
             }
         }
     }
@@ -100,42 +109,47 @@ public partial class WeatherSystem : Node2D
         float t = tick / 60f;
         foreach (Emitter e in _emitters)
         {
-            // Nearer rows run slightly BEHIND the schedule — the gust sweeps
-            // back-to-front through the stack (the cheapest depth sell there is).
-            float tLayer = Mathf.Max(0f, t - e.LayerIndex * e.Instance.Preset.LayerPhaseOffsetS);
-            float gate = e.Instance.EpisodeGate.Evaluate(tLayer);
-            float intensity = e.Instance.Intensity.Evaluate(tLayer);
-            bool visible = gate > 0.01f;
-            e.Particles.Emitting = visible;
-            if (!visible)
-            {
-                e.Particles.Modulate = e.Particles.Modulate with { A = 0f };
-                continue;
-            }
-            float speed = e.Instance.Speed.Evaluate(tLayer) * e.Layer.EffSpeedScale;
-            float directionDeg = e.Instance.Direction.Evaluate(tLayer);
-            float rad = Mathf.DegToRad(directionDeg);
-            var dir = new Vector3(Mathf.Cos(rad), -Mathf.Sin(rad), 0f); // world y-up → screen y-down
-            e.Material.Direction = dir;
-            e.Material.InitialVelocityMin = speed * 0.8f;
-            e.Material.InitialVelocityMax = speed * 1.2f;
-            if (e.Instance.Preset.Type is "rain" or "sand")
-            {
-                // Streak textures align with their motion (texture drawn along +Y).
-                float angle = -directionDeg - 90f;
-                e.Material.AngleMin = angle;
-                e.Material.AngleMax = angle;
-            }
-            e.Particles.AmountRatio = Mathf.Clamp(0.25f + 0.75f * intensity, 0f, 1f) * gate;
-            e.Particles.Modulate = e.Particles.Modulate with
-            {
-                A = e.BaseOpacity * gate * (0.45f + 0.55f * intensity),
-            };
-            // Parallax: the row trails the camera by (1 − factor) of its motion.
-            if (_camera is not null)
-            {
-                e.Holder.Position = _camera.Position * (1f - e.Layer.ParallaxFactor);
-            }
+            UpdateEmitter(e, t);
+        }
+    }
+
+    private void UpdateEmitter(Emitter e, float t)
+    {
+        // Nearer rows run slightly BEHIND the schedule — the gust sweeps
+        // back-to-front through the stack (the cheapest depth sell there is).
+        float tLayer = Mathf.Max(0f, t - e.LayerIndex * e.Instance.Preset.LayerPhaseOffsetS);
+        float gate = e.Instance.EpisodeGate.Evaluate(tLayer);
+        float intensity = e.Instance.Intensity.Evaluate(tLayer);
+        bool visible = gate > 0.01f;
+        e.Particles.Emitting = visible;
+        if (!visible)
+        {
+            e.Particles.Modulate = e.Particles.Modulate with { A = 0f };
+            return;
+        }
+        float speed = e.Instance.Speed.Evaluate(tLayer) * e.Layer.EffSpeedScale;
+        float directionDeg = e.Instance.Direction.Evaluate(tLayer);
+        float rad = Mathf.DegToRad(directionDeg);
+        var dir = new Vector3(Mathf.Cos(rad), -Mathf.Sin(rad), 0f); // world y-up → screen y-down
+        e.Material.Direction = dir;
+        e.Material.InitialVelocityMin = speed * 0.8f;
+        e.Material.InitialVelocityMax = speed * 1.2f;
+        if (e.Instance.Preset.Type is "rain" or "sand")
+        {
+            // Streak textures align with their motion (texture drawn along +Y).
+            float angle = -directionDeg - 90f;
+            e.Material.AngleMin = angle;
+            e.Material.AngleMax = angle;
+        }
+        e.Particles.AmountRatio = Mathf.Clamp(0.25f + 0.75f * intensity, 0f, 1f) * gate;
+        e.Particles.Modulate = e.Particles.Modulate with
+        {
+            A = e.BaseOpacity * gate * (0.45f + 0.55f * intensity),
+        };
+        // Parallax: the row trails the camera by (1 − factor) of its motion.
+        if (_camera is not null)
+        {
+            e.Holder.Position = _camera.Position * (1f - e.Layer.ParallaxFactor);
         }
     }
 }

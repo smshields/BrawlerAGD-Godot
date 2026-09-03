@@ -92,7 +92,9 @@ public sealed class KeyframeSchedule
     /// <summary>The episode gate in [0, 1]: persistent = always 1; otherwise gaps
     /// (gapS) and episodes (durS) with eased ramps — precipitation swells and dies
     /// instead of popping. Ramps subtract from the episode's duration, so dur/gap
-    /// stay inside their envelopes.</summary>
+    /// stay inside their envelopes. A weathered stage is weathered AT MATCH START
+    /// (designer 2026-09-02): the FIRST episode is already running at t = 0 (gate 1)
+    /// and plays out its remaining duration; gaps separate the episodes after it.</summary>
     public static KeyframeSchedule Episodes(bool persistent, Envelope durS, Envelope gapS,
         float rampInS, float rampOutS, string easing, NgPcg rng, float horizonS)
     {
@@ -101,7 +103,9 @@ public sealed class KeyframeSchedule
             return new KeyframeSchedule(1f, Array.Empty<ScheduleSegment>());
         }
         var segments = new List<ScheduleSegment>();
-        float t = 0;
+        float first = Math.Max(rampOutS + 0.5f, durS.Sample(rng));
+        segments.Add(new ScheduleSegment(first - rampOutS, first, 1f, 0f, easing));
+        float t = first;
         while (t < horizonS)
         {
             float gap = Math.Max(0.5f, gapS.Sample(rng));
@@ -112,7 +116,7 @@ public sealed class KeyframeSchedule
             segments.Add(new ScheduleSegment(down0, down0 + rampOutS, 1f, 0f, easing));
             t = up0 + dur;
         }
-        return new KeyframeSchedule(0f, segments);
+        return new KeyframeSchedule(1f, segments);
     }
 }
 

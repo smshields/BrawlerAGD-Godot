@@ -68,6 +68,11 @@ public partial class MatchPreview : Node2D
 
         Position = GetViewportRect().Size / 2f;
 
+        // Backdrop (designer 2026-09-02): the evolve preview shows the stage's real
+        // look. Added first (draw order), set up after the camera exists below.
+        var background = new BackgroundView();
+        AddChild(background);
+
         var stage = new StageView();
         AddChild(stage);
         stage.Setup(_world, Ppu, _record.Genome.Stage); // themed tiles (M4d)
@@ -92,6 +97,7 @@ public partial class MatchPreview : Node2D
         _camera = new ArenaCamera();
         AddChild(_camera);
         _camera.Setup(_world, Ppu);
+        background.Setup(Ppu, _record.Genome.Stage, _camera);
 
         MatchChanged?.Invoke();
     }

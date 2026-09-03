@@ -1,4 +1,5 @@
 using Godot;
+using BrawlerSim.Backgrounds;
 using BrawlerSim.Genome;
 
 namespace BrawlerGodot;
@@ -9,10 +10,14 @@ namespace BrawlerGodot;
 /// 2026-08-17 (designer): content is fitted UNIFORMLY (true aspect, letterboxed,
 /// centered) to the union of the kill box and every platform/spawn — legacy
 /// stages can have platforms outside the kill box, which previously drew past
-/// the control's bounds; ClipContents backstops any residue.</summary>
+/// the control's bounds; ClipContents backstops any residue.
+/// 2026-09-02 (designer): the stage's BACKDROP draws inside the kill box (dimmed,
+/// far + mid for composites) so stage select previews the real look — the in-match
+/// minimap stays schematic on purpose.</summary>
 public sealed partial class StageThumb : Control
 {
     private StageGenome? _stage;
+    private string? _backgroundRemap;
 
     public StageThumb()
     {
@@ -20,16 +25,20 @@ public sealed partial class StageThumb : Control
         ClipContents = true;
     }
 
-    public StageThumb(StageGenome stage)
+    public StageThumb(StageGenome stage, string? backgroundRemap = null)
     {
         _stage = stage;
+        _backgroundRemap = backgroundRemap;
         MouseFilter = MouseFilterEnum.Ignore;
         ClipContents = true;
     }
 
-    public void SetStage(StageGenome? stage)
+    /// <summary>backgroundRemap: a built stage's persisted single-image remap
+    /// (BuiltStage.BackgroundRemap); null derives it from the seed.</summary>
+    public void SetStage(StageGenome? stage, string? backgroundRemap = null)
     {
         _stage = stage;
+        _backgroundRemap = backgroundRemap;
         QueueRedraw();
     }
 
@@ -69,9 +78,11 @@ public sealed partial class StageThumb : Control
             Size.X / 2f + (x - mid.X) * scale,
             Size.Y / 2f - (y - mid.Y) * scale);
 
-        // Arena bounds, faint (same vocabulary as the in-match minimap frame).
         Vector2 boxTl = Map(-blast.X, blast.Y);
         Vector2 boxBr = Map(blast.X, -blast.Y);
+        DrawBackdrop(new Rect2(boxTl, boxBr - boxTl));
+
+        // Arena bounds, faint (same vocabulary as the in-match minimap frame).
         DrawRect(new Rect2(boxTl, boxBr - boxTl), new Color(0.28f, 0.3f, 0.38f), filled: false, width: 1f);
 
         foreach (PlatformGene p in _stage.Platforms)
@@ -95,6 +106,45 @@ public sealed partial class StageThumb : Control
         {
             var s = StageRules.SpawnOf(_stage.Params, i);
             DrawCircle(Map(s.X, s.Y), 2.5f, PlayerPalette.Of(i));
+        }
+    }
+
+    /// <summary>The real backdrop inside the kill-box rect (designer 2026-09-02):
+    /// the variant-cropped, remapped far/single image, plus the width-fitted,
+    /// bottom-anchored mid for composites — dimmed like the arena, schematic
+    /// platforms drawn on top. Null-gene stages keep the plain thumb.</summary>
+    private void DrawBackdrop(Rect2 box)
+    {
+        if (_stage?.BackgroundId is null)
+        {
+            return;
+        }
+        BackgroundSelector selector = BackgroundBank.Selector;
+        BackgroundLayout? layout = selector.Layout(
+            _stage, BrawlerSim.Serialization.BuiltGameNaming.NamingSeed(_stage), _backgroundRemap);
+        if (layout is null)
+        {
+            return;
+        }
+        float dim = selector.Config.BaseDim;
+        var tint = new Color(dim, dim, dim);
+
+        BackgroundEntry farEntry = layout.Single ?? layout.Far!;
+        BackgroundVariant v = layout.Variant;
+        Rect2 dest = layout.Variant.FlipX
+            ? new Rect2(box.Position.X + box.Size.X, box.Position.Y, -box.Size.X, box.Size.Y)
+            : box;
+        DrawTextureRectRegion(
+            BackgroundBank.TextureFor(farEntry, layout.Remap), dest,
+            new Rect2(v.Crop.X, v.Crop.Y, v.Crop.W, v.Crop.H), tint);
+
+        if (layout.Mid is { } mid)
+        {
+            float midH = box.Size.X * mid.Height / mid.Width;
+            DrawTextureRectRegion(
+                BackgroundBank.TextureFor(mid, layout.Remap),
+                new Rect2(box.Position.X, box.End.Y - midH, box.Size.X, midH),
+                new Rect2(0, 0, mid.Width, mid.Height), tint);
         }
     }
 }
