@@ -39,14 +39,48 @@ public static class BackgroundBank
             FileAccess.GetFileAsString("res://assets/background_selection.json")),
         ThemeBank.Library);
 
+    private static readonly System.Collections.Generic.Dictionary<string, bool> PropCache = new();
+
+    /// <summary>True when an element reads as a DISCRETE prop (planet, cloud, tree):
+    /// its border pixels are mostly transparent (corner-flood-keyed objects), not the
+    /// opaque edge of a scene slice cut from a larger image. The aspect filter cannot
+    /// catch square scene slices (2026-09-03: an underwater foreground read as a
+    /// floating billboard); the pipeline-side fix is retagging, this is the guard.</summary>
+    public static bool IsDiscreteProp(BackgroundEntry entry)
+    {
+        if (PropCache.TryGetValue(entry.Id, out bool cached))
+        {
+            return cached;
+        }
+        Image image = GD.Load<Texture2D>($"res://assets/backgrounds_v1/{entry.File}").GetImage();
+        image.Convert(Image.Format.Rgba8);
+        int w = image.GetWidth(), h = image.GetHeight();
+        int opaque = 0, total = 0;
+        for (int x = 0; x < w; x++)
+        {
+            total += 2;
+            if (image.GetPixel(x, 0).A > 0.1f) opaque++;
+            if (image.GetPixel(x, h - 1).A > 0.1f) opaque++;
+        }
+        for (int y = 1; y < h - 1; y++)
+        {
+            total += 2;
+            if (image.GetPixel(0, y).A > 0.1f) opaque++;
+            if (image.GetPixel(w - 1, y).A > 0.1f) opaque++;
+        }
+        bool prop = opaque < total * 0.15f;
+        PropCache[entry.Id] = prop;
+        return prop;
+    }
+
     /// <summary>The entry's texture under a remap target (null = native, straight from
     /// the import). Remapped variants are computed once and cached for the session.</summary>
     public static Texture2D TextureFor(BackgroundEntry entry, string? remap)
     {
         var native = GD.Load<Texture2D>($"res://assets/backgrounds_v1/{entry.File}");
-        if (remap is null)
+        if (remap is null || remap == entry.PaletteGroup)
         {
-            return native;
+            return native; // a layer already IN the unified target group stays native
         }
         string key = $"{entry.Id}|{remap}";
         if (RemapCache.TryGetValue(key, out ImageTexture? cached))

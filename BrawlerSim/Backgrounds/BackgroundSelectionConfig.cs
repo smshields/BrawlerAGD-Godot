@@ -62,6 +62,19 @@ public sealed record BackgroundSelectionConfig
     /// buys no extra harmony ("no remap" is always a candidate).</summary>
     public float RemapNoneBonus { get; init; } = 0.05f;
 
+    /// <summary>No-monopoly rule at the SOURCE level (designer 2026-09-03: cityscape
+    /// packs were dominating): no single source pack may hold more than this
+    /// probability mass in one pool — the per-entry cap cannot police family share
+    /// when one pack contributes half the corpus.</summary>
+    public float SourceShareCap { get; init; } = 0.25f;
+
+    /// <summary>Maximum world-pixels-per-image-pixel a layer may stretch to (the
+    /// policy-D design density is ~2.67 at 720p; 8 = three design steps). A layer
+    /// that cannot cover the kill box within this density MIRROR-TILES to cover the
+    /// entire camera space instead (designer 2026-09-03) — in the arena, the evolve
+    /// preview, and the stage-select thumbs alike.</summary>
+    public float LayerMaxScale { get; init; } = 8f;
+
     /// <summary>Tile-theme paletteGroup names that do not exist in the background
     /// group vocabulary, aliased for harmony scoring (art direction, tunable).</summary>
     public IReadOnlyDictionary<string, string> ThemeGroupAliases { get; init; } =
@@ -133,6 +146,12 @@ public sealed record BackgroundSelectionConfig
     /// scale range (fraction of the kill-box height), and its opacity cap — sparse,
     /// heavily blurred, never over the platform envelope at readable opacity.</summary>
     public float AccentProbability { get; init; } = 0.35f;
+
+    /// <summary>Accents must be DISCRETE props (planets, clouds, trees — roughly
+    /// square): elements whose aspect ratio exceeds this are scene strips or prop
+    /// SHEETS and never join the bokeh plane (2026-09-03 — a full-width foreground
+    /// slice read as a floating billboard). 1.6 keeps 273 of the 319 elements.</summary>
+    public float AccentMaxAspect { get; init; } = 1.6f;
     public float AccentFactorMin { get; init; } = 0.7f;
     public float AccentFactorMax { get; init; } = 1.3f;
     public float AccentScaleMin { get; init; } = 0.12f;

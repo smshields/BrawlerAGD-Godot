@@ -128,23 +128,76 @@ public sealed partial class StageThumb : Control
         }
         float dim = selector.Config.BaseDim;
         var tint = new Color(dim, dim, dim);
+        const float ppu = 72f; // the arena's px-per-unit: the fits must match in-game
+        var blast = StageRules.BlastHalfExtents(_stage.Params);
+        float boxWpx = blast.X * 2f * ppu;
+        float boxHpx = blast.Y * 2f * ppu;
 
+        // The far/single layer, mirror-tiled past the density cap exactly like the
+        // arena (BackgroundLayerFit is the shared rule).
         BackgroundEntry farEntry = layout.Single ?? layout.Far!;
         BackgroundVariant v = layout.Variant;
-        Rect2 dest = layout.Variant.FlipX
-            ? new Rect2(box.Position.X + box.Size.X, box.Position.Y, -box.Size.X, box.Size.Y)
-            : box;
-        DrawTextureRectRegion(
-            BackgroundBank.TextureFor(farEntry, layout.Remap), dest,
-            new Rect2(v.Crop.X, v.Crop.Y, v.Crop.W, v.Crop.H), tint);
+        var src = new Rect2(v.Crop.X, v.Crop.Y, v.Crop.W, v.Crop.H);
+        Texture2D farTexture = BackgroundBank.TextureFor(farEntry, layout.Remap);
+        LayerFit farFit = BackgroundLayerFit.Far(v.Crop, boxHpx, selector.Config.LayerMaxScale);
+        if (farEntry.Tileable || farFit.Tiled)
+        {
+            float scale = farEntry.Tileable
+                ? Mathf.Min(10f * ppu / farEntry.Height, selector.Config.LayerMaxScale)
+                : farFit.Scale;
+            DrawTiledRow(farTexture, src, box, box.Size.Y,
+                copyWidth: box.Size.X * v.Crop.W * scale / boxWpx, tint, v.FlipX);
+        }
+        else
+        {
+            // Flips go through a NEGATIVE-WIDTH SOURCE rect — a negative destination
+            // rect draws nothing (found on a flipped single-image thumb, 2026-09-03).
+            Rect2 flippedSrc = v.FlipX
+                ? new Rect2(src.Position.X + src.Size.X, src.Position.Y, -src.Size.X, src.Size.Y)
+                : src;
+            DrawTextureRectRegion(farTexture, box, flippedSrc, tint);
+        }
 
         if (layout.Mid is { } mid)
         {
-            float midH = box.Size.X * mid.Height / mid.Width;
-            DrawTextureRectRegion(
-                BackgroundBank.TextureFor(mid, layout.Remap),
-                new Rect2(box.Position.X, box.End.Y - midH, box.Size.X, midH),
-                new Rect2(0, 0, mid.Width, mid.Height), tint);
+            LayerFit midFit = BackgroundLayerFit.Mid(mid.Width, boxWpx, selector.Config.LayerMaxScale);
+            float midHThumb = box.Size.X * mid.Height * midFit.Scale / boxWpx;
+            var midBand = new Rect2(box.Position.X, box.End.Y - midHThumb, box.Size.X, midHThumb);
+            var midSrc = new Rect2(0, 0, mid.Width, mid.Height);
+            Texture2D midTexture = BackgroundBank.TextureFor(mid, layout.Remap);
+            if (midFit.Tiled)
+            {
+                DrawTiledRow(midTexture, midSrc, midBand, midHThumb,
+                    copyWidth: box.Size.X * mid.Width * midFit.Scale / boxWpx, tint, flipFirst: false);
+            }
+            else
+            {
+                DrawTextureRectRegion(midTexture, midBand, midSrc, tint);
+            }
+        }
+    }
+
+    /// <summary>Mirror-adjacent copies across a band — the thumb's rendition of the
+    /// arena's tiled repeat (vertical detail is approximated by the band height).</summary>
+    private void DrawTiledRow(Texture2D texture, Rect2 src, Rect2 band, float copyHeight,
+        float copyWidth, Color tint, bool flipFirst)
+    {
+        copyWidth = Mathf.Max(2f, copyWidth);
+        int copies = Mathf.CeilToInt(band.Size.X / copyWidth);
+        for (int i = 0; i < copies; i++)
+        {
+            bool flip = (i % 2 == 1) != flipFirst;
+            float x = band.Position.X + i * copyWidth;
+            float w = Mathf.Min(copyWidth, band.End.X - x);
+            var dest = new Rect2(x, band.End.Y - copyHeight, w, copyHeight);
+            // Partial last copy: crop the source to the same fraction so pixels map
+            // 1:1. Mirrored copies flip through a NEGATIVE-WIDTH SOURCE rect (a
+            // negative destination rect draws nothing).
+            float partW = src.Size.X * w / copyWidth;
+            Rect2 partSrc = flip
+                ? new Rect2(src.Position.X + src.Size.X, src.Position.Y, -partW, src.Size.Y)
+                : new Rect2(src.Position.X, src.Position.Y, partW, src.Size.Y);
+            DrawTextureRectRegion(texture, dest, partSrc, tint);
         }
     }
 }

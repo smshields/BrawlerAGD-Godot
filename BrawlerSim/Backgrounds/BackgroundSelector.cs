@@ -231,6 +231,7 @@ public sealed partial class BackgroundSelector
         }
 
         double[] probs = SelectionMath.Softmax(scores, Config.SoftmaxTemperature);
+        SelectionMath.CapGroupShare(probs, SourceGroups(pool), Config.SourceShareCap);
         SelectionMath.CapShare(probs, Config.MaxEntryShare);
 
         int k = Math.Min(Config.CandidateCount, pool.Count);
@@ -242,6 +243,25 @@ public sealed partial class BackgroundSelector
             probs[index] = 0;
         }
         return ordered;
+    }
+
+    /// <summary>Pool entries keyed by source pack, for the family-level share cap
+    /// (designer 2026-09-03: one pack contributing half the corpus was dominating
+    /// picks — the per-entry cap cannot police that).</summary>
+    internal static int[] SourceGroups(List<BackgroundEntry> pool)
+    {
+        var ids = new Dictionary<string, int>(StringComparer.Ordinal);
+        var groups = new int[pool.Count];
+        for (int i = 0; i < pool.Count; i++)
+        {
+            if (!ids.TryGetValue(pool[i].Source, out int id))
+            {
+                id = ids.Count;
+                ids[pool[i].Source] = id;
+            }
+            groups[i] = id;
+        }
+        return groups;
     }
 
     /// <summary>Resolve the BackgroundId GENE — the seeded spec's gene string (a

@@ -66,22 +66,29 @@ public partial class BackgroundView : Node2D
         float baseBlur = config.BlurMaxRadius * variant.BlurScale;
 
         // L0 — the far (or single) image covering the whole box. Scene images take
-        // the variant crop at the kill-box aspect; TILEABLE textures instead repeat
-        // at design density (one repeat ≈ the legacy 10-world-unit view height), so
-        // a big kill box never blows their pixels up — the variant crop origin
-        // doubles as the seeded tile offset.
+        // the variant crop at the kill-box aspect while that stays within the
+        // density cap; TILEABLE textures repeat at design density (one repeat ≈ the
+        // legacy 10-world-unit view height); anything that would stretch past
+        // LayerMaxScale MIRROR-TILES at the cap instead (designer 2026-09-03:
+        // coverage at sane density beats stretch). The variant crop origin doubles
+        // as the seeded tile offset in every repeating mode.
         BackgroundEntry farEntry = layout.Single ?? layout.Far!;
+        LayerFit farFit = BackgroundLayerFit.Far(variant.Crop, boxH, config.LayerMaxScale);
         Sprite2D farSprite;
-        if (farEntry.Tileable)
+        if (farEntry.Tileable || farFit.Tiled)
         {
-            float tileScale = 10f * ppu / farEntry.Height;
+            float tileScale = farEntry.Tileable
+                ? Mathf.Min(10f * ppu / farEntry.Height, config.LayerMaxScale)
+                : farFit.Scale;
             farSprite = new Sprite2D
             {
                 Texture = BackgroundBank.TextureFor(farEntry, layout.Remap),
                 RegionEnabled = true,
                 RegionRect = new Rect2(
                     variant.Crop.X, variant.Crop.Y, boxW / tileScale, boxH / tileScale),
-                TextureRepeat = TextureRepeatEnum.Enabled,
+                TextureRepeat = farEntry.Tileable
+                    ? TextureRepeatEnum.Enabled
+                    : TextureRepeatEnum.Mirror, // seam-free copies of a scene image
                 FlipH = variant.FlipX,
                 TextureFilter = TextureFilterEnum.Nearest,
                 Material = LayerMaterial(baseBlur, config.BaseDim, variant),
@@ -108,8 +115,11 @@ public partial class BackgroundView : Node2D
             // The mid is width-fitted to the kill box and bottom-anchored: its alpha
             // skyline lands where its aspect puts it, and the seam haze welds it to
             // the far behind (strength raised when atmospheric ordering failed).
+            // Past the density cap it MIRROR-TILES horizontally instead of
+            // stretching (designer 2026-09-03 — tiny mids on wide maps).
             Texture2D midTexture = BackgroundBank.TextureFor(midEntry, layout.Remap);
-            float midScale = boxW / midEntry.Width;
+            LayerFit midFit = BackgroundLayerFit.Mid(midEntry.Width, boxW, config.LayerMaxScale);
+            float midScale = midFit.Scale;
             float midH = midEntry.Height * midScale;
             float skylineLocalY = blast.Y * ppu - midH; // the mid quad's top edge
 
@@ -134,14 +144,23 @@ public partial class BackgroundView : Node2D
                 Material = LayerMaterial(baseBlur * config.MidBlurFraction, config.BaseDim, variant),
                 Scale = new Vector2(midScale, midScale),
             };
+            if (midFit.Tiled)
+            {
+                midSprite.RegionEnabled = true;
+                midSprite.RegionRect = new Rect2(0, 0, boxW / midScale, midEntry.Height);
+                midSprite.TextureRepeat = midEntry.Tileable
+                    ? TextureRepeatEnum.Enabled
+                    : TextureRepeatEnum.Mirror;
+            }
             AddLayer(midSprite, layout.MidFactor);
         }
 
-        if (layout.Accent is { } accent)
+        if (layout.Accent is { } accent && BackgroundBank.IsDiscreteProp(accent.Element))
         {
             // L2 — the bokeh plane: one sparse element, heavy blur, capped opacity,
             // anchored in the upper band (the selector already skipped stages whose
-            // platforms reach that high).
+            // platforms reach that high). Square-canvas SCENE SLICES mistagged as
+            // elements are dropped by the border-alpha guard above.
             BackgroundEntry element = accent.Element;
             string? accentRemap = layout.Remap is { } target
                 && System.Linq.Enumerable.Contains(selector.LegalRemaps(element), target)

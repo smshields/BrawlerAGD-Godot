@@ -268,6 +268,11 @@ public class BackgroundRecombinationTests
             {
                 accents++;
                 Assert.Equal("element", accent.Element.LayerRole);
+                // Accents are discrete props, never scene strips (2026-09-03).
+                Assert.True(
+                    Math.Max(accent.Element.Width, accent.Element.Height)
+                        <= 1.6f * Math.Min(accent.Element.Width, accent.Element.Height) + 1e-3f,
+                    $"strip-shaped accent: {accent.Element.Id}");
                 Assert.InRange(accent.Anchor, 0, 2);
                 Assert.InRange(accent.Factor, config.AccentFactorMin, config.AccentFactorMax);
                 Assert.InRange(accent.Scale, config.AccentScaleMin, config.AccentScaleMax);

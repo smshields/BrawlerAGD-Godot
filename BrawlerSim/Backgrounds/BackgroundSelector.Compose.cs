@@ -49,8 +49,13 @@ public sealed partial class BackgroundSelector
     private const ulong LayoutSequence = 0x42474c41594f5554UL;  // "BGLAYOUT"
 
     /// <summary>The unified-remap candidates a pair admits: "no remap" when the
-    /// native groups already match, plus the transition-table-legal targets both
-    /// entries' pipeline-validated lists share. Empty = predicate (b) fails.</summary>
+    /// native groups already match, plus every target group EACH layer can serve —
+    /// by already sitting in it natively (a native layer takes no remap; the render
+    /// path skips it) or by a transition-legal, pipeline-validated remap into it.
+    /// Empty = predicate (b) fails. Widened 2026-09-03 (designer: cityscape packs
+    /// were dominating): the old both-lists-intersect rule locked the 400
+    /// zero-remap entries out of almost every pair, leaving remap-rich city packs
+    /// as the only legal mids.</summary>
     public List<string?> SharedRemapCandidates(BackgroundEntry far, BackgroundEntry mid)
     {
         var candidates = new List<string?>();
@@ -58,9 +63,11 @@ public sealed partial class BackgroundSelector
         {
             candidates.Add(null);
         }
-        foreach (string target in LegalRemaps(far))
+        foreach (string target in Library.RemapTargets)
         {
-            if (LegalRemaps(mid).Contains(target))
+            bool farServes = far.PaletteGroup == target || LegalRemaps(far).Contains(target);
+            bool midServes = mid.PaletteGroup == target || LegalRemaps(mid).Contains(target);
+            if (farServes && midServes)
             {
                 candidates.Add(target);
             }
@@ -228,6 +235,7 @@ public sealed partial class BackgroundSelector
             scores[i] = score(pool[i]);
         }
         double[] probs = SelectionMath.Softmax(scores, Config.SoftmaxTemperature);
+        SelectionMath.CapGroupShare(probs, SourceGroups(pool), Config.SourceShareCap);
         SelectionMath.CapShare(probs, Config.MaxEntryShare);
         int k = Math.Min(Config.CandidateCount, pool.Count);
         var ordered = new List<BackgroundEntry>(k);
@@ -322,12 +330,15 @@ public sealed partial class BackgroundSelector
             return null;
         }
         string register = PickRegister(seed);
+        bool Prop(BackgroundEntry e) => e.LayerRole == "element"
+            && Math.Max(e.Width, e.Height)
+                <= Config.AccentMaxAspect * Math.Min(e.Width, e.Height);
         List<BackgroundEntry> pool = Library.Entries
-            .Where(e => e.LayerRole == "element" && e.Register.Contains(register))
+            .Where(e => Prop(e) && e.Register.Contains(register))
             .ToList();
         if (pool.Count == 0)
         {
-            pool = Library.Entries.Where(e => e.LayerRole == "element").ToList();
+            pool = Library.Entries.Where(Prop).ToList();
         }
         if (pool.Count == 0)
         {

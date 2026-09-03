@@ -84,7 +84,9 @@ public sealed class BackgroundPalette
             (byte)Math.Clamp(entry.Metrics.DomLightColor[0], 0, 255),
             (byte)Math.Clamp(entry.Metrics.DomLightColor[1], 0, 255),
             (byte)Math.Clamp(entry.Metrics.DomLightColor[2], 0, 255));
-        return targetGroup is null ? dom : RemapColor(dom, entry.PaletteGroup, targetGroup);
+        return targetGroup is null || targetGroup == entry.PaletteGroup
+            ? dom // a layer already in the unified target group renders native
+            : RemapColor(dom, entry.PaletteGroup, targetGroup);
     }
 
     private static double Offset(double h, string sourceGroup)
