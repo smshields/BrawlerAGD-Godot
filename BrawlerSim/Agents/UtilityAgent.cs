@@ -39,14 +39,26 @@ public sealed partial class UtilityAgent : IInputSource
     private const float AttackInRange = 4.0f;
     private const float AttackDamagePreference = 0.05f; // dmg ≤ ~15 → bonus ≤ 0.75 < base 4
 
-    // Projectiles (2026-07-14, FEATURES.md §Projectiles agent spec). Fire-from-range
-    // sits BELOW AttackInRange so melee stays preferred when both connect ("avoid
-    // using projectiles at close range" is the hard gate; this is the soft one), and
-    // the weight is deliberately moderate — zoning findable, not agent-forced.
-    private const float ProjectileInRange = 2.6f;
-    private const float ProjectileDamagePreference = 0.04f;
+    // Projectiles (2026-07-14, FEATURES.md §Projectiles agent spec). EQUAL WEIGHTING
+    // since 2026-09-04 (designer-directed, DEVIATIONS #35): the original 2.6/0.04
+    // soft melee preference — on top of the melee-first movement stack — helped
+    // drive projectile slots extinct under random composition (probe: bolts released
+    // at median dx 1.3-2.2 after the target closed during warm-up, 87-91% cross-match
+    // losses despite higher damage). The close-range gate stays the hard rule.
+    private const float ProjectileInRange = 4.0f;       // == AttackInRange
+    private const float ProjectileDamagePreference = 0.05f; // == AttackDamagePreference
     private const float MinProjectileRange = 2.5f;      // the close-range gate
     private const float ProjectileCorridorSlack = 0.6f; // vertical looseness of the aim test
+    // Zoning stance (2026-09-04, designer-directed — DEVIATIONS #35): a projectile
+    // carrier plays RANGE. Retreat must beat Approach (1.5) but stay below Flank
+    // (2.5) so platform routing still wins; the hold keeps the agent planted in the
+    // firing pocket instead of drifting in. All O(moves) arithmetic per decision —
+    // no pathfinding, no allocation (designer: must stay computationally cheap).
+    private const float ZonerRetreat = 2.2f;      // too close for the gate → back out
+    private const float ZonerRetreatRange = 4.0f; // retreat while inside gate + margin
+    private const float ZonerMaxRange = 10f;      // the pocket's far edge; beyond, approach
+    private const float ZonerHold = 1.6f;         // in the pocket: plant and fire
+    private const float ZonerEdgeProbe = 1.0f;    // never back off a ledge
     private const int ProjectileLookaheadTicks = 30;    // dodge prediction horizon (0.5 s)
     private const int ProjectileLookaheadStep = 3;
     private const float EvadeMove = 2.0f;         // scaled up to 2× as damage climbs
@@ -755,7 +767,19 @@ public sealed partial class UtilityAgent : IInputSource
             {
                 continue;
             }
-            canHit[m] = !opponentImmune && ProjectileCorridorHit(ranged, self, opponent, world.Config);
+            // Commit awareness + horizontal lead (2026-09-04, DEVIATIONS #35): the
+            // shot is a warm-up commitment, so AIM AT THE RELEASE MOMENT — the
+            // target's position led by its current velocity over the warm-up. A
+            // closing target's led position falls inside the close-range gate and
+            // the shot is refused (the probe's point-blank releases at median dx
+            // 1.3-2.2); a retreating target must still be in range at release.
+            // Loose by design like the rest of the corridor: horizontal lead only.
+            float warmUpSeconds = ranged.WarmUpTicks * world.Config.Dt;
+            var led = new Determinism.Vec2(
+                opponent.Position.X + opponent.Velocity.X * warmUpSeconds,
+                opponent.Position.Y);
+            canHit[m] = !opponentImmune
+                && ProjectileCorridorHit(ranged, self, led, opponent.BodyHalf, world.Config);
             anyCanHit |= canHit[m];
         }
     }
@@ -926,9 +950,16 @@ public sealed partial class UtilityAgent : IInputSource
     /// coarse — precision comes from the sim, misses are the humanizing noise.
     /// </summary>
     private static bool ProjectileCorridorHit(
-        SimProjectileMove ranged, SimPlayer shooter, SimPlayer target, MatchConfig config)
+        SimProjectileMove ranged, SimPlayer shooter, SimPlayer target, MatchConfig config) =>
+        ProjectileCorridorHit(ranged, shooter, target.Position, target.BodyHalf, config);
+
+    /// <summary>Position-based core (2026-09-04): the shooter aims at the LED target
+    /// position (release-moment prediction); the telegraph scan keeps the plain
+    /// current-position overload above — a committed shot threatens where you ARE.</summary>
+    private static bool ProjectileCorridorHit(SimProjectileMove ranged, SimPlayer shooter,
+        Determinism.Vec2 targetPos, Determinism.Vec2 targetHalf, MatchConfig config)
     {
-        float dx = MathF.Abs(target.Position.X - shooter.Position.X);
+        float dx = MathF.Abs(targetPos.X - shooter.Position.X);
         if (dx < MinProjectileRange)
         {
             return false;
@@ -947,19 +978,23 @@ public sealed partial class UtilityAgent : IInputSource
         {
             return false;
         }
-        float centerY = ProjectileCorridorCenterY(ranged, shooter, target, config);
-        float tolerance = ProjectileCorridorSlack + target.BodyHalf.Y
+        float centerY = ProjectileCorridorCenterY(ranged, shooter, targetPos, config);
+        float tolerance = ProjectileCorridorSlack + targetHalf.Y
             + (ranged.Path == ProjectilePath.Sine ? ranged.SineAmplitude : 0f);
-        return MathF.Abs(target.Position.Y - centerY) <= tolerance;
+        return MathF.Abs(targetPos.Y - centerY) <= tolerance;
     }
 
     /// <summary>Where the shot's path sits vertically when it reaches the target's
     /// column (loose: time from launch speed alone). Shared by the shooter's aim test
     /// and the defender's wind-up telegraph (2026-07-20).</summary>
     private static float ProjectileCorridorCenterY(
-        SimProjectileMove ranged, SimPlayer shooter, SimPlayer target, MatchConfig config)
+        SimProjectileMove ranged, SimPlayer shooter, SimPlayer target, MatchConfig config) =>
+        ProjectileCorridorCenterY(ranged, shooter, target.Position, config);
+
+    private static float ProjectileCorridorCenterY(
+        SimProjectileMove ranged, SimPlayer shooter, Determinism.Vec2 targetPos, MatchConfig config)
     {
-        float dx = MathF.Abs(target.Position.X - shooter.Position.X);
+        float dx = MathF.Abs(targetPos.X - shooter.Position.X);
         float t = dx / MathF.Max(ranged.LaunchSpeed, 0.5f);
         float centerY = shooter.Position.Y + ranged.LaunchFraction.Y * shooter.BodyHalf.Y;
         if (ranged.Path == ProjectilePath.Quadratic)

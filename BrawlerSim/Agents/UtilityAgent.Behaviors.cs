@@ -21,6 +21,7 @@ public sealed partial class UtilityAgent
         new FlankBehavior(),
         new AttackBehavior(),
         new ProjectileBehavior(),
+        new ZonerBehavior(),
         new DashUtilityBehavior(),
         new VerticalUtilityBehavior(),
         new EvadeBehavior(),
@@ -205,9 +206,11 @@ public sealed partial class UtilityAgent
 
     /// <summary>Projectile firing (2026-07-14, FEATURES.md §Projectiles agent spec):
     /// scores any projectile slot whose corridor test says the opponent is plausibly
-    /// hittable — canHit already encodes both the close-range gate and the loose aim,
-    /// so this behavior only prices the candidate. A break-stunned opponent gets the
-    /// half punish bonus (the full one belongs to melee, which actually confirms).</summary>
+    /// hittable — canHit already encodes the close-range gate, the RELEASE-MOMENT
+    /// lead (2026-09-04), and the loose aim, so this behavior only prices the
+    /// candidate — at PARITY with melee since 2026-09-04 (designer-directed,
+    /// DEVIATIONS #35). A break-stunned opponent gets the half punish bonus (the
+    /// full one belongs to melee, which actually confirms).</summary>
     private sealed class ProjectileBehavior : IUtilityBehavior
     {
         public void Contribute(in UtilityContext ctx, UtilityScores scores)
@@ -226,6 +229,45 @@ public sealed partial class UtilityAgent
                         + ProjectileDamagePreference * ranged.DamageGiven;
                 }
             }
+        }
+    }
+
+    /// <summary>Zoning stance (2026-09-04, designer-directed — DEVIATIONS #35): a
+    /// character holding a fireable projectile plays RANGE instead of pure rushdown.
+    /// Too close for the firing gate → back out (edge-safe via the shared retreat
+    /// helper); inside the firing pocket → plant and let the attack channel shoot.
+    /// Gates: never over a pit, never while vulnerable, and never during the
+    /// opponent's break stun (that is the melee punish window — go in). Beyond the
+    /// pocket the normal approach stack takes over, so zoners still close distance
+    /// on runaways. O(moves) arithmetic, no allocation.</summary>
+    private sealed class ZonerBehavior : IUtilityBehavior
+    {
+        public void Contribute(in UtilityContext ctx, UtilityScores scores)
+        {
+            if (ctx.OverPit || ctx.Vulnerable || ctx.OpponentBreakStunned)
+            {
+                return;
+            }
+            bool armed = false;
+            for (int m = 0; m < ctx.Self.Moves.Count; m++)
+            {
+                if (ctx.Self.ButtonForMove(m) >= 0 && ctx.Self.ProjectileMoves[m] is not null)
+                {
+                    armed = true;
+                    break;
+                }
+            }
+            if (!armed || ctx.Distance > ZonerMaxRange)
+            {
+                return;
+            }
+            if (ctx.Distance < ZonerRetreatRange)
+            {
+                scores.Horizontal[UtilityScores.Toward(
+                    SafeRetreatDirection(ctx, requireGrounded: true))] += ZonerRetreat;
+                return;
+            }
+            scores.Horizontal[UtilityScores.HNeutral] += ZonerHold;
         }
     }
 

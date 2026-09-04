@@ -259,6 +259,18 @@ public partial class EvolveView : Control
         {
             generation = generation with { ButtonComposition = GenerationConfig.RandomComposition };
         }
+        else if (_compositionMode.Selected == 3)
+        {
+            // PINNED + PROJECTILE (designer 2026-09-04).
+            generation = generation with
+            {
+                ButtonComposition = new[]
+                {
+                    SlotSpec.Attack, SlotSpec.Attack, SlotSpec.Projectile,
+                    SlotSpec.Shield, SlotSpec.Dash,
+                },
+            };
+        }
         else if (_compositionMode.Selected == 2)
         {
             generation = generation with
@@ -292,9 +304,9 @@ public partial class EvolveView : Control
                 case "seed": _seed.Value = double.Parse(kv[1]); break;
                 case "rounds": _rounds.Value = double.Parse(kv[1]); break;
                 case "players": _numPlayers.Selected = int.Parse(kv[1]) - 2; break; // 2026-08-12
-                case "composition": // pinned|random|perbutton (headless UI verification)
+                case "composition": // pinned|random|perbutton|projectile (headless UI verification)
                     _compositionMode.Selected = kv[1] switch
-                        { "random" => 1, "perbutton" => 2, _ => 0 };
+                        { "random" => 1, "perbutton" => 2, "projectile" => 3, _ => 0 };
                     OnCompositionModeChanged(_compositionMode.Selected);
                     break;
                 case "advanced": // any value: open the advanced panel for screenshots
@@ -358,6 +370,10 @@ public partial class EvolveView : Control
         _compositionMode.AddItem("PINNED (ATTACK/ATTACK/SHIELD/DASH)", 0);
         _compositionMode.AddItem("RANDOMIZED (TYPES EVOLVE)", 1);
         _compositionMode.AddItem("PER-BUTTON", 2);
+        // Projectile pin as a first-class option (designer 2026-09-04): the standard
+        // kit with a guaranteed bolt slot — previously only reachable via PER-BUTTON.
+        // Appended so existing indices (and autoevolve tokens) stay stable.
+        _compositionMode.AddItem("PINNED + PROJECTILE (ATK/ATK/PROJ/SHLD/DASH)", 3);
         _compositionMode.Selected = 0;
         _compositionMode.ItemSelected += i => OnCompositionModeChanged((int)i);
         left.AddChild(Labeled("composition", _compositionMode));
