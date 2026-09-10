@@ -198,6 +198,10 @@ public sealed partial class BackgroundSelector
         string? themeGroup, IReadOnlyDictionary<string, int>? priorUse)
     {
         double score = AffinityScore(e, salient) + BestHarmony(e, themeGroup);
+        if (e.Style == "texture")
+        {
+            score -= Config.TextureStylePenalty; // scene art first (2026-09-10)
+        }
         if (e.Metrics.ContrastBand > Config.ContrastBandCeiling)
         {
             score -= Config.ContrastPenaltyWeight

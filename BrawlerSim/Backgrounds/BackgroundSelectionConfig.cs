@@ -62,6 +62,13 @@ public sealed record BackgroundSelectionConfig
     /// buys no extra harmony ("no remap" is always a candidate).</summary>
     public float RemapNoneBonus { get; init; } = 0.05f;
 
+    /// <summary>Score penalty on style == "texture" entries (designer 2026-09-10:
+    /// too much sameness — a third of stages drew flat texture-field backdrops).
+    /// Scene art outranks texture walls wherever the pool offers any; pools that are
+    /// ALL texture (the far role is 95% texture until the corpus grows) are
+    /// unaffected, since softmax only sees relative scores.</summary>
+    public float TextureStylePenalty { get; init; } = 0.25f;
+
     /// <summary>No-monopoly rule at the SOURCE level (designer 2026-09-03: cityscape
     /// packs were dominating): no single source pack may hold more than this
     /// probability mass in one pool — the per-entry cap cannot police family share

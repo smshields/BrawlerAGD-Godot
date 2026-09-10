@@ -218,6 +218,10 @@ public sealed partial class BackgroundSelector
         {
             BackgroundEntry e = pool[i];
             scores[i] = AffinityScore(e, salient) + BestHarmony(e, themeGroup);
+            if (e.Style == "texture")
+            {
+                scores[i] -= Config.TextureStylePenalty; // scene art first (2026-09-10)
+            }
             if (e.Metrics.ContrastBand > Config.ContrastBandCeiling)
             {
                 scores[i] -= Config.ContrastPenaltyWeight

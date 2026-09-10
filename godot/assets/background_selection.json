@@ -13,6 +13,7 @@
   "contrastBandCeiling": 32.0,
   "contrastPenaltyWeight": 0.25,
   "remapNoneBonus": 0.05,
+  "textureStylePenalty": 0.25,
   "sourceShareCap": 0.25,
   "layerMaxScale": 8.0,
   "themeGroupAliases": { "black": "night", "bone": "grey" },

@@ -14,11 +14,15 @@ namespace BrawlerGodot;
 /// </summary>
 public static class CreditsUi
 {
-    /// <summary>The long-standing courtesy block (engine + sprite/tile/name sources).</summary>
+    /// <summary>The courtesy block (engine + sprite/tile/name sources). Corrected
+    /// 2026-09-10 (designer attribution audit): the v2 STAGE TILES are DCSS-derived
+    /// too — Kenney's 1-bit pack now covers only the legacy v1 sheets. The stated
+    /// facts (all three v2 libraries CC0, DCSS-sourced) are pinned by
+    /// CreditsAssumptionsTests so this text cannot silently drift.</summary>
     public const string CourtesyBlock =
-        "Engine: Godot. Character and attack sprites: Dungeon Crawl Stone Soup "
-        + "tiles (CC0 — thank you to the DCSS artists; github.com/crawl/tiles). "
-        + "Tile sprites: Kenney 1-bit pack (kenney.nl). "
+        "Engine: Godot. Character, attack, and stage-tile sprites: Dungeon Crawl "
+        + "Stone Soup tiles (CC0 — thank you to the DCSS artists; "
+        + "github.com/crawl/tiles). Legacy 1-bit sprites: Kenney (kenney.nl). "
         + "Fighter and stage names: namegen.";
 
     /// <summary>Appends the backgrounds credits to a credits column: required
