@@ -9,8 +9,9 @@ shader_type canvas_item;
 
 uniform float band_top = 0.30;    // screen UV y where the focal band starts
 uniform float band_bottom = 0.70; // screen UV y where the focal band ends
-uniform float blur_px = 2.5;      // max blur radius in texture pixels
+uniform float blur_px = 5.5;      // max blur radius in texture pixels
 uniform float dim = 0.85;         // runtime dim multiplier (background never wins contrast)
+uniform float falloff_dim = 0.18; // extra darkening at full defocus (depth cue, backdrop only)
 uniform float brightness = 1.0;   // seeded per-stage jitter
 uniform float contrast = 1.0;     // seeded per-stage jitter
 
@@ -22,15 +23,18 @@ void fragment() {
     } else if (SCREEN_UV.y > band_bottom) {
         d = (SCREEN_UV.y - band_bottom) / max(1.0 - band_bottom, 1e-4);
     }
-    float radius = blur_px * smoothstep(0.0, 1.0, d);
+    // Intensified 2026-09-10 (designer: sell the miniature harder during play):
+    // full defocus arrives just past the band instead of at the screen edge.
+    float s = smoothstep(0.0, 0.55, d);
+    float radius = blur_px * s;
 
     vec4 c = texture(TEXTURE, UV);
     if (radius > 0.01) {
         vec4 acc = vec4(0.0);
         float total = 0.0;
-        for (int i = -3; i <= 3; i++) {
-            for (int j = -3; j <= 3; j++) {
-                vec2 off = vec2(float(i), float(j)) / 3.0 * radius * TEXTURE_PIXEL_SIZE;
+        for (int i = -4; i <= 4; i++) {
+            for (int j = -4; j <= 4; j++) {
+                vec2 off = vec2(float(i), float(j)) / 4.0 * radius * TEXTURE_PIXEL_SIZE;
                 float w = 1.0 / (1.0 + float(i * i + j * j));
                 acc += texture(TEXTURE, UV + off) * w;
                 total += w;
@@ -39,6 +43,9 @@ void fragment() {
         c = acc / total;
     }
     c.rgb = (c.rgb - 0.5) * contrast + 0.5;
-    c.rgb *= brightness * dim;
+    // Defocused regions also fall away in value — the depth half of the
+    // tilt-shift read. Backdrop-only (this shader never touches gameplay
+    // elements), runtime, and shipped-tunable: not a baked vignette.
+    c.rgb *= brightness * dim * (1.0 - falloff_dim * s);
     COLOR = vec4(c.rgb, c.a);
 }

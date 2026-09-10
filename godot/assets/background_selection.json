@@ -24,8 +24,9 @@
   "blurScaleMin": 0.8,
   "blurScaleMax": 1.2,
   "baseDim": 0.85,
-  "blurMaxRadius": 2.5,
-  "focalMarginWorld": 1.5,
+  "blurMaxRadius": 5.5,
+  "outOfBandDim": 0.18,
+  "focalMarginWorld": 1.0,
   // Phase 2: parallax recombination
   "recombinationProbability": 0.5,
   "goofBudget": 0.10,

@@ -111,13 +111,19 @@ public sealed record BackgroundSelectionConfig
     /// a HUD band, so ship slightly darker.</summary>
     public float BaseDim { get; init; } = 0.85f;
 
-    /// <summary>Maximum tilt-shift blur radius in SOURCE-texture pixels at the screen
-    /// edge (scaled by the variant's BlurScale; 0 inside the focal band).</summary>
-    public float BlurMaxRadius { get; init; } = 2.5f;
+    /// <summary>Maximum tilt-shift blur radius in SOURCE-texture pixels at full
+    /// defocus (scaled by the variant's BlurScale; 0 inside the focal band).
+    /// Intensified 2.5 -> 5.5 on 2026-09-10 (designer: sell the miniature harder).</summary>
+    public float BlurMaxRadius { get; init; } = 5.5f;
+
+    /// <summary>Extra value falloff at full defocus — the depth half of the
+    /// tilt-shift read; backdrop layers only, never gameplay elements.</summary>
+    public float OutOfBandDim { get; init; } = 0.18f;
 
     /// <summary>World-unit margin added around the platform envelope when the view
-    /// derives the sharp focal band.</summary>
-    public float FocalMarginWorld { get; init; } = 1.5f;
+    /// derives the sharp focal band (tightened 1.5 -> 1.0 on 2026-09-10 so the
+    /// sharp zone hugs the action).</summary>
+    public float FocalMarginWorld { get; init; } = 1.0f;
 
     // ── Phase 2: parallax recombination (brief §Phase 2) ───────────────────────
 

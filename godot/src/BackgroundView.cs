@@ -247,6 +247,7 @@ public partial class BackgroundView : Node2D
         };
         material.SetShaderParameter("blur_px", blurPx);
         material.SetShaderParameter("dim", dim);
+        material.SetShaderParameter("falloff_dim", BackgroundBank.Selector.Config.OutOfBandDim);
         material.SetShaderParameter("brightness", variant.Brightness);
         material.SetShaderParameter("contrast", variant.Contrast);
         _materials.Add(material);
