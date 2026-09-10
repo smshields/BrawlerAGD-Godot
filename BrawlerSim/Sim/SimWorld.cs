@@ -1118,6 +1118,7 @@ public sealed class SimWorld
             TickCount / (float)Config.TicksPerSecond,
             StateHash(),
             trace,
-            ComputePlacements());
+            ComputePlacements(),
+            new StageMetrics(VisibleHalf.X, VisibleHalf.Y));
 
 }

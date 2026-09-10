@@ -30,6 +30,10 @@ public static class FitnessRegistry
         ("standard-v3", false, (target, max, cs) => new StandardFitnessV3(target, max, collisionScalar: cs)),
         ("standard-v4", false, (target, max, cs) => new StandardFitnessV4(target, max, collisionScalar: cs)),
         ("standard-v5", false, (target, max, cs) => new StandardFitnessV5(target, max, collisionScalar: cs)),
+        // standard-v6 (2026-09-09): the scaled-time stage-diversity EXPERIMENT — v5
+        // with the time target re-anchored to map size. Opt-in, NOT the default,
+        // pending the designer gate.
+        ("standard-v6", false, (target, max, cs) => new StandardFitnessV6(target, max, collisionScalar: cs)),
         ("ffa-v1", true, (target, max, cs) => new FfaFitnessV1(target, max, collisionScalar: cs)),
         ("ffa-v2", true, (target, max, cs) => new FfaFitnessV2(target, max, collisionScalar: cs)),
     };

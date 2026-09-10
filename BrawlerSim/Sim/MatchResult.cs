@@ -36,6 +36,15 @@ public sealed record PlayerStats(
     int SelfDestructs = 0,
     int DropThroughs = 0); // thin-platform crouch drops (2026-09-01)
 
+/// <summary>Stage facts a fitness function may condition on (2026-09-09, scaled-time
+/// fitness): the genome's visible-map half extents, copied from SimWorld.VisibleHalf.
+/// Deliberately minimal — richer stage descriptors belong to the MAP-Elites track,
+/// not the fitness input. Null only in hand-built legacy fixtures (fitness versions
+/// that read it must treat null as a legacy-size stage).</summary>
+public sealed record StageMetrics(
+    float VisibleHalfWidth,
+    float VisibleHalfHeight);
+
 /// <summary>
 /// Outcome of one simulated match. LoserIndex is -1 for a 2P timeout draw (under
 /// STOCK with 3-4 players it is the first eliminated player; under TIMED, last
@@ -52,4 +61,5 @@ public sealed record MatchResult(
     float LengthSeconds,
     ulong FinalHash,
     InputTrace? Trace,
-    IReadOnlyList<int>? Placements = null);
+    IReadOnlyList<int>? Placements = null,
+    StageMetrics? Stage = null);
