@@ -82,6 +82,14 @@ public sealed class MapElitesEngine
     /// <summary>Run-monotone candidate counter — the evaluation seed key.</summary>
     public int CandidatesEvaluated { get; private set; }
 
+    /// <summary>The most recent batch's candidates and their aggregated fitness —
+    /// the EvolutionEngine Population/LastFitness counterpart for chart snapshots.
+    /// Empty until the first Step (and after a resume, until the next Step).</summary>
+    public IReadOnlyList<GameGenome> LastBatch => _lastBatch;
+    public IReadOnlyList<float> LastBatchFitness => _lastBatchFitness;
+    private GameGenome[] _lastBatch = System.Array.Empty<GameGenome>();
+    private float[] _lastBatchFitness = System.Array.Empty<float>();
+
     public IFitnessFunction FitnessFunction => _fitness;
 
     /// <summary>Cells written since the last checkpoint flush (ascending order) —
@@ -191,6 +199,8 @@ public sealed class MapElitesEngine
             }
         }
 
+        _lastBatch = candidates;
+        _lastBatchFitness = fitness;
         CandidatesEvaluated += candidates.Length;
         BatchesCompleted++;
         return new MapElitesBatchStats(
