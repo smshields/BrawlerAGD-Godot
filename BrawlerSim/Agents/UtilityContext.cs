@@ -39,7 +39,10 @@ public readonly record struct UtilityContext(
     // Thin platforms (2026-09-01, DEVIATIONS #34) — all false on thin-free stages.
     bool OnThinPlatform,
     bool CanDropSafely,
-    bool TraversalDrop);
+    bool TraversalDrop,
+    // Chain defense (2026-09-10, DEVIATIONS #37): true on exactly the first tick
+    // after leaving Stun — the chain-escape window an adjacent attacker exploits.
+    bool JustExitedStun);
 
 /// <summary>
 /// The per-decision score sheet. Horizontal = {left, neutral, right}; Jump = {no, yes};

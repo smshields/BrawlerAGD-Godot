@@ -369,13 +369,20 @@ public sealed partial class UtilityAgent
             {
                 scores.Vertical[UtilityScores.Down] += DropPursuit;
             }
-            // DI pre-positioning: about to be hit (or being juggled) → hold toward the
-            // farthest blast line (stage center) and up.
+            // DI pre-positioning: about to be hit (or being juggled) → hold and up.
+            // Percent-aware since 2026-09-10 (DEVIATIONS #37): at low damage there is
+            // no kill risk and the always-toward-center hold FED stun chains (mid-
+            // stage, the attacker usually IS center-ward — the victim's own DI pulled
+            // it back into the chain), so the low-damage hold breaks adjacency by
+            // pointing AWAY from the attacker. Past HighDamageThreshold the survival
+            // hold toward the farthest blast line (stage center) takes over, as before.
             if (self.DirectionalInfluence > 0f
                 && (ctx.TelegraphThreat || ctx.UnderThreat || self.State == PlayerState.Stun))
             {
-                scores.Horizontal[TowardStageCenterX(self) > 0
-                    ? UtilityScores.Right : UtilityScores.Left] += DIHold;
+                float holdDirection = self.Damage < HighDamageThreshold
+                    ? -ctx.FacingToOpponent
+                    : TowardStageCenterX(self);
+                scores.Horizontal[UtilityScores.Toward(holdDirection)] += DIHold;
                 scores.Vertical[UtilityScores.Up] += DIHoldVertical;
             }
         }

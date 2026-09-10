@@ -122,6 +122,12 @@ public sealed partial class UtilityAgent : IInputSource
     // the better answer to a ranged threat (designer: reflect should increase
     // defensive usage of these options).
     private const float ReflectDefenseBoost = 1.5f;
+    // Chain defense (2026-09-10, DEVIATIONS #37 — designer bug report: inward-knockback
+    // kits chained stunned victims who neither DI'd out nor defended on stun exit):
+    // the defense channel also triggers on the first decision after leaving Stun with
+    // the attacker inside this range, and low-damage DI holds AWAY from the attacker
+    // (survival DI toward the far blast line takes over past HighDamageThreshold).
+    private const float ChainEscapeRange = 3f;
     private const float BaselineVerticalNeutral = 0.5f;
     private const float FastFallPursuit = 1.2f;     // opponent below → drop onto them
     private const float CrouchBrake = 2.0f;         // negative-accel crouch at high slide speed
@@ -228,7 +234,10 @@ public sealed partial class UtilityAgent : IInputSource
             return new InputFrame(_dashIntentH, _dashIntentV, false, 0);
         }
 
-        UtilityContext ctx = BuildContext(world, self, opponent, _graph);
+        // _wasStunned still holds LAST tick's state here (updated in the salient
+        // block below) — Stun-exit detection depends on that ordering.
+        UtilityContext ctx = BuildContext(world, self, opponent, _graph,
+            justExitedStun: _wasStunned && self.State != PlayerState.Stun);
 
         if (ctx.OverPit)
         {
@@ -237,6 +246,9 @@ public sealed partial class UtilityAgent : IInputSource
 
         bool salient =
             (self.State == PlayerState.Stun && !_wasStunned) ||
+            // Stun EXIT is as salient as entry (2026-09-10, DEVIATIONS #37): waiting
+            // out the decision interval hands a chaining attacker up to 8 free ticks.
+            ctx.JustExitedStun ||
             (self.IsGrounded != _wasGrounded) ||
             (ctx.OverPit != _wasOverPit) ||
             (ctx.AnyCanHit && !_couldHit) ||
@@ -291,7 +303,13 @@ public sealed partial class UtilityAgent : IInputSource
     private void ApplyDefenseChannel(in UtilityContext ctx, UtilityScores scores,
         ref int moveChoice, ref int verticalChoice, ref int jumpChoice, ref int attackChoice)
     {
-        bool triggered = (ctx.TelegraphThreat && !ctx.AnyCanHit || ctx.ProjectileThreat)
+        // Chain escape (2026-09-10, DEVIATIONS #37): the first decision after leaving
+        // Stun with the attacker in chain range is a defense moment even before any
+        // telegraph — inward-knockback kits re-swing faster than the telegraph scan
+        // reacts. A counter-hit in hand still takes priority (trade-commit: landing
+        // OUR melee interrupts the chain just as well).
+        bool chainEscape = ctx.JustExitedStun && ctx.Distance < ChainEscapeRange && !ctx.AnyCanHit;
+        bool triggered = (ctx.TelegraphThreat && !ctx.AnyCanHit || ctx.ProjectileThreat || chainEscape)
             && ctx.Self.State is not (PlayerState.WarmUp or PlayerState.Attack);
         if (!triggered)
         {
@@ -576,7 +594,8 @@ public sealed partial class UtilityAgent : IInputSource
 
     // ── Context ────────────────────────────────────────────────────────────────
 
-    private static UtilityContext BuildContext(SimWorld world, SimPlayer self, SimPlayer opponent, PlatformGraph graph)
+    private static UtilityContext BuildContext(SimWorld world, SimPlayer self, SimPlayer opponent,
+        PlatformGraph graph, bool justExitedStun)
     {
         // Dash availability first — recovery reachability must credit a usable dash
         // (2026-07-13 playtest fix: with jumps spent, the dash IS the way back up).
@@ -678,7 +697,8 @@ public sealed partial class UtilityAgent : IInputSource
             RangedThreat: rangedTelegraph || projectileThreat,
             OnThinPlatform: onThinPlatform,
             CanDropSafely: canDropSafely,
-            TraversalDrop: traversalDrop);
+            TraversalDrop: traversalDrop,
+            JustExitedStun: justExitedStun);
     }
 
     /// <summary>Where the mirrored hitbox of <paramref name="move"/> sits when
