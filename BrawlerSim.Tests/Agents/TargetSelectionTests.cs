@@ -145,6 +145,10 @@ public class TargetSelectionTests
         // Re-pinned 2026-09-01 (thin platforms, agent step — FEATURE-FINAL): the
         // utility agents now read the thin flags (drop-route traversal, safe-drop
         // escape, gated crouch utilities — DEVIATIONS #34), which changes their
+        // Re-pinned 2026-09-10 (fourth pin that day): recovery reachability measures
+        // the LANDING SURFACE, not the collision box's closest point (DEVIATIONS #38
+        // amendment). The 2P utility golden is unmoved by this one — its GameC match
+        // has no recovery this changes. Prior pin: 16241560751694857092.
         // Re-pinned 2026-09-10 (third pin that day): nearest-platform recovery
         // (DEVIATIONS #38). Prior pin: 8122319624593953844.
         // Re-pinned 2026-09-10 (second pin that day): agent chain defense
@@ -172,6 +176,6 @@ public class TargetSelectionTests
         // Pinned 2026-08-12 (first pin — the 4P mode is new with this feature):
         // covers N-player spawning, all-pairs contact/hits, elimination, the gated
         // hash suffix, and nearest-enemy targeting end to end.
-        Assert.Equal(16241560751694857092UL, result.FinalHash);
+        Assert.Equal(1713621591834472700UL, result.FinalHash);
     }
 }

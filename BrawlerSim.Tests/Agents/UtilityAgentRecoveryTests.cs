@@ -53,6 +53,32 @@ public class UtilityAgentRecoveryTests
     }
 
     [Fact]
+    public void ReachabilityMeasuresTheLandingSurfaceNotThePlatformSide()
+    {
+        // 2026-09-10 designer amendment to DEVIATIONS #38: a TALL platform one unit
+        // to the right — its SIDE is at the agent's own height (the old collision-box
+        // ClosestPoint called that trivially reachable, dy = 0), but its TOP (y = 2)
+        // is 4.4 above, beyond the 8-force jump peak (~3.3 at g = 9.81). A LOW
+        // platform four units left has an honestly reachable top (dy = 0.4). The
+        // old measure recovered right into an unclimbable wall; the landing-surface
+        // measure goes left.
+        var brawler = new CharacterGenome("B", 3, 0, TestGames.Character(),
+            new[] { new MoveGenome(TestGames.Move(), 0) }, new[] { 0, 0, 0, 0, 0 });
+        var stage = new StageGenome(new[]
+        {
+            new PlatformGene(1, -3, 2, 5),   // tall wall: x [1,3], top 2
+            new PlatformGene(-6, -3, 2, 1),  // low ledge: x [-6,-4], top -2
+        });
+        var world = new SimWorld(new GameGenome(new[] { brawler, brawler }, stage));
+        world.Players[0].Position = new Vec2(0f, -2.4f);
+        world.Players[1].Position = new Vec2(2f, 2.6f); // atop the tall wall
+        world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
+
+        InputFrame input = new UtilityAgent(new Pcg32(1), Greedy).GetInput(world, 0);
+        Assert.Equal(-1f, input.Horizontal);
+    }
+
+    [Fact]
     public void AnOffStageChaserTurnsBackAndRecoversInsteadOfSelfDestructing()
     {
         // Mid-chase past the main platform's left edge, still moving OUTWARD: nothing

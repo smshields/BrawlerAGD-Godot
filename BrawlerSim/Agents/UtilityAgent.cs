@@ -1093,8 +1093,8 @@ public sealed partial class UtilityAgent : IInputSource
     }
 
     /// <summary>Recovery target among sensed platforms: the REACHABLE one whose
-    /// closest point is nearest to SELF; when none is reachable, the nearest-to-self
-    /// sensed point (the Doomed check's subject).
+    /// LANDING SURFACE (nearest point on the top edge) is nearest to SELF; when none
+    /// is reachable, the nearest-to-self landing point (the Doomed check's subject).
     ///
     /// HISTORY (DEVIATIONS #38): from 2026-07-10 to 2026-09-10 the reachable pick was
     /// nearest-to-the-OPPONENT (chase-preserving directional recovery). The designer
@@ -1134,7 +1134,17 @@ public sealed partial class UtilityAgent : IInputSource
             {
                 continue;
             }
-            Vec2 point = platform.ClosestPoint(self.Position);
+            // Measure to the LANDING SURFACE (2026-09-10 designer amendment to
+            // DEVIATIONS #38): the nearest point on the platform's TOP edge, x
+            // clamped to its span. The old collision-box ClosestPoint let a tall
+            // solid platform's low SIDE point pass the reachability test — but
+            // reaching a side is not landing, so agents committed to ledges they
+            // could not climb. Thin platforms get the honest rise-through credit
+            // for free: their landing surface is the same top edge, and the
+            // vertical budget in EstimateReachable is exactly the rise they need.
+            var point = new Vec2(
+                MathF.Min(MathF.Max(self.Position.X, platform.Left), platform.Right),
+                platform.Top);
             found = true;
             float toSelf = (point - self.Position).Length();
             if (toSelf < bestFallback)
