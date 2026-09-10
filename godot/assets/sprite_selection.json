@@ -25,6 +25,8 @@
     "crossDuplicatePenalty": 0.6,
     "sweepBonus": 0.15,
     "repairFloor": 0.05,
+  "maxClassShare": 0.30,
+  "maxSpriteShare": 0.25,
     "registerAffinities": {
       "fantasy": { "elements": ["fire", "ice", "chaos"], "classes": [] },
       "scifi": { "elements": ["electric"], "classes": [] },

@@ -541,6 +541,9 @@ public sealed class SpriteSelector
                 traits, horizontal, vertical, characterSprite, register, gameUsage);
         }
         double[] classProbs = Softmax(classScores, Config.Moves.SoftmaxTemperature);
+        // No-monopoly at the class stage (designer 2026-09-10) — the shared
+        // water-fill, then the exact object pin (last, so the budget stays exact).
+        Backgrounds.SelectionMath.CapShare(classProbs, Config.Moves.MaxClassShare);
         for (int i = 0; i < classes.Count; i++)
         {
             if (classes[i].Name == "object")
@@ -561,6 +564,9 @@ public sealed class SpriteSelector
                 characterSprite, register, gameUsage);
         }
         double[] spriteProbs = Softmax(spriteScores, Config.Moves.SoftmaxTemperature);
+        // No-monopoly within the class too (2026-09-10): one best-scoring sprite was
+        // absorbing whole classes. Infeasible caps no-op (tiny classes untouched).
+        Backgrounds.SelectionMath.CapShare(spriteProbs, Config.Moves.MaxSpriteShare);
         return chosen[SampleIndex(spriteProbs, rng)].Id;
     }
 
