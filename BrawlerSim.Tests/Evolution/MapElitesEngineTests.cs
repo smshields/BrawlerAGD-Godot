@@ -199,12 +199,41 @@ public class MapElitesEngineTests
             Assert.True(MapElitesStore.IsMapElitesRun(meDir));
             Assert.False(MapElitesStore.IsMapElitesRun(gaDir));
             Assert.False(MapElitesStore.IsMapElitesRun(Path.GetTempPath()));
+
+            // Both loaders refuse the other's run dir LOUDLY (2026-09-10 review: a
+            // map-elites manifest read as a GA RunManifest would otherwise resume as
+            // a 0-population engine and its first checkpoint would destroy the
+            // archive index).
+            Assert.Throws<InvalidDataException>(() => RunStore.Load(meDir));
+            Assert.Throws<InvalidDataException>(() => MapElitesStore.Load(gaDir));
         }
         finally
         {
             Directory.Delete(meDir, recursive: true);
             Directory.Delete(gaDir, recursive: true);
         }
+    }
+
+    [Fact]
+    public void DegenerateConfigsAreRefused()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            new MapElitesEngine(SmallConfig() with { RoundsPerIndividual = 0 }));
+        Assert.Throws<ArgumentException>(() =>
+            new MapElitesEngine(SmallConfig() with { BatchSize = 0 }));
+    }
+
+    [Fact]
+    public void OutOfPilotRangeStatIsPerBatchNotCumulative()
+    {
+        // Sum of the per-batch stats must equal the archive's cumulative counter.
+        var engine = new MapElitesEngine(SmallConfig());
+        int total = 0;
+        for (int batch = 0; batch < 4; batch++)
+        {
+            total += engine.Step().OutOfPilotRange;
+        }
+        Assert.Equal(engine.Archive.OutOfPilotRangeCount, total);
     }
 
     [Fact]

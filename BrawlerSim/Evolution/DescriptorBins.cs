@@ -34,9 +34,15 @@ public sealed class DescriptorBins
     public ulong PilotSeed { get; }
     public int PilotSamples { get; }
 
+    /// <summary>The generation configuration the pilot ran at (ConfigKeyFor) — lets a
+    /// cached bins file be validated against the run about to use it (pilots are
+    /// per-configuration; a stale cache must recompute, never silently re-bin).
+    /// Null on bins deserialized from pre-key documents.</summary>
+    public string? ConfigKey { get; }
+
     public DescriptorBins(IReadOnlyList<IReadOnlyList<float>> edges,
         IReadOnlyList<float> pilotMin, IReadOnlyList<float> pilotMax,
-        ulong pilotSeed, int pilotSamples)
+        ulong pilotSeed, int pilotSamples, string? configKey = null)
     {
         if (edges.Count != Descriptors.Count)
         {
@@ -55,6 +61,24 @@ public sealed class DescriptorBins
         PilotMax = pilotMax;
         PilotSeed = pilotSeed;
         PilotSamples = pilotSamples;
+        ConfigKey = configKey;
+    }
+
+    /// <summary>Canonical description of the descriptor-relevant generation
+    /// configuration: player count, composition, and range overrides — the parts that
+    /// change descriptor distributions. Selectors are excluded on purpose (cosmetic
+    /// and RNG-free; see FromPilot).</summary>
+    public static string ConfigKeyFor(GenerationConfig generation)
+    {
+        string composition = generation.ButtonComposition is { } slots
+            ? string.Join(",", slots).ToLowerInvariant()
+            : "pinned";
+        string overrides = generation.RangeOverrides.Count == 0
+            ? "stock"
+            : string.Join(";", generation.RangeOverrides.Select(o =>
+                FormattableString.Invariant($"{o.Schema}.{o.Key}={o.Min}:{o.Max}")));
+        return FormattableString.Invariant(
+            $"{generation.CharacterCount}p|{composition}|{overrides}");
     }
 
     /// <summary>The deterministic default pilot seed for a run: derived from the run
@@ -74,6 +98,18 @@ public sealed class DescriptorBins
         {
             throw new ArgumentException($"Pilot needs at least {BinsPerAxis} samples, got {samples}.");
         }
+        // Selectors are stripped for the pilot: they are cosmetic and RNG-FREE
+        // (content-seeded — sprite-selection.md), so the Pcg32 stream and therefore
+        // every mechanical gene and descriptor are bit-identical with or without
+        // them, while generation runs far faster and the resulting edges are
+        // independent of which asset libraries happen to be installed.
+        string configKey = ConfigKeyFor(generation);
+        generation = generation with
+        {
+            SpriteSelector = null,
+            StageThemeSelector = null,
+            BackgroundSelector = null,
+        };
         var rng = new Pcg32(pilotSeed);
         var values = new float[Descriptors.Count][];
         for (int axis = 0; axis < Descriptors.Count; axis++)
@@ -102,7 +138,7 @@ public sealed class DescriptorBins
                 edges[axis][k - 1] = values[axis][(int)((long)k * samples / BinsPerAxis)];
             }
         }
-        return new DescriptorBins(edges, min, max, pilotSeed, samples);
+        return new DescriptorBins(edges, min, max, pilotSeed, samples, configKey);
     }
 
     /// <summary>Bin index (0..BinsPerAxis−1) of a value on one axis: the number of
@@ -165,6 +201,7 @@ public sealed class DescriptorBins
         public float[]? PilotMax { get; set; }
         public ulong PilotSeed { get; set; }
         public int PilotSamples { get; set; }
+        public string? ConfigKey { get; set; }
     }
 
     public Doc ToDoc() => new()
@@ -174,13 +211,14 @@ public sealed class DescriptorBins
         PilotMax = PilotMax.ToArray(),
         PilotSeed = PilotSeed,
         PilotSamples = PilotSamples,
+        ConfigKey = ConfigKey,
     };
 
     public static DescriptorBins FromDoc(Doc doc) => new(
         doc.Edges ?? throw new JsonException("descriptor bins document has no edges"),
         doc.PilotMin ?? throw new JsonException("descriptor bins document has no pilotMin"),
         doc.PilotMax ?? throw new JsonException("descriptor bins document has no pilotMax"),
-        doc.PilotSeed, doc.PilotSamples);
+        doc.PilotSeed, doc.PilotSamples, doc.ConfigKey);
 
     public void Save(string path) =>
         File.WriteAllText(path, JsonSerializer.Serialize(ToDoc(), JsonOptions.Document));

@@ -49,6 +49,20 @@ public class DescriptorBinsTests
     }
 
     [Fact]
+    public void ConfigKeyDistinguishesDescriptorRelevantConfigurations()
+    {
+        string stock = DescriptorBins.ConfigKeyFor(GenerationConfig.Default);
+        Assert.NotEqual(stock, DescriptorBins.ConfigKeyFor(
+            GenerationConfig.Default with { CharacterCount = 4 }));
+        Assert.NotEqual(stock, DescriptorBins.ConfigKeyFor(
+            GenerationConfig.Default with { ButtonComposition = GenerationConfig.RandomComposition }));
+        Assert.NotEqual(stock, DescriptorBins.ConfigKeyFor(
+            GenerationConfig.Default.WithRangeOverrides(
+                new[] { new RangeOverride("character", "mass", 0.5f, 1f) })));
+        Assert.Equal(stock, DescriptorBins.ConfigKeyFor(GenerationConfig.Default));
+    }
+
+    [Fact]
     public void PilotIsDeterministic()
     {
         DescriptorBins a = DescriptorBins.FromPilot(GenerationConfig.Default, pilotSeed: 5, samples: 400);
@@ -105,6 +119,8 @@ public class DescriptorBinsTests
             Assert.Equal(bins.PilotMax, loaded.PilotMax);
             Assert.Equal(bins.PilotSeed, loaded.PilotSeed);
             Assert.Equal(bins.PilotSamples, loaded.PilotSamples);
+            Assert.Equal(bins.ConfigKey, loaded.ConfigKey);
+            Assert.Equal(DescriptorBins.ConfigKeyFor(GenerationConfig.Default), loaded.ConfigKey);
         }
         finally
         {

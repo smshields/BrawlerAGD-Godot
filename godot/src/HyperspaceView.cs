@@ -136,12 +136,10 @@ public partial class HyperspaceView : Control
         {
             foreach (HyperspaceEntry entry in snapshot.Entries)
             {
-                int[] coords = DescriptorBins.CellCoordinates(snapshot.Bins.CellIndex(entry.Descriptor));
-                if (!all && coords[_hidden] != slice)
+                if (!TryProjectCell(snapshot, entry.Descriptor, all, slice, out Vector3I key))
                 {
                     continue;
                 }
-                var key = new Vector3I(coords[_spatial[0]], coords[_spatial[1]], coords[_spatial[2]]);
                 if (!_visible.TryGetValue(key, out HyperspaceEntry? incumbent)
                     || entry.Fitness > incumbent.Fitness)
                 {
@@ -220,7 +218,7 @@ public partial class HyperspaceView : Control
         }
         _landmarks ??= LoadLandmarks();
         var plotted = new System.Collections.Generic.List<Vector3I>();
-        int mismatched = 0;
+        int mismatched = 0, matched = 0;
         foreach ((string _, GameGenome genome, float[] descriptor) in _landmarks)
         {
             // A library game only plots into an archive of its own configuration
@@ -230,22 +228,40 @@ public partial class HyperspaceView : Control
                 mismatched++;
                 continue;
             }
-            int[] coords = DescriptorBins.CellCoordinates(snapshot.Bins.CellIndex(descriptor));
-            if (!all && coords[_hidden] != slice)
+            matched++;
+            if (TryProjectCell(snapshot, descriptor, all, slice, out Vector3I key))
             {
-                continue;
+                plotted.Add(key);
             }
-            plotted.Add(new Vector3I(coords[_spatial[0]], coords[_spatial[1]], coords[_spatial[2]]));
         }
         marks.InstanceCount = plotted.Count;
         for (int i = 0; i < plotted.Count; i++)
         {
             marks.SetInstanceTransform(i, new Transform3D(Basis.Identity, LatticePosition(plotted[i])));
         }
+        int offSlice = matched - plotted.Count;
         _landmarkNote.Text = _landmarks.Count == 0
             ? ""
-            : $"LIBRARY LANDMARKS: {_landmarks.Count - mismatched} PLOTTED"
+            : $"LIBRARY LANDMARKS: {plotted.Count} PLOTTED"
+              + (offSlice > 0 ? $" · {offSlice} OFF-SLICE" : "")
               + (mismatched > 0 ? $" · {mismatched} OTHER-CONFIG (NOT PLOTTED)" : "");
+    }
+
+    /// <summary>The one descriptor→spatial-cell projection (shared by elites and
+    /// landmarks so axis-swap/slice semantics can never diverge): bins the raw
+    /// 4-vector, applies the hidden-axis slice filter, and maps the three assigned
+    /// axes onto the lattice key.</summary>
+    private bool TryProjectCell(HyperspaceSnapshot snapshot, float[] descriptor,
+        bool all, int slice, out Vector3I key)
+    {
+        int[] coords = DescriptorBins.CellCoordinates(snapshot.Bins.CellIndex(descriptor));
+        if (!all && coords[_hidden] != slice)
+        {
+            key = default;
+            return false;
+        }
+        key = new Vector3I(coords[_spatial[0]], coords[_spatial[1]], coords[_spatial[2]]);
+        return true;
     }
 
     /// <summary>Favorites + demo game.jsons with descriptors computed on load — pure
@@ -497,7 +513,9 @@ public partial class HyperspaceView : Control
         _viewport = new SubViewport
         {
             OwnWorld3D = true,
-            RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
+            // WhenVisible: the lattice only re-renders while the HYPERSPACE tab is in
+            // front — no per-frame GPU cost during a run watched from the RUN tab.
+            RenderTargetUpdateMode = SubViewport.UpdateMode.WhenVisible,
         };
         _viewportContainer.AddChild(_viewport);
         Build3DScene();

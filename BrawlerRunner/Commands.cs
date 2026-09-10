@@ -141,18 +141,7 @@ internal static class Commands
                 // Absent --fitness = auto: standard-v5 at 2 players, ffa-v2 at 3/4 (2026-09-01).
                 FitnessName = opts.GetValueOrDefault("fitness"),
                 FitnessCollisionScalar = CollisionScalar(opts),
-                // Sprite selection (2026-08-22) + stage tile themes (M4d,
-                // 2026-09-01) + backgrounds (2026-09-02): on whenever the libraries
-                // are found — cosmetic, RNG-free, fitness-blind; --no-sprites turns
-                // all three off.
-                Generation = opts.ContainsKey("no-sprites")
-                    ? ParseGeneration(opts)
-                    : ParseGeneration(opts) with
-                    {
-                        SpriteSelector = LoadSpriteSelector(opts),
-                        StageThemeSelector = LoadStageThemeSelector(opts),
-                        BackgroundSelector = LoadBackgroundSelector(opts),
-                    },
+                Generation = ParseGenerationWithSelectors(opts),
             };
             engine = new EvolutionEngine(config);
             history = new List<GenerationStats>();
@@ -209,14 +198,7 @@ internal static class Commands
         else
         {
             ulong seed = (ulong)GetInt(opts, "seed", 1);
-            GenerationConfig generation = opts.ContainsKey("no-sprites")
-                ? ParseGeneration(opts)
-                : ParseGeneration(opts) with
-                {
-                    SpriteSelector = LoadSpriteSelector(opts),
-                    StageThemeSelector = LoadStageThemeSelector(opts),
-                    BackgroundSelector = LoadBackgroundSelector(opts),
-                };
+            GenerationConfig generation = ParseGenerationWithSelectors(opts);
             int pilotSamples = GetInt(opts, "pilot", DescriptorBins.DefaultPilotSamples);
             var pilotWatch = Stopwatch.StartNew();
             DescriptorBins bins = DescriptorBins.FromPilot(
@@ -240,6 +222,9 @@ internal static class Commands
             };
             engine = new MapElitesEngine(config);
             history = new List<MapElitesBatchStats>();
+            // Checkpoint immediately: the (expensive) pilot's frozen edges are on
+            // disk and the dir is resumable even before the first batch completes.
+            MapElitesStore.SaveCheckpoint(outDir, engine, config, history);
         }
 
         float bestSoFar = history.Count > 0 ? history.Max(s => s.BestFitness) : float.MinValue;
@@ -393,6 +378,20 @@ internal static class Commands
         Console.WriteLine($"slug={Slug(game.Name)}");
         return 0;
     }
+
+    /// <summary>ParseGeneration plus the selector attach shared by evolve/mapelites:
+    /// sprite selection (2026-08-22) + stage tile themes (M4d, 2026-09-01) +
+    /// backgrounds (2026-09-02) attach whenever the libraries are found — cosmetic,
+    /// RNG-free, fitness-blind; --no-sprites turns all three off.</summary>
+    private static GenerationConfig ParseGenerationWithSelectors(Dictionary<string, string> opts) =>
+        opts.ContainsKey("no-sprites")
+            ? ParseGeneration(opts)
+            : ParseGeneration(opts) with
+            {
+                SpriteSelector = LoadSpriteSelector(opts),
+                StageThemeSelector = LoadStageThemeSelector(opts),
+                BackgroundSelector = LoadBackgroundSelector(opts),
+            };
 
     /// <summary>The sprite library + tuning, from --sprites <slices.json> or found by
     /// walking up from the working directory (the repo's godot/assets). Null — with a

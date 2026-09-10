@@ -22,6 +22,10 @@ public static class MapElitesStore
     public const string Kind = "map-elites";
     public const string ArchiveDirName = "archive";
 
+    /// <summary>The app-side pilot-bins cache a run dir may carry (shadow archives of
+    /// GA runs; DescriptorBins.Save/Load) — a store-owned name like ManifestFileName.</summary>
+    public const string BinsFileName = "descriptor-bins.json";
+
     public static string CellFileName(int cell) => $"cell_{cell:D4}.json";
 
     private static readonly JsonSerializerOptions Options = JsonOptions.Document;
@@ -55,7 +59,7 @@ public static class MapElitesStore
         string archiveDir = Path.Combine(runDir, ArchiveDirName);
         Directory.CreateDirectory(archiveDir);
 
-        foreach (int cell in engine.FlushDirtyCells())
+        foreach (int cell in engine.DirtyCells)
         {
             if (!engine.Archive.TryGet(cell, out ArchiveEntry entry))
             {
@@ -123,6 +127,9 @@ public static class MapElitesStore
         };
         File.WriteAllText(Path.Combine(runDir, RunStore.ManifestFileName),
             JsonSerializer.Serialize(manifest, Options));
+        // Only after every write succeeded: a failed checkpoint keeps its cells dirty
+        // so the next attempt rewrites them instead of losing them forever.
+        engine.MarkDirtyCellsSaved();
     }
 
     /// <summary>Best-raw-fitness elite + its grading trace, RunStore.SaveBest parity.</summary>

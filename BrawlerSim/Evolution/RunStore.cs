@@ -140,6 +140,15 @@ public static class RunStore
         string manifestPath = Path.Combine(runDir, ManifestFileName);
         RunManifest manifest = JsonSerializer.Deserialize<RunManifest>(File.ReadAllText(manifestPath), Options)
             ?? throw new JsonException($"Could not parse {manifestPath}.");
+        if (manifest.Kind is { } kind && kind != "evolution")
+        {
+            // Both run kinds share run.json (2026-09-10, MAP-Elites). Without this
+            // guard a map-elites manifest deserializes as PopulationSize 0, passes
+            // the resume size check (0 == 0), and the first GA checkpoint would
+            // overwrite the archive index — refuse loudly instead.
+            throw new InvalidDataException(
+                $"{manifestPath} is a '{kind}' run — use MapElitesStore.Load / `mapelites --resume`.");
+        }
 
         var config = new EvolutionConfig
         {
@@ -244,6 +253,7 @@ public static class RunStore
     private sealed class RunManifest
     {
         public int FormatVersion { get; set; }
+        public string? Kind { get; set; } // absent (every GA manifest) = evolution; "map-elites" = the other store
         public string? FitnessName { get; set; }
         public ulong Seed { get; set; }
         public int PopulationSize { get; set; }

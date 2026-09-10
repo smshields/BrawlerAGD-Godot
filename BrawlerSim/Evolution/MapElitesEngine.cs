@@ -45,7 +45,9 @@ public sealed record MapElitesConfig
     public required DescriptorBins Bins { get; init; }
 }
 
-/// <summary>One batch's summary, recorded in the run manifest.</summary>
+/// <summary>One batch's summary, recorded in the run manifest. Filled/Coverage/
+/// QdScore/BestFitness are archive-wide as of the batch's end; Insertions/
+/// Replacements/OutOfPilotRange count THIS batch only.</summary>
 public sealed record MapElitesBatchStats(
     int Batch,
     int Filled,
@@ -98,6 +100,15 @@ public sealed class MapElitesEngine
 
     public MapElitesEngine(MapElitesConfig config, IFitnessFunction? fitness = null)
     {
+        if (config.RoundsPerIndividual < 1)
+        {
+            throw new ArgumentException(
+                $"RoundsPerIndividual must be at least 1 (got {config.RoundsPerIndividual}).");
+        }
+        if (config.BatchSize < 1)
+        {
+            throw new ArgumentException($"BatchSize must be at least 1 (got {config.BatchSize}).");
+        }
         _config = config;
         _fitness = ResolveFitness(config, fitness);
         _rng = new Pcg32(config.Seed);
@@ -181,6 +192,7 @@ public sealed class MapElitesEngine
         });
 
         int insertions = 0, replacements = 0;
+        int outOfPilotBefore = Archive.OutOfPilotRangeCount;
         for (int i = 0; i < candidates.Length; i++)
         {
             var entry = new ArchiveEntry(candidates[i], fitness[i], descriptors[i], firstCandidate + i);
@@ -211,7 +223,7 @@ public sealed class MapElitesEngine
             Archive.Best?.Fitness ?? float.MinValue,
             insertions,
             replacements,
-            Archive.OutOfPilotRangeCount);
+            Archive.OutOfPilotRangeCount - outOfPilotBefore);
     }
 
     /// <summary>Re-runs an archive entry's evaluation match with its exact per-round
@@ -222,13 +234,12 @@ public sealed class MapElitesEngine
         return (result, result.Trace!);
     }
 
-    /// <summary>Cells changed since the last flush, ascending; clears the set.</summary>
-    public int[] FlushDirtyCells()
-    {
-        int[] dirty = _dirtyCells.ToArray();
-        _dirtyCells.Clear();
-        return dirty;
-    }
+    /// <summary>Cells changed since the last saved checkpoint, ascending. The store
+    /// clears them via MarkDirtyCellsSaved AFTER its writes succeed, so a failed
+    /// checkpoint never loses track of unsaved cells.</summary>
+    public IReadOnlyCollection<int> DirtyCells => _dirtyCells;
+
+    public void MarkDirtyCellsSaved() => _dirtyCells.Clear();
 
     private MatchResult RunMatch(GameGenome genome, int candidate, int round, bool recordTrace)
     {
@@ -237,28 +248,6 @@ public sealed class MapElitesEngine
         return MatchRunner.Run(genome, sources, _config.Match, recordTrace);
     }
 
-    private float Aggregate(Span<float> rounds)
-    {
-        for (int i = 1; i < rounds.Length; i++)
-        {
-            float value = rounds[i];
-            int j = i - 1;
-            while (j >= 0 && rounds[j] > value)
-            {
-                rounds[j + 1] = rounds[j];
-                j--;
-            }
-            rounds[j + 1] = value;
-        }
-        if (_config.Aggregate == FitnessAggregate.Median)
-        {
-            return rounds[rounds.Length / 2]; // Unity parity: upper median
-        }
-        float total = 0f;
-        foreach (float value in rounds)
-        {
-            total += value;
-        }
-        return total / rounds.Length;
-    }
+    private float Aggregate(Span<float> rounds) =>
+        FitnessAggregation.Aggregate(rounds, _config.Aggregate);
 }
