@@ -66,15 +66,9 @@ public static class RunStore
             Players = config.Generation.CharacterCount == 2 ? null : config.Generation.CharacterCount,
             // Composition + range overrides (2026-07-14): part of what a run MEANS —
             // absent fields read back as the pinned layout with stock schemas.
-            Composition = config.Generation.ButtonComposition?
-                .Select(s => s.ToString().ToLowerInvariant()).ToList(),
+            Composition = CompositionDoc(config.Generation),
             TypeRerollRate = config.Generation.IsComposed ? config.Generation.TypeRerollRate : null,
-            RangeOverrides = config.Generation.RangeOverrides.Count == 0
-                ? null
-                : config.Generation.RangeOverrides.Select(o => new RangeOverrideDoc
-                {
-                    Schema = o.Schema, Key = o.Key, Min = o.Min, Max = o.Max,
-                }).ToList(),
+            RangeOverrides = RangeOverridesDoc(config.Generation),
             // Sprite selection (2026-08-22): absent = off, so pre-feature manifests
             // stay byte-compatible and resume exactly as they ran. Stage themes
             // (M4d, 2026-09-01) record the same way.
@@ -99,17 +93,27 @@ public static class RunStore
     private static GenerationConfig WithSelectors(GenerationConfig generation,
         RunManifest manifest, Sprites.SpriteSelector? spriteSelector,
         Sprites.StageThemeSelector? themeSelector,
+        Backgrounds.BackgroundSelector? backgroundSelector) =>
+        WithSelectors(generation, manifest.Sprites == true, manifest.Themes == true,
+            manifest.Backgrounds == true, spriteSelector, themeSelector, backgroundSelector);
+
+    /// <summary>Selector re-attach shared with MapElitesStore (2026-09-10): a selector
+    /// re-binds only when the manifest recorded that the run used it AND the caller
+    /// located the library — null degrades gracefully (new children keep null genes).</summary>
+    internal static GenerationConfig WithSelectors(GenerationConfig generation,
+        bool sprites, bool themes, bool backgrounds, Sprites.SpriteSelector? spriteSelector,
+        Sprites.StageThemeSelector? themeSelector,
         Backgrounds.BackgroundSelector? backgroundSelector)
     {
-        if (manifest.Sprites == true && spriteSelector is not null)
+        if (sprites && spriteSelector is not null)
         {
             generation = generation with { SpriteSelector = spriteSelector };
         }
-        if (manifest.Themes == true && themeSelector is not null)
+        if (themes && themeSelector is not null)
         {
             generation = generation with { StageThemeSelector = themeSelector };
         }
-        if (manifest.Backgrounds == true && backgroundSelector is not null)
+        if (backgrounds && backgroundSelector is not null)
         {
             generation = generation with { BackgroundSelector = backgroundSelector };
         }
@@ -186,14 +190,22 @@ public static class RunStore
         return (engine, config, history);
     }
 
-    private static GenerationConfig BuildGenerationConfig(RunManifest manifest)
+    private static GenerationConfig BuildGenerationConfig(RunManifest manifest) =>
+        BuildGeneration(manifest.Players, manifest.Composition, manifest.TypeRerollRate,
+            manifest.RangeOverrides);
+
+    /// <summary>The one generation-config document round-trip, shared with
+    /// MapElitesStore (2026-09-10) — players/composition/type-reroll/range-override
+    /// fields read back exactly as SaveCheckpoint writes them.</summary>
+    internal static GenerationConfig BuildGeneration(int? players, List<string>? compositionDoc,
+        float? typeRerollRate, List<RangeOverrideDoc>? overridesDoc)
     {
         GenerationConfig generation = GenerationConfig.Default with
         {
             // Absent = 2: every pre-2026-08-12 checkpoint resumes as the 2P run it was.
-            CharacterCount = manifest.Players ?? 2,
+            CharacterCount = players ?? 2,
         };
-        if (manifest.Composition is { } composition)
+        if (compositionDoc is { } composition)
         {
             if (composition.Count != Sim.InputFrame.ActionCount)
             {
@@ -205,16 +217,29 @@ public static class RunStore
             generation = generation with
             {
                 ButtonComposition = composition.Select(s => Enum.Parse<SlotSpec>(s, ignoreCase: true)).ToArray(),
-                TypeRerollRate = manifest.TypeRerollRate ?? generation.TypeRerollRate,
+                TypeRerollRate = typeRerollRate ?? generation.TypeRerollRate,
             };
         }
-        if (manifest.RangeOverrides is { Count: > 0 } overrides)
+        if (overridesDoc is { Count: > 0 } overrides)
         {
             generation = generation.WithRangeOverrides(overrides
                 .Select(o => new RangeOverride(o.Schema ?? "", o.Key ?? "", o.Min, o.Max)).ToArray());
         }
         return generation;
     }
+
+    /// <summary>The composition field exactly as run.json records it (null = pinned).</summary>
+    internal static List<string>? CompositionDoc(GenerationConfig generation) =>
+        generation.ButtonComposition?.Select(s => s.ToString().ToLowerInvariant()).ToList();
+
+    /// <summary>The rangeOverrides field exactly as run.json records it (null = stock).</summary>
+    internal static List<RangeOverrideDoc>? RangeOverridesDoc(GenerationConfig generation) =>
+        generation.RangeOverrides.Count == 0
+            ? null
+            : generation.RangeOverrides.Select(o => new RangeOverrideDoc
+            {
+                Schema = o.Schema, Key = o.Key, Min = o.Min, Max = o.Max,
+            }).ToList();
 
     private sealed class RunManifest
     {
@@ -247,7 +272,7 @@ public static class RunStore
         public List<GenerationStatsDoc>? Stats { get; set; }
     }
 
-    private sealed class RangeOverrideDoc
+    internal sealed class RangeOverrideDoc
     {
         public string? Schema { get; set; }
         public string? Key { get; set; }
