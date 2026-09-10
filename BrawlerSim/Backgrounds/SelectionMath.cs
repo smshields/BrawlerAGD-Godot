@@ -172,6 +172,90 @@ public static class SelectionMath
         }
     }
 
+    /// <summary>Per-index no-monopoly water-fill: index i may hold at most caps[i]
+    /// of the probability mass (2026-09-10, the starved-class rule: a 2-sprite class
+    /// must not funnel a whole class share into single sprites). Indexes at/over
+    /// their cap freeze; freed mass lifts the rest; iterates because a lift can push
+    /// another index over. No-ops when the caps cannot sum to 1.</summary>
+    public static void CapShares(double[] probs, double[] caps)
+    {
+        double capacity = 0;
+        foreach (double c in caps)
+        {
+            capacity += c;
+        }
+        if (capacity <= 0)
+        {
+            return;
+        }
+        if (capacity <= 1.0 + 1e-9)
+        {
+            // Saturated: with total headroom at or under 1, the water-fill limit is
+            // every index AT its cap — sample proportionally to the caps. (An early
+            // no-op here let small body-plan-filtered pools skip capping entirely,
+            // funneling whole class shares into starved classes — found 2026-09-10.)
+            for (int i = 0; i < probs.Length; i++)
+            {
+                probs[i] = caps[i];
+            }
+            return;
+        }
+        double total = 0;
+        foreach (double p in probs)
+        {
+            total += p;
+        }
+        if (total <= 0)
+        {
+            return;
+        }
+        for (int i = 0; i < probs.Length; i++)
+        {
+            probs[i] /= total;
+        }
+        var frozen = new bool[probs.Length];
+        for (int pass = 0; pass < probs.Length; pass++)
+        {
+            bool frozeAnother = false;
+            double frozenMass = 0;
+            double freeMass = 0;
+            for (int i = 0; i < probs.Length; i++)
+            {
+                if (!frozen[i] && probs[i] > caps[i] + 1e-9)
+                {
+                    probs[i] = caps[i];
+                    frozen[i] = true;
+                    frozeAnother = true;
+                }
+                if (frozen[i])
+                {
+                    frozenMass += probs[i];
+                }
+                else
+                {
+                    freeMass += probs[i];
+                }
+            }
+            if (!frozeAnother)
+            {
+                return;
+            }
+            double target = 1.0 - frozenMass;
+            if (freeMass <= 0 || target <= 0)
+            {
+                return;
+            }
+            double lift = target / freeMass;
+            for (int i = 0; i < probs.Length; i++)
+            {
+                if (!frozen[i])
+                {
+                    probs[i] *= lift;
+                }
+            }
+        }
+    }
+
     public static int SampleIndex(double[] probs, NgPcg rng)
     {
         double total = 0;

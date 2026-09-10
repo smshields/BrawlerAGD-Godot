@@ -156,7 +156,14 @@ public class AttackSpriteSelectionTests
             }
         }
         Assert.True(total >= 500, $"only {total} characters sampled");
-        Assert.True(matched > total * 0.5,
+        // Re-bounded 2026-09-10 (was > 0.5): the move-sprite no-monopoly caps
+        // (designer-directed — MaxClassShare + the member-scaled SpriteOverallCeiling)
+        // deliberately weaken wields-following for STARVED first-wield classes:
+        // natural is first wield for 106 bodies but holds 2 sprites, so its per-pick
+        // cap is 0.10 and it can no longer be modal for most beasts. Measured 0.448
+        // at the shipped caps; the floor asserts the signal stays a real plurality
+        // driver without re-pinning the exact value.
+        Assert.True(matched > total * 0.38,
             $"modal class matched first wields for {matched}/{total} ({matched / (double)total:0.###})");
     }
 

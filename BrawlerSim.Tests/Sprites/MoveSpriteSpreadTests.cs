@@ -70,13 +70,22 @@ public class MoveSpriteSpreadTests
             }
         }
         Assert.True(picks > 2000, $"only {picks} attack picks sampled");
-        // Per-pick cap 0.30 bounds any class's aggregate share (small sampling slack);
-        // pre-fix, blade took the majority of fresh first slots.
-        (string cls, int n) = byClass.MaxBy(kv => kv.Value) is var kv2 ? (kv2.Key, kv2.Value) : ("", 0);
-        Assert.True(n <= picks * 0.35, $"class monopoly: {cls} {n}/{picks}");
-        // No single sprite dominates overall (class cap x within cap ≈ 7.5% ceiling).
+        // Class shares: every class except burst is bounded by the per-pick caps.
+        // Burst is exempted DELIBERATELY: it is the only substantial class most
+        // non-biped body plans can legally use (the library holds zero non-biped
+        // blades/blunts/axes/polearms — the quantified data gap for the rebuild),
+        // so saturated pools hand it cap-proportional share. It still may not hold
+        // a majority, and its 31 members spread under the within-class cap.
+        foreach ((string cls, int n) in byClass)
+        {
+            double bound = cls == "burst" ? 0.45 : 0.20;
+            Assert.True(n <= picks * bound, $"class monopoly: {cls} {n}/{picks}");
+        }
+        // No single sprite dominates overall (the member-scaled class caps make
+        // ~5% the global per-sprite ceiling; sampling slack on top). Pre-fix,
+        // mv_spwpn_vampires_tooth alone took 12.8% of fresh picks.
         (string sid, int sn) = byId.MaxBy(kv => kv.Value) is var kv3 ? (kv3.Key, kv3.Value) : ("", 0);
-        Assert.True(sn <= picks * 0.10, $"sprite monopoly: {sid} {sn}/{picks}");
+        Assert.True(sn <= picks * 0.08, $"sprite monopoly: {sid} {sn}/{picks}");
         // Breadth: most of the library sees use, and every populated class appears.
         Assert.True(byId.Count >= 90, $"only {byId.Count} distinct sprites picked");
         foreach (string cls2 in new[]

@@ -141,9 +141,16 @@ public sealed record MoveSelectionConfig
     /// <summary>No-monopoly water-fill at the CLASS stage (designer 2026-09-10:
     /// blade — 39 of the library's 111 sprites AND first in 56% of wields lists —
     /// dominated fresh rosters, while evolution drifted repair re-picks to burst,
-    /// 48% of evolved picks). No class holds more than this probability mass in one
-    /// pick; the exact object budget still pins after the cap.</summary>
+    /// 48% of evolved picks). Each class's cap per pick is
+    /// min(MaxClassShare, members x SpriteOverallCeiling) — a starved class (natural
+    /// is FIRST wield for 106 bodies but holds 2 sprites) must not funnel a whole
+    /// class share into single sprites. The exact object budget pins after the cap.</summary>
     public float MaxClassShare { get; init; } = 0.30f;
+
+    /// <summary>The global per-sprite ceiling that sizes each class's cap
+    /// (members x this): no single sprite can exceed roughly this share of all
+    /// attack picks regardless of how starved its class is.</summary>
+    public float SpriteOverallCeiling { get; init; } = 0.05f;
 
     /// <summary>No-monopoly water-fill at the SPRITE stage, within the chosen class
     /// (mv_blood_green alone was 10% of all evolved picks). Infeasible caps no-op,

@@ -26,6 +26,7 @@
     "sweepBonus": 0.15,
     "repairFloor": 0.05,
   "maxClassShare": 0.30,
+  "spriteOverallCeiling": 0.05,
   "maxSpriteShare": 0.25,
     "registerAffinities": {
       "fantasy": { "elements": ["fire", "ice", "chaos"], "classes": [] },

@@ -541,9 +541,16 @@ public sealed class SpriteSelector
                 traits, horizontal, vertical, characterSprite, register, gameUsage);
         }
         double[] classProbs = Softmax(classScores, Config.Moves.SoftmaxTemperature);
-        // No-monopoly at the class stage (designer 2026-09-10) — the shared
-        // water-fill, then the exact object pin (last, so the budget stays exact).
-        Backgrounds.SelectionMath.CapShare(classProbs, Config.Moves.MaxClassShare);
+        // No-monopoly at the class stage (designer 2026-09-10) — per-class caps
+        // sized by member count (min(MaxClassShare, members x SpriteOverallCeiling)),
+        // then the exact object pin (last, so the budget stays exact).
+        var classCaps = new double[classes.Count];
+        for (int i = 0; i < classes.Count; i++)
+        {
+            classCaps[i] = Math.Min(Config.Moves.MaxClassShare,
+                classes[i].Members.Count * Config.Moves.SpriteOverallCeiling);
+        }
+        Backgrounds.SelectionMath.CapShares(classProbs, classCaps);
         for (int i = 0; i < classes.Count; i++)
         {
             if (classes[i].Name == "object")
