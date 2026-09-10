@@ -128,6 +128,9 @@ public sealed partial class UtilityAgent : IInputSource
     // the attacker inside this range, and low-damage DI holds AWAY from the attacker
     // (survival DI toward the far blast line takes over past HighDamageThreshold).
     private const float ChainEscapeRange = 3f;
+    // Nearest-platform recovery (2026-09-10, DEVIATIONS #38): below this horizontal
+    // speed the momentum split is off and recovery is purely nearest-reachable.
+    private const float RecoverMomentumEpsilon = 0.1f;
     private const float BaselineVerticalNeutral = 0.5f;
     private const float FastFallPursuit = 1.2f;     // opponent below → drop onto them
     private const float CrouchBrake = 2.0f;         // negative-accel crouch at high slide speed
@@ -607,10 +610,11 @@ public sealed partial class UtilityAgent : IInputSource
         bool targetSensed = false, reachable = false;
         if (overPit)
         {
-            // Directional recovery (2026-07-10 traversal fix): among REACHABLE sensed
-            // platforms, prefer the one closest to the OPPONENT — mid-hop recovery
-            // continues the chase instead of pulling back to the platform just left.
-            targetSensed = TrySensedRecoverTarget(world, self, opponent, dashRange,
+            // Nearest-platform recovery (2026-09-10, DEVIATIONS #38 — reverses the
+            // 2026-07-10 chase-preserving pick): among REACHABLE sensed platforms,
+            // prefer the one closest to SELF — the reliable ledge back, not the
+            // opponent's far platform.
+            targetSensed = TrySensedRecoverTarget(world, self, dashRange,
                 out recoverTarget, out recoverPlatform, out reachable);
         }
 
@@ -1089,10 +1093,21 @@ public sealed partial class UtilityAgent : IInputSource
     }
 
     /// <summary>Recovery target among sensed platforms: the REACHABLE one whose
-    /// closest point is nearest to the opponent (chase-preserving); when none is
-    /// reachable, the nearest-to-self sensed point (the Doomed check's subject).</summary>
+    /// closest point is nearest to SELF; when none is reachable, the nearest-to-self
+    /// sensed point (the Doomed check's subject).
+    ///
+    /// HISTORY (DEVIATIONS #38): from 2026-07-10 to 2026-09-10 the reachable pick was
+    /// nearest-to-the-OPPONENT (chase-preserving directional recovery). The designer
+    /// reversed it 2026-09-10: agents chasing an enemy off stage aimed their recovery
+    /// at the enemy's platform — the far, risky option — and self-destructed when the
+    /// margin didn't hold; the nearest reachable platform is the reliable ledge back.
+    /// (This is also what makes thin side platforms recovery targets in practice —
+    /// the opponent's platform is always solid by the at-least-one-solid rule, so the
+    /// old rule never chose thin.) A pure nearest pick reintroduced the 2026-07-10
+    /// oscillation stall verbatim (AChaseCrossesTheWholeLevel failed: every traversal
+    /// hop got hijacked back to its origin platform), hence the momentum split.</summary>
     private static bool TrySensedRecoverTarget(
-        SimWorld world, SimPlayer self, SimPlayer opponent, float dashRange,
+        SimWorld world, SimPlayer self, float dashRange,
         out Vec2 target, out Aabb chosenPlatform, out bool reachable)
     {
         var sense = AgentGeometry.SenseBox(world, self);
@@ -1100,9 +1115,19 @@ public sealed partial class UtilityAgent : IInputSource
         chosenPlatform = default;
         reachable = false;
         bool found = false;
-        float bestReachable = float.PositiveInfinity, bestFallback = float.PositiveInfinity;
+        float bestFallback = float.PositiveInfinity;
         Vec2 fallback = Vec2.Zero;
         Aabb fallbackPlatform = default;
+        // Momentum split: a platform is AHEAD when its closest point lies in the
+        // direction of current horizontal motion. Nearest-AHEAD beats nearest-BEHIND
+        // so a mid-hop traversal is never hijacked back to the platform just left
+        // (the 2026-07-10 oscillation stall, guarded by UtilityAgentTraversalTests);
+        // a chase past the last platform has nothing reachable ahead and turns back.
+        float vx = self.Velocity.X;
+        bool directional = MathF.Abs(vx) > RecoverMomentumEpsilon;
+        float bestAhead = float.PositiveInfinity, bestBehind = float.PositiveInfinity;
+        Vec2 aheadPoint = Vec2.Zero, behindPoint = Vec2.Zero;
+        Aabb aheadPlatform = default, behindPlatform = default;
         foreach (Aabb platform in world.Platforms)
         {
             if (!sense.Overlaps(platform))
@@ -1123,15 +1148,27 @@ public sealed partial class UtilityAgent : IInputSource
             bool inDashReach = dashRange > 0f && toSelf <= dashRange + 1f;
             if (inDashReach || EstimateReachable(world, self, point))
             {
-                float toOpponent = (point - opponent.Position).Length();
-                if (toOpponent < bestReachable)
+                bool ahead = !directional || (point.X - self.Position.X) * vx >= 0f;
+                if (ahead && toSelf < bestAhead)
                 {
-                    bestReachable = toOpponent;
-                    target = point;
-                    chosenPlatform = platform;
-                    reachable = true;
+                    bestAhead = toSelf;
+                    aheadPoint = point;
+                    aheadPlatform = platform;
                 }
+                else if (!ahead && toSelf < bestBehind)
+                {
+                    bestBehind = toSelf;
+                    behindPoint = point;
+                    behindPlatform = platform;
+                }
+                reachable = true;
             }
+        }
+        if (reachable)
+        {
+            bool useAhead = bestAhead < float.PositiveInfinity;
+            target = useAhead ? aheadPoint : behindPoint;
+            chosenPlatform = useAhead ? aheadPlatform : behindPlatform;
         }
         if (!reachable)
         {

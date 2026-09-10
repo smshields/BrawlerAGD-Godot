@@ -344,6 +344,10 @@ public class UtilityAgentTests
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 0)),
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 1)),
         });
+        // Re-pinned 2026-09-10 (third pin that day): nearest-platform recovery
+        // (DEVIATIONS #38) — the reachable recovery pick is now nearest-to-self with
+        // the momentum split, not nearest-to-the-opponent. Prior pin:
+        // 2527329711807338059.
         // Re-pinned 2026-09-10 (second pin that day): agent chain defense
         // (DEVIATIONS #37) — percent-aware DI and the stun-exit chain-escape
         // defense trigger change the instrument's decisions in stun exchanges.
@@ -364,6 +368,6 @@ public class UtilityAgentTests
         // 2695584452249808183, 13063472053697347474,
         // 4239894947699402948 / 8169156236120396373, 3417322836374644188,
         // 15992591370472251803 (initial).
-        Assert.Equal(2527329711807338059UL, result.FinalHash);
+        Assert.Equal(12033930178660994681UL, result.FinalHash);
     }
 }
