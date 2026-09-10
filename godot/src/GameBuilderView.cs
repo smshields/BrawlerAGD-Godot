@@ -38,6 +38,10 @@ public partial class GameBuilderView : Control
     private GameRecord? _source;    // the open source game.json
     private string _sourceLabel = "";
 
+    /// <summary>When set, the builder opens this built-game path on load (the main
+    /// menu's BUILD flyout, 2026-09-10). Consumed once.</summary>
+    public static string? OpenOnLoad;
+
     public override void _Ready()
     {
         Theme = UiTheme.Buttons; // app-wide button styling (2026-08-17)
@@ -45,6 +49,15 @@ public partial class GameBuilderView : Control
         RefreshLibrary();
         RefreshRoster();
         RefreshSourceElements();
+
+        if (OpenOnLoad is { } pending)
+        {
+            OpenOnLoad = null;
+            if (System.IO.File.Exists(pending))
+            {
+                OpenGame(pending);
+            }
+        }
 
         if (AutomationEnv.AutoBuild)
         {

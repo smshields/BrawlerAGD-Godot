@@ -46,6 +46,9 @@ public static class AutomationEnv
     public static string Scene => OS.GetEnvironment("BRAWLER_SCENE");
     public static string Title => OS.GetEnvironment("BRAWLER_TITLE");
     public static bool Picker => OS.GetEnvironment("BRAWLER_PICKER") == "1";
+    /// <summary>BRAWLER_FLYOUT=play|build|evolve|settings: open that main-menu flyout
+    /// on load (2026-09-10 menu rework screenshots).</summary>
+    public static string Flyout => OS.GetEnvironment("BRAWLER_FLYOUT");
     public static bool AutoOpen => OS.GetEnvironment("BRAWLER_AUTOOPEN") == "1";
     public static bool AutoBuild => OS.GetEnvironment("BRAWLER_AUTOBUILD") == "1";
     public static string AutoSelect => OS.GetEnvironment("BRAWLER_AUTOSELECT");

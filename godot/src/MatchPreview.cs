@@ -38,6 +38,11 @@ public partial class MatchPreview : Node2D
     /// <summary>Fires when a match ends or a new one starts (info line refresh).</summary>
     public System.Action? MatchChanged;
 
+    /// <summary>When set, consulted at each match end for the next game to play
+    /// (main-menu backdrop rotation, 2026-09-10); a null result keeps the current
+    /// game. Unset (the evolve preview), the same game loops on the next seed.</summary>
+    public System.Func<GameRecord?>? NextGame;
+
     public void ShowGame(GameRecord record, ulong firstSeed)
     {
         _record = record;
@@ -120,6 +125,10 @@ public partial class MatchPreview : Node2D
             // Hold the final frame briefly, then play the next seed.
             if (--_restartCountdown <= 0)
             {
+                if (NextGame?.Invoke() is { } next)
+                {
+                    _record = next;
+                }
                 _seed++;
                 Rebuild();
                 return;

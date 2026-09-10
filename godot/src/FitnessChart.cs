@@ -160,11 +160,7 @@ public partial class FitnessChart : Control
         DrawString(font, new Vector2(12f, 42f), $"avg {_average[^1]:F1}", HorizontalAlignment.Left, -1f, 14, new Color(0.55f, 0.65f, 0.9f));
         DrawString(font, new Vector2(size.X - 90f, size.Y - 10f), $"gen {_top.Count - 1}",
             HorizontalAlignment.Left, -1f, 14, new Color(0.5f, 0.55f, 0.65f));
-        if (_scores.Count > 0 && _scores[^1].Length > 0)
-        {
-            DrawString(font, new Vector2(12f, size.Y - 28f), "click a point to preview that game",
-                HorizontalAlignment.Left, -1f, 12, new Color(0.45f, 0.5f, 0.6f));
-        }
+        // Helper text removed (designer 2026-09-10): points remain clickable.
     }
 
     /// <summary>Chart range comes from the LINES (top/avg): early-generation stragglers

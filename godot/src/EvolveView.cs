@@ -12,7 +12,11 @@ namespace BrawlerGodot;
 /// <summary>
 /// In-app evolution dashboard: configure a run, execute the EvolutionEngine on a
 /// background thread (checkpointing every generation exactly like the CLI), watch the
-/// fitness curves live, then jump straight to watching the best game.
+/// fitness curves live, and preview/save any chart point.
+/// UI rework (2026-09-10, designer): narrow scrollable config column (NAME / NUMBER OF
+/// PLAYERS / BUTTON ASSIGNMENT up front, everything else under ADVANCED OPTIONS),
+/// icon transport buttons (start/pause/reset), the match preview inline in the column
+/// with an overlaid save button, and a generation progress bar under the chart.
 /// Automation: BRAWLER_AUTOEVOLVE="name=x;pop=24;gens=20;seed=9" starts on load;
 /// with BRAWLER_SHOT set it captures the finished dashboard and quits.
 /// </summary>
@@ -26,18 +30,22 @@ public partial class EvolveView : Control
     private HSlider _dropout = null!;
     private LineEdit _runName = null!;
     private Button _start = null!;
-    private Button _watchBest = null!;
+    private Button _pause = null!;
+    private Button _reset = null!;
     private Label _status = null!;
+    private ProgressBar _progress = null!;
     private FitnessChart _chart = null!;
 
     // Composition control + advanced ranges (2026-07-14,
     // docs/features/evolve-composition-and-ranges.md)
     private OptionButton _compositionMode = null!;
     private OptionButton _numPlayers = null!; // 2026-08-12 four-player
-    private HBoxContainer _perButtonRow = null!;
+    private VBoxContainer _perButtonList = null!;
     private readonly OptionButton[] _buttonSlots = new OptionButton[BrawlerSim.Sim.InputFrame.ActionCount];
     private Button _advancedToggle = null!;
-    private ScrollContainer _advancedPanel = null!;
+    private VBoxContainer _advancedBox = null!;
+    private Button _rangesToggle = null!;
+    private ScrollContainer _rangesPanel = null!;
     private readonly System.Collections.Generic.List<RangeRow> _rangeRows = new();
 
     private sealed class RangeRow
@@ -54,7 +62,7 @@ public partial class EvolveView : Control
     private ulong _startTimeMs;
 
     // Evolution Explorer (2026-07-27, designer): per-game chart points feed a live
-    // match preview + the ADD TO GAMES favorites basket. Generations cross from the
+    // match preview + the save-to-favorites button. Generations cross from the
     // engine thread through a queue (GameGenome is not a Variant, so no CallDeferred
     // args); genomes are immutable and survivors are shared refs across generations,
     // so retaining them is cheap.
@@ -62,9 +70,7 @@ public partial class EvolveView : Control
         (GenerationStats Stats, float[] Scores, GameGenome[] Genomes)> _pendingGenerations = new();
     private int _lastBestIndex;
     private bool _autoFavorite;
-    private VBoxContainer _previewPanel = null!;
     private Label _previewInfo = null!;
-    private Label _previewSeed = null!;
     private Button _addToGames = null!;
     private Label _savedNote = null!;
     private MatchPreview _preview = null!;
@@ -103,9 +109,10 @@ public partial class EvolveView : Control
 
         _chart.Clear();
         ClearSelection();
-        _start.Disabled = true;
-        _watchBest.Disabled = true;
-        _status.Text = $"running → {_runDir}";
+        SetRunning(true);
+        _progress.MaxValue = generations;
+        _progress.Value = 0;
+        _status.Text = $"RUNNING → {_runDir}";
         _startTimeMs = Time.GetTicksMsec();
         _cancel = new CancellationTokenSource();
         CancellationToken token = _cancel.Token;
@@ -141,9 +148,9 @@ public partial class EvolveView : Control
         {
             _chart.AddGeneration(gen.Stats.TopFitness, gen.Stats.AverageFitness, gen.Scores, gen.Genomes);
             _lastBestIndex = gen.Stats.BestIndex;
+            _progress.Value = gen.Stats.Generation;
             float elapsed = (Time.GetTicksMsec() - _startTimeMs) / 1000f;
-            _status.Text = $"gen {gen.Stats.Generation}   top {gen.Stats.TopFitness:F1}   " +
-                $"avg {gen.Stats.AverageFitness:F1}   {elapsed:F1}s   → {_runDir}";
+            _status.Text = $"TOP {gen.Stats.TopFitness:F1} · AVG {gen.Stats.AverageFitness:F1} · {elapsed:F1}S";
         }
     }
 
@@ -151,10 +158,10 @@ public partial class EvolveView : Control
     {
         DrainGenerations(); // anything still queued when the loop ended
         float elapsed = (Time.GetTicksMsec() - _startTimeMs) / 1000f;
-        _status.Text = (cancelled ? "stopped" : "done") +
-            $" — {generations} generations in {elapsed:F1}s — saved to {_runDir}";
-        _start.Disabled = false;
-        _watchBest.Disabled = !System.IO.File.Exists(System.IO.Path.Combine(_runDir, RunStore.BestGameFileName));
+        _status.Text = (cancelled
+            ? $"PAUSED AFTER {generations} GENERATIONS (CHECKPOINT KEPT)"
+            : $"DONE — {generations} GENERATIONS IN {elapsed:F1}S") + $" — {_runDir}";
+        SetRunning(false);
 
         // Convenience: focus the final generation's best game so the preview is live
         // the moment a run ends (also what automation screenshots capture).
@@ -174,6 +181,59 @@ public partial class EvolveView : Control
         }
     }
 
+    /// <summary>START runs, PAUSE cancels (checkpoint kept), RESET only between runs.</summary>
+    private void SetRunning(bool running)
+    {
+        _start.Disabled = running;
+        _pause.Disabled = !running;
+        _reset.Disabled = running;
+    }
+
+    /// <summary>RESET (designer 2026-09-10): clear the dashboard and configure a fresh
+    /// run — next EVOLUTION number, new random seed. Touches no files: the previous
+    /// run's directory keeps everything it wrote.</summary>
+    private void ResetForNewRun()
+    {
+        _chart.Clear();
+        ClearSelection();
+        _runName.Text = NextEvolutionName(_runName.Text);
+        _seed.Value = RandomSeed();
+        _progress.MaxValue = 1;
+        _progress.Value = 0;
+        _runDir = "";
+        _status.Text = "CONFIGURE A RUN AND PRESS START";
+    }
+
+    /// <summary>Default run name: EVOLUTION X, X = first number past everything in the
+    /// runs directory (and past the current field on RESET, so the number always
+    /// increments even if the previous run never started).</summary>
+    private static string NextEvolutionName(string? current = null)
+    {
+        int max = 0;
+        foreach (string dir in System.IO.Directory.GetDirectories(AppPaths.RunsRoot()))
+        {
+            if (TryParseEvolutionNumber(System.IO.Path.GetFileName(dir), out int n) && n > max)
+            {
+                max = n;
+            }
+        }
+        if (current is not null && TryParseEvolutionNumber(current.Trim(), out int c) && c > max)
+        {
+            max = c;
+        }
+        return $"EVOLUTION {max + 1}";
+    }
+
+    private static bool TryParseEvolutionNumber(string name, out int number)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
+            name, @"^EVOLUTION (\d+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        number = 0;
+        return match.Success && int.TryParse(match.Groups[1].Value, out number);
+    }
+
+    private static int RandomSeed() => System.Random.Shared.Next(1, 1_000_000);
+
     // ── Evolution Explorer: selection → preview → basket ──────────────────────────
 
     private void OnPointSelected(int gen, int index, float score, GameGenome genome)
@@ -186,7 +246,7 @@ public partial class EvolveView : Control
         _selection = (gen, index, score, genome);
         _previewInfo.Text = $"GEN {gen} · GAME {index} · FITNESS {score:F1}";
         _addToGames.Disabled = false;
-        _savedNote.Text = "";
+        _savedNote.Visible = false;
         _preview.ShowGame(record, firstSeed: (ulong)(gen * 1000 + index + 1));
     }
 
@@ -194,14 +254,13 @@ public partial class EvolveView : Control
     {
         _selection = null;
         _preview.Stop();
-        _previewInfo.Text = "click a chart point to preview that game";
-        _previewSeed.Text = "";
+        _previewInfo.Text = "";
         _addToGames.Disabled = true;
-        _savedNote.Text = "";
+        _savedNote.Visible = false;
     }
 
-    /// <summary>ADD TO GAMES (the basket): saves the selected genome as a game.json
-    /// in the favorites library, which the game picker lists first.</summary>
+    /// <summary>The preview's save button: saves the selected genome as a game.json
+    /// in the favorites library and flashes the SAVED notification.</summary>
     private void AddSelectionToGames()
     {
         if (_selection is not { } sel)
@@ -221,7 +280,8 @@ public partial class EvolveView : Control
             path = System.IO.Path.Combine(dir, $"{baseName}-{n}.json");
         }
         GameGenomeJson.Save(record, path);
-        _savedNote.Text = $"ADDED ✓  {System.IO.Path.GetFileName(path)}";
+        _savedNote.Visible = true;
+        GetTree().CreateTimer(2.5).Timeout += () => _savedNote.Visible = false;
     }
 
     private static string Sanitize(string name)
@@ -234,14 +294,6 @@ public partial class EvolveView : Control
     }
 
     private Task CaptureAndQuit(string path) => Screenshot.CaptureAsync(this, path, quitWhenDone: true);
-
-    private void WatchBest()
-    {
-        MatchSession.Game = GameGenomeJson.Load(System.IO.Path.Combine(_runDir, RunStore.BestGameFileName));
-        MatchSession.Mode = MatchMode.Replay;
-        MatchSession.Trace = BrawlerSim.Replay.InputTraceJson.Load(System.IO.Path.Combine(_runDir, RunStore.BestTraceFileName));
-        GetTree().ChangeSceneToFile(Scenes.Arena);
-    }
 
     /// <summary>Collects composition mode + advanced range rows into the run's
     /// GenerationConfig. PINNED with untouched rows = GenerationConfig.Default —
@@ -309,10 +361,11 @@ public partial class EvolveView : Control
                         { "random" => 1, "perbutton" => 2, "projectile" => 3, _ => 0 };
                     OnCompositionModeChanged(_compositionMode.Selected);
                     break;
-                case "advanced": // any value: open the advanced panel for screenshots
-                    ToggleAdvanced();
+                case "advanced": // any value: open advanced options + ranges for screenshots
+                    SetAdvancedVisible(true);
+                    ToggleRanges();
                     break;
-                case "favorite": // =1: ADD TO GAMES on the auto-selected best (automation)
+                case "favorite": // =1: save the auto-selected best to favorites (automation)
                     _autoFavorite = kv[1] == "1";
                     break;
             }
@@ -324,36 +377,44 @@ public partial class EvolveView : Control
         var root = new HBoxContainer
         {
             AnchorRight = 1f, AnchorBottom = 1f,
-            OffsetLeft = 24f, OffsetTop = 24f, OffsetRight = -24f, OffsetBottom = -24f,
+            OffsetLeft = 16f, OffsetTop = 16f, OffsetRight = -16f, OffsetBottom = -16f,
         };
-        root.AddThemeConstantOverride("separation", 24);
+        root.AddThemeConstantOverride("separation", 16);
         AddChild(root);
 
         BuildConfigColumn(root);
         BuildChartColumn(root);
-
-        _previewPanel = BuildPreviewPanel();
-        root.AddChild(_previewPanel);
     }
 
+    /// <summary>The config column (designer 2026-09-10): one narrow ScrollContainer —
+    /// header, the three primary fields (labels above, small caps), transport icons,
+    /// the match preview, then the ADVANCED OPTIONS dropdown.</summary>
     private void BuildConfigColumn(HBoxContainer root)
     {
-        var left = new VBoxContainer { CustomMinimumSize = new Vector2(360f, 0f) };
-        left.AddThemeConstantOverride("separation", 8);
-        root.AddChild(left);
+        ScrollContainer scroll = UiWidgets.ScrollList(out VBoxContainer left, separation: 10);
+        scroll.CustomMinimumSize = new Vector2(264f, 0f);
+        root.AddChild(scroll);
 
-        var title = new Label { Text = "EVOLVE" };
-        title.AddThemeFontSizeOverride("font_size", 34);
-        left.AddChild(title);
+        // Header: BACK top-left, EVOLVE centered (a spacer mirrors BACK's width so
+        // the title centers on the column, not the leftover space).
+        var header = new HBoxContainer();
+        var back = new Button { Text = "BACK" };
+        back.Pressed += () => GetTree().ChangeSceneToFile(Scenes.MainMenu);
+        header.AddChild(back);
+        var title = new Label
+        {
+            Text = "EVOLVE",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            SizeFlagsHorizontal = SizeFlags.ExpandFill,
+        };
+        title.AddThemeFontSizeOverride("font_size", 26);
+        header.AddChild(title);
+        var spacer = new Control { CustomMinimumSize = new Vector2(64f, 0f) };
+        header.AddChild(spacer);
+        left.AddChild(header);
 
-        _runName = new LineEdit { Text = "run-1", PlaceholderText = "run name" };
-        left.AddChild(Labeled("run name", _runName));
-        _seed = Spin(1, 1, 999_999); left.AddChild(Labeled("seed", _seed));
-        _population = Spin(100, 4, 500); left.AddChild(Labeled("population", _population));
-        _generations = Spin(100, 1, 5000); left.AddChild(Labeled("generations", _generations));
-        _rounds = Spin(1, 1, 9); left.AddChild(Labeled("rounds / individual", _rounds));
-        _mutation = Slider(0.4f); left.AddChild(Labeled("mutation rate", _mutation));
-        _dropout = Slider(0.5f); left.AddChild(Labeled("dropout rate", _dropout));
+        _runName = new LineEdit { Text = NextEvolutionName(), PlaceholderText = "EVOLUTION 1" };
+        left.AddChild(Field("NAME", _runName));
 
         // Four Player Support (2026-08-12): each game holds 2-4 characters; runs past
         // two players score under ffa-v1 automatically (run.json records both).
@@ -362,24 +423,26 @@ public partial class EvolveView : Control
         _numPlayers.AddItem("3 PLAYERS", 1);
         _numPlayers.AddItem("4 PLAYERS", 2);
         _numPlayers.Selected = 0;
-        left.AddChild(Labeled("num players", _numPlayers));
+        left.AddChild(Field("NUMBER OF PLAYERS", _numPlayers));
 
         // Composition (2026-07-14): PINNED = today's fixed attack/attack/shield/dash;
         // RANDOM = every button free; PER-BUTTON = pin some, free others.
-        _compositionMode = new OptionButton();
-        _compositionMode.AddItem("PINNED (ATTACK/ATTACK/SHIELD/DASH)", 0);
+        _compositionMode = new OptionButton { FitToLongestItem = false, ClipText = true };
+        _compositionMode.AddThemeFontSizeOverride("font_size", 14); // longest label fits the column
+        _compositionMode.AddItem("PINNED (ATK/ATK/SHLD/DASH)", 0);
         _compositionMode.AddItem("RANDOMIZED (TYPES EVOLVE)", 1);
         _compositionMode.AddItem("PER-BUTTON", 2);
         // Projectile pin as a first-class option (designer 2026-09-04): the standard
         // kit with a guaranteed bolt slot — previously only reachable via PER-BUTTON.
         // Appended so existing indices (and autoevolve tokens) stay stable.
-        _compositionMode.AddItem("PINNED + PROJECTILE (ATK/ATK/PROJ/SHLD/DASH)", 3);
+        _compositionMode.AddItem("PINNED + PROJECTILE", 3);
         _compositionMode.Selected = 0;
         _compositionMode.ItemSelected += i => OnCompositionModeChanged((int)i);
-        left.AddChild(Labeled("composition", _compositionMode));
+        left.AddChild(Field("BUTTON ASSIGNMENT", _compositionMode));
 
-        _perButtonRow = new HBoxContainer { Visible = false };
-        _perButtonRow.AddThemeConstantOverride("separation", 4);
+        // PER-BUTTON slots stack vertically to fit the narrow column.
+        _perButtonList = new VBoxContainer { Visible = false };
+        _perButtonList.AddThemeConstantOverride("separation", 4);
         // Slot-order invariant (L pinned last) documented on ControlLabels.
         string[] buttonNames = ControlLabels.Keyboard;
         for (int b = 0; b < _buttonSlots.Length; b++)
@@ -394,31 +457,95 @@ public partial class EvolveView : Control
             // Seed from the pinned layout (attack/attack/shield/attack/dash).
             slot.Selected = b switch { 2 => 1, 4 => 2, _ => 0 };
             _buttonSlots[b] = slot;
-            var cell = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-            var name = new Label { Text = buttonNames[b], HorizontalAlignment = HorizontalAlignment.Center };
+            var row = new HBoxContainer();
+            var name = new Label { Text = buttonNames[b], CustomMinimumSize = new Vector2(44f, 0f) };
             name.AddThemeFontSizeOverride("font_size", 12);
-            cell.AddChild(name);
-            cell.AddChild(slot);
-            _perButtonRow.AddChild(cell);
+            row.AddChild(name);
+            row.AddChild(slot);
+            _perButtonList.AddChild(row);
         }
-        left.AddChild(_perButtonRow);
+        left.AddChild(_perButtonList);
 
-        _advancedToggle = new Button { Text = "ADVANCED: PARAMETER RANGES", ToggleMode = true };
-        _advancedToggle.Pressed += ToggleAdvanced;
+        // Transport: START / PAUSE (cancel, checkpoint kept) / RESET.
+        var transport = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        transport.AddThemeConstantOverride("separation", 12);
+        _start = IconButton(UiIcons.Play(), "START RUN");
+        _start.Pressed += StartRun;
+        transport.AddChild(_start);
+        _pause = IconButton(UiIcons.Pause(), "PAUSE (KEEPS CHECKPOINT)");
+        _pause.Disabled = true;
+        _pause.Pressed += () => _cancel?.Cancel();
+        transport.AddChild(_pause);
+        _reset = IconButton(UiIcons.Reset(), "RESET (CONFIGURE A NEW RUN — PRIOR FILES KEPT)");
+        _reset.Pressed += ResetForNewRun;
+        transport.AddChild(_reset);
+        left.AddChild(transport);
+
+        BuildPreviewBlock(left);
+
+        _advancedToggle = new Button { Text = "ADVANCED OPTIONS", ToggleMode = true };
+        _advancedToggle.Toggled += on => _advancedBox.Visible = on;
         left.AddChild(_advancedToggle);
 
-        _start = new Button { Text = "START RUN" };
-        _start.Pressed += StartRun;
-        left.AddChild(_start);
-        var stop = new Button { Text = "STOP (keeps checkpoint)" };
-        stop.Pressed += () => _cancel?.Cancel();
-        left.AddChild(stop);
-        _watchBest = new Button { Text = "WATCH BEST (graded match)", Disabled = true };
-        _watchBest.Pressed += WatchBest;
-        left.AddChild(_watchBest);
-        var back = new Button { Text = "BACK" };
-        back.Pressed += () => GetTree().ChangeSceneToFile(Scenes.MainMenu);
-        left.AddChild(back);
+        _advancedBox = new VBoxContainer { Visible = false };
+        _advancedBox.AddThemeConstantOverride("separation", 10);
+        _seed = Spin(RandomSeed(), 1, 999_999);
+        _advancedBox.AddChild(Field("SEED", _seed));
+        _population = Spin(100, 4, 500);
+        _advancedBox.AddChild(Field("POPULATION", _population));
+        _generations = Spin(300, 1, 5000);
+        _advancedBox.AddChild(Field("GENERATIONS", _generations));
+        _rounds = Spin(3, 1, 9);
+        _advancedBox.AddChild(Field("ROUNDS / INDIVIDUAL", _rounds));
+        _mutation = Slider(0.4f);
+        _advancedBox.AddChild(Field("MUTATION RATE", _mutation));
+        _dropout = Slider(0.5f);
+        _advancedBox.AddChild(Field("DROPOUT RATE", _dropout));
+        _rangesToggle = new Button { Text = "PARAMETER RANGES", ToggleMode = true };
+        _rangesToggle.Pressed += ToggleRanges;
+        _advancedBox.AddChild(_rangesToggle);
+        left.AddChild(_advancedBox);
+    }
+
+    /// <summary>The match preview, inline in the config column: mini arena with the
+    /// save button overlaid top-right and the SAVED notification overlaid at the
+    /// bottom; the selection readout sits underneath.</summary>
+    private void BuildPreviewBlock(VBoxContainer left)
+    {
+        left.AddChild(UiWidgets.Heading("MATCH PREVIEW", 12));
+
+        var frame = new Control { CustomMinimumSize = new Vector2(248f, 140f) }; // 16:9
+        var container = new SubViewportContainer { Stretch = true };
+        frame.AddChild(container);
+        container.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+        var viewport = new SubViewport { RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        container.AddChild(viewport);
+        _preview = new MatchPreview();
+        viewport.AddChild(_preview);
+
+        _addToGames = new Button { Icon = UiIcons.Save(18), TooltipText = "ADD TO GAMES", Disabled = true };
+        frame.AddChild(_addToGames);
+        _addToGames.SetAnchorsAndOffsetsPreset(LayoutPreset.TopRight, LayoutPresetMode.Minsize, 6);
+        _addToGames.Pressed += AddSelectionToGames;
+
+        _savedNote = new Label
+        {
+            Text = "SAVED MATCH TO STORAGE",
+            Visible = false,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Modulate = new Color(0.5f, 0.9f, 0.6f),
+        };
+        _savedNote.AddThemeFontSizeOverride("font_size", 12);
+        _savedNote.AddThemeStyleboxOverride("normal", UiWidgets.PanelStyle(
+            new Color(0.05f, 0.05f, 0.08f, 0.85f), cornerRadius: 4, marginX: 8f, marginY: 4f));
+        frame.AddChild(_savedNote);
+        _savedNote.SetAnchorsAndOffsetsPreset(LayoutPreset.CenterBottom, LayoutPresetMode.Minsize, 8);
+
+        left.AddChild(frame);
+
+        _previewInfo = new Label { Text = "", AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        _previewInfo.AddThemeFontSizeOverride("font_size", 12);
+        left.AddChild(_previewInfo);
     }
 
     private void BuildChartColumn(HBoxContainer root)
@@ -429,93 +556,53 @@ public partial class EvolveView : Control
         _chart = new FitnessChart { SizeFlagsVertical = SizeFlags.ExpandFill };
         _chart.PointSelected += OnPointSelected;
         right.AddChild(_chart);
-        _advancedPanel = BuildAdvancedPanel();
-        right.AddChild(_advancedPanel);
-        // ClipText: the run-dir path is long — without clipping its min width pushes
-        // the preview column off screen.
+        _rangesPanel = BuildRangesPanel();
+        right.AddChild(_rangesPanel);
+        // Generation progress as a bar (designer 2026-09-10); the label under it
+        // carries fitness/run-state only. ClipText: the run-dir path is long.
+        _progress = new ProgressBar
+        {
+            MinValue = 0, MaxValue = 1, Value = 0,
+            ShowPercentage = false,
+            CustomMinimumSize = new Vector2(0f, 12f),
+        };
+        // Green fill over a panel-dark trough so it reads as progress, not a scrollbar.
+        _progress.AddThemeStyleboxOverride("background", UiWidgets.PanelStyle(UiPalette.PanelBg, cornerRadius: 3));
+        _progress.AddThemeStyleboxOverride("fill", UiWidgets.PanelStyle(new Color(0.45f, 0.9f, 0.55f), cornerRadius: 3));
+        right.AddChild(_progress);
         _status = new Label
         {
-            Text = "configure a run and press START",
+            Text = "CONFIGURE A RUN AND PRESS START",
             ClipText = true,
             TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
         };
-        _status.AddThemeFontSizeOverride("font_size", 14);
+        _status.AddThemeFontSizeOverride("font_size", 13);
         right.AddChild(_status);
-    }
-
-    /// <summary>The Evolution Explorer column (2026-07-27): live match preview of the
-    /// clicked chart point + the ADD TO GAMES basket.</summary>
-    private VBoxContainer BuildPreviewPanel()
-    {
-        var panel = new VBoxContainer { CustomMinimumSize = new Vector2(392f, 0f) };
-        panel.AddThemeConstantOverride("separation", 8);
-
-        var title = new Label { Text = "PREVIEW" };
-        title.AddThemeFontSizeOverride("font_size", 22);
-        panel.AddChild(title);
-
-        _previewInfo = new Label
-        {
-            Text = "click a chart point to preview that game",
-            AutowrapMode = TextServer.AutowrapMode.WordSmart,
-        };
-        _previewInfo.AddThemeFontSizeOverride("font_size", 14);
-        panel.AddChild(_previewInfo);
-
-        var container = new SubViewportContainer
-        {
-            Stretch = true,
-            CustomMinimumSize = new Vector2(392f, 220f), // 16:9 mini arena
-        };
-        var viewport = new SubViewport { RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
-        container.AddChild(viewport);
-        _preview = new MatchPreview();
-        _preview.MatchChanged += () =>
-            _previewSeed.Text = $"AI vs AI · match seed {_preview.CurrentSeed} · new matches loop live";
-        viewport.AddChild(_preview);
-        panel.AddChild(container);
-
-        _previewSeed = new Label { Text = "", Modulate = new Color(0.6f, 0.65f, 0.72f) };
-        _previewSeed.AddThemeFontSizeOverride("font_size", 12);
-        panel.AddChild(_previewSeed);
-
-        _addToGames = new Button { Text = "ADD TO GAMES", Disabled = true };
-        _addToGames.Pressed += AddSelectionToGames;
-        panel.AddChild(_addToGames);
-
-        _savedNote = new Label { Text = "", Modulate = new Color(0.5f, 0.9f, 0.6f) };
-        _savedNote.AddThemeFontSizeOverride("font_size", 13);
-        panel.AddChild(_savedNote);
-
-        var hint = new Label
-        {
-            Text = "favorited games appear first in the PLAY/WATCH game picker",
-            Modulate = new Color(0.5f, 0.55f, 0.65f),
-            AutowrapMode = TextServer.AutowrapMode.WordSmart,
-        };
-        hint.AddThemeFontSizeOverride("font_size", 12);
-        panel.AddChild(hint);
-
-        return panel;
     }
 
     private void OnCompositionModeChanged(int mode)
     {
-        _perButtonRow.Visible = mode == 2;
+        _perButtonList.Visible = mode == 2;
     }
 
-    /// <summary>The advanced panel swaps with the chart (same slot on the right) so
-    /// the range grid gets full height; the run keeps drawing to the chart underneath
-    /// and reappears when the panel is toggled off.</summary>
-    private void ToggleAdvanced()
+    private void SetAdvancedVisible(bool show)
     {
-        bool show = !_advancedPanel.Visible;
-        _advancedPanel.Visible = show;
-        _chart.Visible = !show;
         _advancedToggle.ButtonPressed = show;
+        _advancedBox.Visible = show;
     }
 
-    private ScrollContainer BuildAdvancedPanel()
+    /// <summary>The parameter-ranges panel swaps with the chart (same slot on the
+    /// right) so the range grid gets full height; the run keeps drawing to the chart
+    /// underneath and reappears when the panel is toggled off.</summary>
+    private void ToggleRanges()
+    {
+        bool show = !_rangesPanel.Visible;
+        _rangesPanel.Visible = show;
+        _chart.Visible = !show;
+        _rangesToggle.ButtonPressed = show;
+    }
+
+    private ScrollContainer BuildRangesPanel()
     {
         ScrollContainer scroll = UiWidgets.ScrollList(out VBoxContainer list, separation: 2);
         scroll.Visible = false;
@@ -607,20 +694,29 @@ public partial class EvolveView : Control
         CustomMinimumSize = new Vector2(110f, 0f),
     };
 
+    private static Button IconButton(Texture2D icon, string tooltip) => new()
+    {
+        Icon = icon,
+        TooltipText = tooltip,
+        IconAlignment = HorizontalAlignment.Center,
+        CustomMinimumSize = new Vector2(64f, 40f),
+    };
+
     private static SpinBox Spin(double value, double min, double max) =>
-        new() { MinValue = min, MaxValue = max, Value = value, CustomMinimumSize = new Vector2(140f, 0f) };
+        new() { MinValue = min, MaxValue = max, Value = value };
 
     private static HSlider Slider(float value) =>
-        new() { MinValue = 0, MaxValue = 1, Step = 0.05, Value = value, CustomMinimumSize = new Vector2(140f, 20f) };
+        new() { MinValue = 0, MaxValue = 1, Step = 0.05, Value = value, CustomMinimumSize = new Vector2(0f, 20f) };
 
-    private static Control Labeled(string text, Control control)
+    /// <summary>Field ritual (designer 2026-09-10): small caps label ABOVE the
+    /// control so the column collapses as narrow as possible.</summary>
+    private static Control Field(string text, Control control)
     {
-        var row = new HBoxContainer();
-        var label = new Label { Text = text, CustomMinimumSize = new Vector2(170f, 0f) };
-        label.AddThemeFontSizeOverride("font_size", 15);
-        row.AddChild(label);
+        var box = new VBoxContainer();
+        box.AddThemeConstantOverride("separation", 2);
+        box.AddChild(UiWidgets.Heading(text, 12));
         control.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        row.AddChild(control);
-        return row;
+        box.AddChild(control);
+        return box;
     }
 }
