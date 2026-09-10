@@ -50,12 +50,15 @@ public class MoveRulesTests
     }
 
     [Fact]
-    public void KnockbackAlignedWithHitboxIsFlipped()
+    public void KnockbackAlignedWithHitboxIsNoLongerFlipped()
     {
-        // Hitbox at angle 0 (pointing +X), knockback also +X → within 45° → X flips.
+        // DEVIATIONS #36 (2026-09-10): through 2026-09-09 a knockback vector within
+        // 45° of the hitbox direction had its X flipped (the Unity/paper quirk), and
+        // evolution aligned genes deliberately to mint inward-knockback stun chains.
+        // The gene vector now applies verbatim: hitbox +X, knockback +X → stays +X.
         var move = Move((MoveParams.KnockbackModX, 1f), (MoveParams.KnockbackModY, 0.1f));
         Vec2 effective = MoveRules.EffectiveKnockback(move);
-        Assert.Equal(-1f, effective.X, 0.0001f);
+        Assert.Equal(1f, effective.X, 0.0001f);
         Assert.Equal(0.1f, effective.Y, 0.0001f);
     }
 

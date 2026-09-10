@@ -145,6 +145,9 @@ public class TargetSelectionTests
         // Re-pinned 2026-09-01 (thin platforms, agent step — FEATURE-FINAL): the
         // utility agents now read the thin flags (drop-route traversal, safe-drop
         // escape, gated crouch utilities — DEVIATIONS #34), which changes their
+        // Re-pinned 2026-09-10: knockback X-flip quirk removed (DEVIATIONS #36,
+        // designer-directed; see MatchTests.GoldenMatchHashMatches). Prior pin:
+        // 4158844278074372289.
         // decisions on this thin-carrying fixture. The 2P utility golden (thin-free
         // fixture) is UNMOVED — the instrument is untouched off thin stages. This
         // golden now covers generation, sim, and agent thin behavior end to end.
@@ -164,6 +167,6 @@ public class TargetSelectionTests
         // Pinned 2026-08-12 (first pin — the 4P mode is new with this feature):
         // covers N-player spawning, all-pairs contact/hits, elimination, the gated
         // hash suffix, and nearest-enemy targeting end to end.
-        Assert.Equal(4158844278074372289UL, result.FinalHash);
+        Assert.Equal(6268288007970569437UL, result.FinalHash);
     }
 }

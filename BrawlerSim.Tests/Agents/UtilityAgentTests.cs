@@ -344,6 +344,9 @@ public class UtilityAgentTests
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 0)),
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 1)),
         });
+        // Re-pinned 2026-09-10: knockback X-flip quirk removed (DEVIATIONS #36,
+        // designer-directed; see MatchTests.GoldenMatchHashMatches). Prior pin:
+        // 6003077694252399340.
         // Re-pinned 2026-07-22: agent air-jump-conservation (DEVIATIONS #28 — the
         // large-map oscillation fix). Two behavior refinements changed the utility
         // instrument's decisions: ThreatDodge no longer spends the AIR jump to flinch
@@ -357,6 +360,6 @@ public class UtilityAgentTests
         // 2695584452249808183, 13063472053697347474,
         // 4239894947699402948 / 8169156236120396373, 3417322836374644188,
         // 15992591370472251803 (initial).
-        Assert.Equal(6003077694252399340UL, result.FinalHash);
+        Assert.Equal(16643597873151639441UL, result.FinalHash);
     }
 }

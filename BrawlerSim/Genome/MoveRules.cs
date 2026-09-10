@@ -27,20 +27,22 @@ public static class MoveRules
           * move.Get(MoveParams.DamageFactor);
 
     /// <summary>
-    /// Effective knockback direction. Unity parity: if the raw knockback vector points
-    /// within 45° of the hitbox direction, its X component is flipped. This is the rule
-    /// that produced the paper's "knockback pointing diagonally backwards" quirk —
-    /// preserved deliberately; changing it is a design decision, not a port decision.
+    /// Effective knockback direction: the raw gene vector, verbatim.
+    ///
+    /// HISTORY (DEVIATIONS #36): through 2026-09-09 this was the Unity-parity rule
+    /// "if the raw knockback vector points within 45° of the hitbox direction, flip
+    /// its X" — the paper's documented "knockback pointing diagonally backwards"
+    /// quirk. Evolution learned to TARGET the flip: aligning moveAngle with the
+    /// knockback genes produced inward knockback that dragged the victim into the
+    /// attacker for stun chains (6 of 12 dominant moves across the 2026-09-09
+    /// timescale champions triggered it). Removed 2026-09-10, designer-directed
+    /// ("the weak version": inward knockback stays EXPRESSIBLE via the genes' valid
+    /// domain, KnockbackModX >= -1.5, but is no longer produced by innocuous aligned
+    /// genes). ConstrainKnockback below is untouched — generation streams stay
+    /// byte-exact (fingerprint unmoved); match goldens re-pinned with this change.
     /// </summary>
-    public static Vec2 EffectiveKnockback(ParamSet move)
-    {
-        var knockback = new Vec2(move.Get(MoveParams.KnockbackModX), move.Get(MoveParams.KnockbackModY));
-        if (Vec2.AngleDeg(knockback, MoveLocation(move)) < 45f)
-        {
-            knockback = knockback with { X = -knockback.X };
-        }
-        return knockback;
-    }
+    public static Vec2 EffectiveKnockback(ParamSet move) =>
+        new(move.Get(MoveParams.KnockbackModX), move.Get(MoveParams.KnockbackModY));
 
     /// <summary>
     /// Generation-time constraint (Unity parity): while the raw knockback vector points

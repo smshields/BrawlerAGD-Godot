@@ -108,6 +108,10 @@ public class MatchTests
     public void GoldenMatchHashMatches()
     {
         MatchResult result = RunAiMatch(StudyGame("GameC"), seed: 20260707);
+        // Re-pinned 2026-09-10: knockback X-flip quirk REMOVED (DEVIATIONS #36,
+        // designer-directed) — EffectiveKnockback now returns the gene vector
+        // verbatim, so every hit whose knockback aligned within 45° of the hitbox
+        // direction sends the victim the other way. Prior pin: 14074722867888814238.
         // Re-pinned 2026-07-21: MaxMatchSeconds default 60 → 300 (Map Size, designer)
         // — this match previously hit the 60 s draw (3600 ticks) and now ends by KO at
         // tick 3717. Verified before pinning: with MaxMatchSeconds = 60 the hash still
@@ -116,7 +120,7 @@ public class MatchTests
         // 14366357446713044105 (dash fields), 12579901790422998345 (shield fields),
         // 13546504710617393521 / 5450044395552427516 (stun caps),
         // 8640048477680184839, 1788087336528951335.
-        Assert.Equal(14074722867888814238UL, result.FinalHash);
+        Assert.Equal(9028521752524567298UL, result.FinalHash);
     }
 
     [Fact]
