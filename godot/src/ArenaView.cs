@@ -53,14 +53,18 @@ public partial class ArenaView : Node2D
     /// <summary>Automation fast-forward: sim ticks per rendered frame (default 1 = real time).</summary>
     private int _ticksPerFrame = 1;
 
+    /// <summary>The match's game, captured non-null at scene entry (2026-09-10:
+    /// the nullable static tripped CI's null-dereference warnings on every read).</summary>
+    private BrawlerSim.Serialization.GameRecord _game = null!;
+
     public override void _Ready()
     {
-        MatchSession.Game ??= new BrawlerSim.Serialization.GameRecord(
+        _game = MatchSession.Game ??= new BrawlerSim.Serialization.GameRecord(
             "generated", "editor-run",
             BrawlerSim.Genome.GameGenome.Generate(
                 BrawlerSim.Genome.GenerationConfig.Default, new Pcg32(1)));
 
-        _world = new SimWorld(MatchSession.Game.Genome, MatchSession.BuildMatchConfig());
+        _world = new SimWorld(_game.Genome, MatchSession.BuildMatchConfig());
         int players = _world.Players.Count;
         _inputs = new InputFrame[players];
         _sources = BuildSources();
@@ -109,7 +113,7 @@ public partial class ArenaView : Node2D
 
         _stage = new StageView();
         AddChild(_stage);
-        _stage.Setup(_world, Ppu, MatchSession.Game.Genome.Stage); // themed tiles (M4d)
+        _stage.Setup(_world, Ppu, _game.Genome.Stage); // themed tiles (M4d)
 
         // Point accents (backgrounds Phase 4): additive mood glows between the
         // tiles and the fighters; empty until the rig is derived below.
@@ -121,7 +125,7 @@ public partial class ArenaView : Node2D
         {
             var view = new PlayerView();
             AddChild(view);
-            var character = MatchSession.Game.Genome.Characters[i];
+            var character = _game.Genome.Characters[i];
             view.Setup(_world.Players[i], character, Ppu);
             view.Sync();
             _views[i] = view;
@@ -141,9 +145,9 @@ public partial class ArenaView : Node2D
         AddChild(_camera);
         _camera.BottomUiPixels = HudView.ReservedBottomPixels(); // frame above the HUD
         _camera.Setup(_world, Ppu);
-        _background.Setup(Ppu, MatchSession.Game!.Genome.Stage, _camera,
+        _background.Setup(Ppu, _game.Genome.Stage, _camera,
             MatchSession.StageBackgroundRemap);
-        _weather.Setup(Ppu, MatchSession.Game!.Genome.Stage, _camera,
+        _weather.Setup(Ppu, _game.Genome.Stage, _camera,
             _background.FarFactor, _background.MidFactor);
 
         // Light rig (backgrounds Phase 4): ambient/cap tinting derived from the
@@ -170,7 +174,7 @@ public partial class ArenaView : Node2D
             {
                 view.LightTint = new Color(tr, tg, tb);
             }
-            _lightAccents.Setup(Ppu, MatchSession.Game!.Genome.Stage, _lightRig, LightBank.Config);
+            _lightAccents.Setup(Ppu, _game.Genome.Stage, _lightRig, LightBank.Config);
         }
 
         _minimap = new MinimapView();
@@ -189,7 +193,7 @@ public partial class ArenaView : Node2D
 
         _hud = new HudView();
         AddChild(_hud);
-        _hud.Setup(_world, MatchSession.Game.Genome);
+        _hud.Setup(_world, _game.Genome);
         _hud.Sync(_inputs);
 
         // Pause menu (HUD polish, 2026-07-23): a real navigable menu replaces the
@@ -414,7 +418,7 @@ public partial class ArenaView : Node2D
         string path = System.IO.Path.Combine(dir, "last_match.trace.json");
         InputTraceJson.Save(_trace, path);
         BrawlerSim.Serialization.GameGenomeJson.Save(
-            MatchSession.Game!, System.IO.Path.Combine(dir, "last_match.game.json"));
+            _game, System.IO.Path.Combine(dir, "last_match.game.json"));
         GD.Print($"match trace saved: {path} ({_trace.TickCount} ticks, hash {_world.StateHash()})");
     }
 
@@ -475,7 +479,7 @@ public partial class ArenaView : Node2D
     /// <summary>Which of this character's buttons map to shield moves (hold semantics).</summary>
     private bool[] ShieldHoldMask(int playerIndex)
     {
-        var character = MatchSession.Game!.Genome.Characters[playerIndex];
+        var character = _game.Genome.Characters[playerIndex];
         var mask = new bool[BrawlerSim.Sim.InputFrame.ActionCount];
         for (int b = 0; b < mask.Length; b++)
         {
