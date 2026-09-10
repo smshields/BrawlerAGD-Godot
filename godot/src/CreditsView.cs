@@ -26,6 +26,7 @@ public partial class CreditsView : Control
         text.AddChild(CreditsUi.Line(
             "Fighters, movesets, and arenas in this app are grown by an evolutionary "
             + "algorithm; the art below dresses what evolution designs.", 14));
+        text.AddChild(CreditsUi.Line(CreditsUi.HumanMadeStatement, 14));
         text.AddChild(new Control { CustomMinimumSize = new Vector2(0f, 10f) });
 
         text.AddChild(UiWidgets.Heading("MADE WITH", 18));

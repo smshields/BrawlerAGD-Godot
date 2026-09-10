@@ -171,6 +171,7 @@ public partial class TitleView : Control
             + "(Shields Games and Research).");
         Line("Built on \"Searching for Balanced 2D Brawler Games: Successes and Failures "
             + "of Automated Evaluation\" (Shields, Mawhorter, Melcer, Mateas — AIIDE 2022).");
+        Line(CreditsUi.HumanMadeStatement);
         Line(CreditsUi.CourtesyBlock);
         text.AddChild(new Control { CustomMinimumSize = new Vector2(0f, 10f) });
 

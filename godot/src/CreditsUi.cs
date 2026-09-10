@@ -14,6 +14,14 @@ namespace BrawlerGodot;
 /// </summary>
 public static class CreditsUi
 {
+    /// <summary>The designer's provenance pledge (2026-09-10): credit everything,
+    /// courtesy or not, and say plainly that nothing is generated. Rendered at the
+    /// top of every credits surface.</summary>
+    public const string HumanMadeStatement =
+        "Every piece of art in this game is human-made — nothing is AI-generated. "
+        + "All sprites, tiles, and backdrops come from the creators credited here, "
+        + "and we thank every one of them.";
+
     /// <summary>The courtesy block (engine + sprite/tile/name sources). Corrected
     /// 2026-09-10 (designer attribution audit): the v2 STAGE TILES are DCSS-derived
     /// too — Kenney's 1-bit pack now covers only the legacy v1 sheets. The stated
