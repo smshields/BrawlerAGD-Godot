@@ -25,14 +25,15 @@ internal static class Commands
         Console.WriteLine("           [--composition pinned|random|<attack,shield,dash,random x4>] [--type-reroll 0.2]");
         Console.WriteLine("           [--range \"schema.key=min:max;...\"]  (schemas: character|move|shield|dash|projectile|stage)");
         Console.WriteLine("           [--fitness standard-v6|standard-v5|ffa-v2|standard-v4|ffa-v1|standard-v3|standard-v2]  (default: v5 at 2P, ffa-v2 at 3/4P; v6 = scaled-time experiment)");
+        Console.WriteLine("           [--max-seconds 300]");
         Console.WriteLine("  evaluate --game <game.json> [--seed 7] [--rounds 5] [--fitness standard-v6|standard-v5|ffa-v2|standard-v4|ffa-v1|standard-v3|standard-v2]");
-        Console.WriteLine("           [--breakdown] [--max-seconds 60] [--target-seconds 45]");
+        Console.WriteLine("           [--breakdown] [--max-seconds 300] [--target-seconds 45]");
         Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
         Console.WriteLine("  replay   --game <game.json> --trace <trace.json>");
         Console.WriteLine("  import   --unity-dir <GameX folder> --out <game.json>");
         Console.WriteLine("  bench    <unity game folder>");
         Console.WriteLine("  noise    --games <g1.json,g2.json,...> [--reps 20] [--rounds 5] [--aggregate median|mean]");
-        Console.WriteLine("           [--max-seconds 60] [--target-seconds 45] [--seed 1] [--agent ...] — fitness noise per genome (CSV)");
+        Console.WriteLine("           [--max-seconds 300] [--target-seconds 45] [--seed 1] [--agent ...] — fitness noise per genome (CSV)");
         Console.WriteLine("  popdiv   --run <run dir> — mean pairwise normalized genome distance of the population");
         Console.WriteLine("  prep-game --game <built-game.json> --out <embedded.json> — packaging gate:");
         Console.WriteLine("           requires a COMPLETE built game (8 chars + 4 stages) and applies the");
@@ -52,7 +53,7 @@ internal static class Commands
         int reps = GetInt(opts, "reps", 20);
         int rounds = GetInt(opts, "rounds", 5);
         bool median = opts.GetValueOrDefault("aggregate", "median") == "median";
-        float maxSeconds = GetFloat(opts, "max-seconds", 60f);
+        float maxSeconds = GetFloat(opts, "max-seconds", MatchConfig.Default.MaxMatchSeconds);
         float targetSeconds = GetFloat(opts, "target-seconds", 45f);
         ulong seed = (ulong)GetInt(opts, "seed", 1);
         AgentConfig agent = ParseAgent(opts);
@@ -435,11 +436,15 @@ internal static class Commands
         agent.CreateSources(seed, players);
 
     /// <summary>The evaluation MatchConfig shared by evolve/evaluate/noise:
-    /// --max-seconds (default 60) and --max-stun (default uncapped).</summary>
+    /// --max-seconds and --max-stun (default uncapped). The max-seconds default
+    /// follows MatchConfig.Default (300 s) since 2026-09-10 (designer-directed,
+    /// scaled-time experiment finding: the old CLI-only 60 s cap was itself a major
+    /// stage-size homogenizer — long-pacing maps ate the overtime cliff regardless
+    /// of fitness version). Old runs resume under their recorded maxMatchSeconds.</summary>
     private static MatchConfig BuildMatchConfig(Dictionary<string, string> opts) =>
         MatchConfig.Default with
         {
-            MaxMatchSeconds = GetFloat(opts, "max-seconds", 60f),
+            MaxMatchSeconds = GetFloat(opts, "max-seconds", MatchConfig.Default.MaxMatchSeconds),
             MaxStunSeconds = GetFloat(opts, "max-stun", float.PositiveInfinity),
         };
 
@@ -453,7 +458,7 @@ internal static class Commands
         FitnessRegistry.Create(
             opts.GetValueOrDefault("fitness"),
             GetFloat(opts, "target-seconds", 45f),
-            GetFloat(opts, "max-seconds", 60f),
+            GetFloat(opts, "max-seconds", MatchConfig.Default.MaxMatchSeconds),
             CollisionScalar(opts),
             players);
 
