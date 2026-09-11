@@ -7,9 +7,24 @@ namespace BrawlerSim.Backgrounds;
 public readonly record struct BgRect(int X, int Y, int W, int H);
 
 /// <summary>Per-entry guardrail metrics measured by the pipeline (stored, never
-/// re-derived at runtime — "no image analysis at runtime" is the M-BG contract).</summary>
+/// re-derived at runtime — "no image analysis at runtime" is the M-BG contract).
+/// Detail/EdgeDensity/Dithered joined with index v0.3 (playtest remediation §3:
+/// detail = edge-density x color-count x contrast in [0,1], the box-composition
+/// guard's metric; dithered marks the 157 re-quantized texture entries).</summary>
 public sealed record BackgroundMetrics(
-    float SatMean, float ContrastBand, IReadOnlyList<int> DomLightColor, float ValMean);
+    float SatMean, float ContrastBand, IReadOnlyList<int> DomLightColor, float ValMean,
+    float Detail, float EdgeDensity, bool Dithered);
+
+/// <summary>One vertical extension rule of the coverage contract (remediation §1):
+/// how a layer fills the space above (extendTop) or below (extendBottom) its image.
+/// Mode "solid" fills with Color, "smear" clamp-stretches the edge row,
+/// "transparent" extends nothing (alpha layers show what's behind).</summary>
+public sealed record BgExtend(string Mode, IReadOnlyList<int>? Color)
+{
+    public const string Solid = "solid";
+    public const string Smear = "smear";
+    public const string Transparent = "transparent";
+}
 
 /// <summary>
 /// One background entry of the bg-v1 index. Fields mirror the contract
@@ -23,6 +38,11 @@ public sealed record BackgroundEntry(
     int Height,
     string LayerRole,           // "full" | "far" | "mid" | "element"
     bool Tileable,
+    bool CanTileX,              // measured seam test: true = real wrap-tile in x
+    bool MirrorTileX,           // always true in v0.4 — mirror-wrap is the universal fallback
+    BgExtend ExtendTop,         // coverage contract: how to fill above the image
+    BgExtend ExtendBottom,      // ... and below
+    bool BoxRisk,               // detail < 0.12 — valid backdrop, guarded by composition rules
     string? Style,
     int? HorizonY,
     IReadOnlyList<string> Register,
@@ -159,6 +179,11 @@ public sealed class BackgroundLibrary
                 e.Size[1],
                 e.LayerRole ?? "full",
                 e.Tileable ?? false,
+                e.CanTileX ?? e.Tileable ?? false, // pre-v0.3 indexes: tileable implies a real seam
+                e.MirrorTileX ?? true,
+                ToExtend(e.ExtendTop),
+                ToExtend(e.ExtendBottom),
+                e.BoxRisk ?? false,
                 e.Style,
                 e.HorizonY,
                 (IReadOnlyList<string>?)e.Register ?? Array.Empty<string>(),
@@ -170,7 +195,10 @@ public sealed class BackgroundLibrary
                     e.Metrics?.SatMean ?? 0f,
                     e.Metrics?.ContrastBand ?? 0f,
                     (IReadOnlyList<int>?)e.Metrics?.DomLightColor ?? new[] { 128, 128, 128 },
-                    e.Metrics?.ValMean ?? 0.5f),
+                    e.Metrics?.ValMean ?? 0.5f,
+                    e.Metrics?.Detail ?? 0.5f, // pre-v0.3 indexes: neutral, never boxRisk-adjacent
+                    e.Metrics?.EdgeDensity ?? 0f,
+                    e.Metrics?.Dithered ?? false),
                 (IReadOnlyList<string>?)e.PairExclude ?? Array.Empty<string>(),
                 (IReadOnlyList<string>?)e.Remaps ?? Array.Empty<string>(),
                 descriptor,
@@ -194,6 +222,16 @@ public sealed class BackgroundLibrary
 
     private static BgRect? ToRect(List<int>? r) =>
         r is { Count: 4 } ? new BgRect(r[0], r[1], r[2], r[3]) : null;
+
+    /// <summary>Absent extend rules (pre-v0.3 indexes) read as smear — edge-clamp is
+    /// the safe universal fill; an unknown mode string degrades the same way.</summary>
+    private static BgExtend ToExtend(ExtendDoc? e) => e?.Mode switch
+    {
+        BgExtend.Solid => new BgExtend(BgExtend.Solid,
+            e.Color is { Count: 3 } ? e.Color : new List<int> { 0, 0, 0 }),
+        BgExtend.Transparent => new BgExtend(BgExtend.Transparent, null),
+        _ => new BgExtend(BgExtend.Smear, null),
+    };
 
     private static readonly JsonSerializerOptions Options = Serialization.JsonOptions.Library;
 
@@ -220,6 +258,15 @@ public sealed class BackgroundLibrary
         public float? ContrastBand { get; set; }
         public List<int>? DomLightColor { get; set; }
         public float? ValMean { get; set; }
+        public float? Detail { get; set; }
+        public float? EdgeDensity { get; set; }
+        public bool? Dithered { get; set; }
+    }
+
+    private sealed class ExtendDoc
+    {
+        public string? Mode { get; set; }
+        public List<int>? Color { get; set; }
     }
 
     private sealed class EntryDoc
@@ -229,6 +276,11 @@ public sealed class BackgroundLibrary
         public List<int>? Size { get; set; }
         public string? LayerRole { get; set; }
         public bool? Tileable { get; set; }
+        public bool? CanTileX { get; set; }
+        public bool? MirrorTileX { get; set; }
+        public ExtendDoc? ExtendTop { get; set; }
+        public ExtendDoc? ExtendBottom { get; set; }
+        public bool? BoxRisk { get; set; }
         public string? Style { get; set; }
         public int? HorizonY { get; set; }
         public List<string>? Register { get; set; }
