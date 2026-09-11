@@ -3,22 +3,25 @@ using NgPcg = NameGen.Core.Pcg32;
 
 namespace BrawlerSim.Backgrounds;
 
-/// <summary>The resolved background of one stage: a single full-scene entry OR a
-/// recombined far + mid pair under one unified remap (Phase 2). Gene() is what the
-/// genome stores.</summary>
+/// <summary>The resolved background of one stage: the far + mid + near parallax
+/// stack under one unified remap (v0.4 default), or — the EXTREME fallback, only
+/// when pair construction failed outright — a single full-scene entry. Gene() is
+/// what the genome stores.</summary>
 public sealed record BackgroundSpec(
     BackgroundEntry? Single, BackgroundEntry? Far, BackgroundEntry? Mid,
-    string? Remap, bool Goof)
+    BackgroundEntry? Near, string? Remap, bool Goof)
 {
     public bool IsComposite => Far is not null;
 
     public string Gene() => IsComposite
-        ? new BackgroundComposite(Far!.Id, Mid!.Id, Remap).ToGene()
+        ? new BackgroundComposite(Far!.Id, Mid!.Id, Near?.Id, Remap).ToGene()
         : Single!.Id;
 }
 
-/// <summary>An optional L2 near-accent element (the tilt-shift bokeh plane): sparse,
-/// heavily blurred, seeded — never over the platform envelope at readable opacity.</summary>
+/// <summary>The near bokeh layer's render placement (the gene owns WHICH element;
+/// anchor/factor/scale stay seeded layout params): sparse, heavily blurred — over
+/// the action band it drops to unreadable opacity instead of vanishing (remediation
+/// §2: three layers minimum, never over the platform envelope at readable opacity).</summary>
 public sealed record BackgroundAccent(BackgroundEntry Element, int Anchor, float Factor, float Scale);
 
 /// <summary>Everything the renderer needs for one stage's backdrop, fully derived
@@ -29,9 +32,12 @@ public sealed record BackgroundLayout(
     float FarFactor, float MidFactor, float SeamHaze, BackgroundAccent? Accent);
 
 /// <summary>
-/// Phase 2 (brief §Phase 2, corpus plan §Recombination design): cross-source
-/// far x mid recombination — the corpus's primary variance engine. Pairing legality
-/// is three RUNTIME predicates over entry metadata, never a precomputed pair table:
+/// Phase 2 (brief §Phase 2, corpus plan §Recombination design; remediation §2,
+/// 2026-09-11): cross-source far x mid x near recombination — the corpus's primary
+/// variance engine, and since v0.4 the DEFAULT composition (three layers minimum;
+/// the designer: the single-image path "should only be an extreme fallback").
+/// Pairing legality is three RUNTIME predicates over entry metadata, never a
+/// precomputed pair table:
 /// (a) the far/mid register intersection contains the stage's register — WAIVED in
 ///     the seeded goof lane, which instead prefers scene-tag-distant pairs;
 /// (b) a shared legal remap target exists (both entries' pipeline-validated remap
@@ -39,7 +45,9 @@ public sealed record BackgroundLayout(
 ///     "no remap") — the UNIFIED remap is what makes arbitrary pairs coherent;
 /// (c) atmospheric ordering — the far must read at least as light as the mid
 ///     (stored valMean); violations RAISE the seam haze rather than rejecting.
-/// Plus the pairExclude scene-tag blocklist, which holds in BOTH lanes.
+/// Plus the pairExclude scene-tag blocklist, which holds in BOTH lanes, and the
+/// DETAIL FLOOR (remediation §3): a far below the detail floor only pairs with a
+/// non-boxRisk mid that clears it, so no stack is boxes all the way down.
 /// </summary>
 public sealed partial class BackgroundSelector
 {
@@ -96,30 +104,40 @@ public sealed partial class BackgroundSelector
         return 1 - shared / (double)Math.Min(a.Scene.Count, b.Scene.Count);
     }
 
-    /// <summary>Resolve a stage's background SPEC: the seeded recombination and goof
-    /// rolls (their own stream), then either the Phase-1 single pick or the far+mid
-    /// pair selection; an unpairable draw falls back to single. Deterministic in
-    /// (stage bytes, seed) like everything here.</summary>
+    /// <summary>The detail floor (remediation §3): at least one large layer of every
+    /// stack must carry real detail. The far covers the whole screen; when IT clears
+    /// the floor, any mid is legal — otherwise the mid must be non-boxRisk AND clear
+    /// the floor itself (this subsumes "a boxRisk far only pairs with a non-boxRisk
+    /// mid": boxRisk = detail &lt; 0.12 &lt; the floor).</summary>
+    private bool DetailFloorHolds(BackgroundEntry far, BackgroundEntry mid) =>
+        far.Metrics.Detail >= Config.DetailFloor
+            || (!mid.BoxRisk && mid.Metrics.Detail >= Config.DetailFloor);
+
+    /// <summary>Resolve a stage's background SPEC: the seeded goof roll (its own
+    /// stream), then the far + mid + near stack selection; only when NO legal stack
+    /// exists (the designer's "extreme fallback") a Phase-1 single pick, restricted
+    /// to non-boxRisk fulls. Deterministic in (stage bytes, seed) like everything
+    /// here.</summary>
     public BackgroundSpec ResolveSpec(Genome.StageGenome stage, ulong seed, string? themeId,
         IReadOnlyDictionary<string, int>? priorUse = null,
         IReadOnlyList<byte[]>? usedDescriptors = null)
     {
         var rolls = new NgPcg(seed, ComposeSequence);
-        bool recombine = rolls.NextDouble() < Config.RecombinationProbability;
-        bool goof = rolls.NextDouble() < Config.GoofBudget; // drawn unconditionally: stable stream
+        bool goof = rolls.NextDouble() < Config.GoofBudget;
 
-        if (recombine
-            && SelectPair(stage, seed, themeId, goof, priorUse, usedDescriptors, rolls)
-                is { } pair)
+        if (SelectStack(stage, seed, themeId, goof, priorUse, usedDescriptors, rolls)
+            is { } stack)
         {
-            return pair;
+            return stack;
         }
+        // EXTREME fallback (v0.4): boxRisk fulls are excluded from the single path.
         BackgroundEntry single = SelectCandidates(
             stage, seed, themeId, out _, priorUse, usedDescriptors)[0].Entry;
-        return new BackgroundSpec(single, null, null, PickRemap(single, themeId, seed), Goof: false);
+        return new BackgroundSpec(single, null, null, null,
+            PickRemap(single, themeId, seed), Goof: false);
     }
 
-    private BackgroundSpec? SelectPair(Genome.StageGenome stage, ulong seed, string? themeId,
+    private BackgroundSpec? SelectStack(Genome.StageGenome stage, ulong seed, string? themeId,
         bool goof, IReadOnlyDictionary<string, int>? priorUse,
         IReadOnlyList<byte[]>? usedDescriptors, NgPcg rng)
     {
@@ -143,17 +161,35 @@ public sealed partial class BackgroundSelector
         }
 
         // Ordered far candidates; the first with a non-empty legal mid pool wins.
+        // v0.4 (designer: the single image is an EXTREME fallback): after the seeded
+        // top-k, every remaining far is tried in descending-score order, so single
+        // fires only when NO far in the pool has a single legal mid.
         List<BackgroundEntry> farsOrdered = SampleOrdered(
             fars, e => Score(e, salient, themeGroup, priorUse), rng);
+        farsOrdered.AddRange(fars
+            .Where(e => !farsOrdered.Contains(e))
+            .OrderByDescending(e => Score(e, salient, themeGroup, priorUse))
+            .ThenBy(e => e.Id, StringComparer.Ordinal));
         foreach (BackgroundEntry far in farsOrdered)
         {
-            List<BackgroundEntry> mids = Library.Entries
-                .Where(m => m.LayerRole == "mid"
-                    && (goof || (m.Register.Contains(register) && far.Register.Contains(register)))
-                    && SharedRemapCandidates(far, m).Count > 0
-                    && !PairExcluded(far, m))
-                .ToList();
-            mids = FilterDistinct(mids, usedDescriptors);
+            // Mid tiers: register-matched first; an empty tier waives the register
+            // predicate by NECESSITY (the same shape as the thin-pool fallback) —
+            // remap/blocklist/detail predicates hold in every tier.
+            List<BackgroundEntry> MidPool(bool requireRegister) => FilterDistinct(
+                Library.Entries
+                    .Where(m => m.LayerRole == "mid"
+                        && (!requireRegister
+                            || (m.Register.Contains(register) && far.Register.Contains(register)))
+                        && SharedRemapCandidates(far, m).Count > 0
+                        && !PairExcluded(far, m)
+                        && DetailFloorHolds(far, m))
+                    .ToList(),
+                usedDescriptors);
+            List<BackgroundEntry> mids = goof ? MidPool(false) : MidPool(true);
+            if (mids.Count == 0)
+            {
+                mids = MidPool(false);
+            }
             if (mids.Count == 0)
             {
                 continue;
@@ -165,10 +201,44 @@ public sealed partial class BackgroundSelector
                     + (goof ? Config.SceneDistanceBonus * SceneDistance(far, m) : 0),
                 rng);
             BackgroundEntry mid = midsOrdered[0];
-            return new BackgroundSpec(null, far, mid,
+            BackgroundEntry? near = SelectNear(register, salient, themeGroup,
+                priorUse, far, mid, rng);
+            return new BackgroundSpec(null, far, mid, near,
                 PickUnifiedRemap(far, mid, themeGroup, seed), goof);
         }
         return null;
+    }
+
+    /// <summary>The near bokeh layer's element (remediation §2 made the plane
+    /// mandatory; designer 2026-09-11 put it in the gene): discrete props only
+    /// (aspect-capped — scene strips and prop sheets read as floating billboards),
+    /// register-pooled with full fallback, pairExclude-checked against BOTH lower
+    /// layers, scored and sampled like any layer. Null only when the corpus offers
+    /// no legal prop at all ("near:none" — the gene stays total and repair
+    /// terminates).</summary>
+    private BackgroundEntry? SelectNear(string register,
+        IReadOnlyList<SalientTrait> salient, string? themeGroup,
+        IReadOnlyDictionary<string, int>? priorUse,
+        BackgroundEntry far, BackgroundEntry mid, NgPcg rng)
+    {
+        bool Prop(BackgroundEntry e) => e.LayerRole == "element"
+            && Math.Max(e.Width, e.Height)
+                <= Config.NearMaxAspect * Math.Min(e.Width, e.Height)
+            && !PairExcluded(e, far)
+            && !PairExcluded(e, mid);
+        List<BackgroundEntry> pool = Library.Entries
+            .Where(e => Prop(e) && e.Register.Contains(register))
+            .ToList();
+        if (pool.Count < Config.RegisterPoolFloor)
+        {
+            pool = Library.Entries.Where(Prop).ToList();
+        }
+        if (pool.Count == 0)
+        {
+            return null;
+        }
+        return SampleOrdered(pool,
+            e => Score(e, salient, themeGroup, priorUse), rng)[0];
     }
 
     /// <summary>The unified remap for a pair: best theme harmony over the shared
@@ -197,7 +267,8 @@ public sealed partial class BackgroundSelector
     private double Score(BackgroundEntry e, IReadOnlyList<SalientTrait> salient,
         string? themeGroup, IReadOnlyDictionary<string, int>? priorUse)
     {
-        double score = AffinityScore(e, salient) + BestHarmony(e, themeGroup);
+        double score = AffinityScore(e, salient) + BestHarmony(e, themeGroup)
+            + Config.DetailWeight * e.Metrics.Detail; // remediation §3: prefer detailed layers
         if (e.Style == "texture")
         {
             score -= Config.TextureStylePenalty; // scene art first (2026-09-10)
@@ -229,7 +300,7 @@ public sealed partial class BackgroundSelector
     }
 
     /// <summary>Seeded softmax + share cap + ordered top-k over an arbitrary pool —
-    /// the Phase-1 sampling shape, reused for far and mid picks.</summary>
+    /// the Phase-1 sampling shape, reused for far, mid, and near picks.</summary>
     private List<BackgroundEntry> SampleOrdered(
         List<BackgroundEntry> pool, Func<BackgroundEntry, double> score, NgPcg rng)
     {
@@ -254,8 +325,9 @@ public sealed partial class BackgroundSelector
 
     // ── gene parsing + the render layout ───────────────────────────────────────
 
-    /// <summary>Resolve a GENE string back to its entries; null when any part is
-    /// unknown (repair follows).</summary>
+    /// <summary>Resolve a GENE string back to its entries; null when the far or mid
+    /// is unknown (repair follows). An unknown NEAR id degrades to a two-layer spec
+    /// at render time — NeedsRepair still re-resolves it at the next breeding.</summary>
     public BackgroundSpec? ParseGene(string? gene)
     {
         if (gene is null)
@@ -268,17 +340,21 @@ public sealed partial class BackgroundSelector
             BackgroundEntry? mid = Library.ById(composite.MidId);
             return far is null || mid is null
                 ? null
-                : new BackgroundSpec(null, far, mid, composite.Remap, Goof: false);
+                : new BackgroundSpec(null, far, mid, Library.ById(composite.NearId),
+                    composite.Remap, Goof: false);
         }
         BackgroundEntry? single = Library.ById(gene);
-        return single is null ? null : new BackgroundSpec(single, null, null, null, Goof: false);
+        return single is null
+            ? null
+            : new BackgroundSpec(single, null, null, null, null, Goof: false);
     }
 
     /// <summary>Everything the renderer draws for this stage, derived purely from
-    /// (gene, stage bytes, seed): the single/far variant, per-layer parallax factors,
-    /// the seam haze strength (raised when predicate c is violated), and the optional
-    /// L2 accent. remapOverride carries a built stage's persisted SINGLE-image remap;
-    /// composites carry their remap inside the gene.</summary>
+    /// (gene, stage bytes, seed): the single/far variant, per-layer parallax factors
+    /// (band-clamped with the minimum adjacent spread — remediation §2: under 0.25
+    /// apart reads as one plane), the seam haze strength (raised when predicate c is
+    /// violated), and the near bokeh placement. remapOverride carries a built stage's
+    /// persisted SINGLE-image remap; composites carry their remap inside the gene.</summary>
     public BackgroundLayout? Layout(Genome.StageGenome stage, ulong seed, string? remapOverride = null)
     {
         BackgroundSpec? spec = ParseGene(stage.BackgroundId);
@@ -288,12 +364,14 @@ public sealed partial class BackgroundSelector
         }
         var rng = new NgPcg(seed, LayoutSequence);
         float farFactor = Lerp(Config.FarFactorMin, Config.FarFactorMax, rng.NextDouble());
-        float midFactor = Lerp(Config.MidFactorMin, Config.MidFactorMax, rng.NextDouble());
-        bool accentRoll = rng.NextDouble() < Config.AccentProbability;
-        int accentPick = rng.NextInt(int.MaxValue);
+        float midFactor = Math.Max(
+            Lerp(Config.MidFactorMin, Config.MidFactorMax, rng.NextDouble()),
+            farFactor + Config.LayerSpreadMin);
         int anchor = rng.NextInt(3);
-        float accentFactor = Lerp(Config.AccentFactorMin, Config.AccentFactorMax, rng.NextDouble());
-        float accentScale = Lerp(Config.AccentScaleMin, Config.AccentScaleMax, rng.NextDouble());
+        float nearFactor = Math.Max(
+            Lerp(Config.NearFactorMin, Config.NearFactorMax, rng.NextDouble()),
+            midFactor + Config.LayerSpreadMin);
+        float nearScale = Lerp(Config.NearScaleMin, Config.NearScaleMax, rng.NextDouble());
 
         BackgroundEntry cropEntry = spec.Single ?? spec.Far!;
         BackgroundVariant variant = Variant(cropEntry, stage, seed);
@@ -309,46 +387,11 @@ public sealed partial class BackgroundSelector
         float seamHaze = OrderingHolds(spec.Far!, spec.Mid!)
             ? Config.SeamHazeBase
             : Config.SeamHazeForced;
-        BackgroundAccent? accent = accentRoll
-            ? PickAccent(stage, seed, accentPick, anchor, accentFactor, accentScale)
+        BackgroundAccent? accent = spec.Near is { } near
+            ? new BackgroundAccent(near, anchor, nearFactor, nearScale)
             : null;
         return new BackgroundLayout(null, spec.Far, spec.Mid, spec.Remap, variant,
             farFactor, midFactor, seamHaze, accent);
-    }
-
-    /// <summary>The L2 accent element: register-pooled (full fallback), uniform
-    /// seeded pick. Skipped when the platform envelope reaches into the accent band
-    /// (the top third of the kill box) — the bokeh plane must never sit over the
-    /// action at readable opacity.</summary>
-    private BackgroundAccent? PickAccent(Genome.StageGenome stage, ulong seed,
-        int pick, int anchor, float factor, float scale)
-    {
-        Determinism.Vec2 blast = Genome.StageRules.BlastHalfExtents(stage.Params);
-        float envelopeTop = float.MinValue;
-        foreach (Genome.PlatformGene p in stage.Platforms)
-        {
-            envelopeTop = Math.Max(envelopeTop, p.Y + p.YSize);
-        }
-        if (envelopeTop >= blast.Y * 0.35f)
-        {
-            return null;
-        }
-        string register = PickRegister(seed);
-        bool Prop(BackgroundEntry e) => e.LayerRole == "element"
-            && Math.Max(e.Width, e.Height)
-                <= Config.AccentMaxAspect * Math.Min(e.Width, e.Height);
-        List<BackgroundEntry> pool = Library.Entries
-            .Where(e => Prop(e) && e.Register.Contains(register))
-            .ToList();
-        if (pool.Count == 0)
-        {
-            pool = Library.Entries.Where(Prop).ToList();
-        }
-        if (pool.Count == 0)
-        {
-            return null;
-        }
-        return new BackgroundAccent(pool[pick % pool.Count], anchor, factor, scale);
     }
 
     private static float Lerp(float min, float max, double t) => min + (float)t * (max - min);

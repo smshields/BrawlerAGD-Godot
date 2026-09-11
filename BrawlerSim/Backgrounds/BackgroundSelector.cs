@@ -97,8 +97,11 @@ public sealed partial class BackgroundSelector
     /// <summary>Repair rule (the ThemeId pattern): re-resolve when the gene is
     /// missing/unparseable/unknown, or the stage HAS salient traits and the affinity
     /// falls below the floor. A composite repairs AS A UNIT (brief decision 1): any
-    /// unknown layer, a now-illegal remap, a pairExclude hit, or a floor miss
-    /// re-resolves the WHOLE gene — children can never drift into illegal pairs.</summary>
+    /// unknown layer, a now-illegal remap, a pairExclude hit, a detail-floor miss
+    /// (remediation §3), a missing near part (pre-v0.4 genes grow their third
+    /// layer), or an affinity-floor miss re-resolves the WHOLE gene — children can
+    /// never drift into illegal stacks. Single genes additionally repair on boxRisk
+    /// (v0.4 excluded boxRisk fulls from the single path).</summary>
     public bool NeedsRepair(Genome.StageGenome stage)
     {
         BackgroundSpec? spec = ParseGene(stage.BackgroundId);
@@ -108,8 +111,21 @@ public sealed partial class BackgroundSelector
         }
         if (spec.IsComposite)
         {
+            BackgroundComposite composite =
+                BackgroundComposite.TryParse(stage.BackgroundId)!;
+            if (!composite.HasNear
+                || (composite.NearId is not null && spec.Near is null))
+            {
+                return true;
+            }
+            if (spec.Near is { } near
+                && (PairExcluded(near, spec.Far!) || PairExcluded(near, spec.Mid!)))
+            {
+                return true;
+            }
             List<string?> shared = SharedRemapCandidates(spec.Far!, spec.Mid!);
-            if (!shared.Contains(spec.Remap) || PairExcluded(spec.Far!, spec.Mid!))
+            if (!shared.Contains(spec.Remap) || PairExcluded(spec.Far!, spec.Mid!)
+                || !DetailFloorHolds(spec.Far!, spec.Mid!))
             {
                 return true;
             }
@@ -117,6 +133,10 @@ public sealed partial class BackgroundSelector
             return salientPair.Count > 0
                 && Math.Max(AffinityScore(spec.Far!, salientPair),
                     AffinityScore(spec.Mid!, salientPair)) < Config.RepairFloor;
+        }
+        if (spec.Single!.BoxRisk)
+        {
+            return true;
         }
         IReadOnlyList<SalientTrait> salient = Salient(stage);
         return salient.Count > 0 && AffinityScore(spec.Single!, salient) < Config.RepairFloor;
@@ -175,11 +195,13 @@ public sealed partial class BackgroundSelector
         return entry.Remaps.Where(allowed.Contains).ToList();
     }
 
-    /// <summary>Selection over the Phase-1 pool (layerRole == "full"): register pool
-    /// with full-library fallback below the floor → trait affinity + best-achievable
-    /// palette harmony − action-band busyness − per-game overuse → within-game
-    /// descriptor-distance filter → seeded softmax with the no-monopoly cap → ordered
-    /// top-k sample. Same shape and primitives as theme selection.</summary>
+    /// <summary>Selection over the single-image pool (layerRole == "full" — the
+    /// EXTREME fallback since v0.4, with boxRisk fulls excluded per remediation §3):
+    /// register pool with full-library fallback below the floor → trait affinity +
+    /// best-achievable palette harmony + detail − action-band busyness − per-game
+    /// overuse → within-game descriptor-distance filter → seeded softmax with the
+    /// no-monopoly cap → ordered top-k sample. Same shape and primitives as theme
+    /// selection.</summary>
     public IReadOnlyList<BackgroundCandidate> SelectCandidates(
         Genome.StageGenome stage, ulong seed, string? themeId, out string register,
         IReadOnlyDictionary<string, int>? priorUse = null,
@@ -190,11 +212,11 @@ public sealed partial class BackgroundSelector
         var rng = new NgPcg(seed, SelectSequence);
 
         List<BackgroundEntry> pool = Library.Entries
-            .Where(e => e.LayerRole == "full" && e.Register.Contains(picked))
+            .Where(e => e.LayerRole == "full" && !e.BoxRisk && e.Register.Contains(picked))
             .ToList();
         if (pool.Count < Config.RegisterPoolFloor)
         {
-            pool = Library.Entries.Where(e => e.LayerRole == "full").ToList();
+            pool = Library.Entries.Where(e => e.LayerRole == "full" && !e.BoxRisk).ToList();
         }
 
         // Lineup uniqueness (the perceptual-descriptor rule): entries too close to a
@@ -217,7 +239,8 @@ public sealed partial class BackgroundSelector
         for (int i = 0; i < pool.Count; i++)
         {
             BackgroundEntry e = pool[i];
-            scores[i] = AffinityScore(e, salient) + BestHarmony(e, themeGroup);
+            scores[i] = AffinityScore(e, salient) + BestHarmony(e, themeGroup)
+                + Config.DetailWeight * e.Metrics.Detail; // remediation §3
             if (e.Style == "texture")
             {
                 scores[i] -= Config.TextureStylePenalty; // scene art first (2026-09-10)

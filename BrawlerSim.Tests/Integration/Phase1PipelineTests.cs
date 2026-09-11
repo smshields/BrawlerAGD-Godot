@@ -70,6 +70,12 @@ public class Phase1PipelineTests
     [Fact]
     public void PopulationFingerprintMatchesGoldenValue()
     {
+        // Re-pinned 2026-09-11: BACKGROUNDS v0.4 (backgrounds-handoff-v04-core) —
+        // game.json is v15 ("formatVersion" in the serialized bytes; the composite
+        // backgroundId grammar grew a near segment). BYTES ONLY, the v14 precedent
+        // verbatim: GenerationConfig.Default has no background library, so
+        // BackgroundId stays null and every draw stream is untouched. All other
+        // goldens unmoved. Prior pin: 659201438368982369.
         // Re-pinned 2026-09-02: BACKGROUNDS (backgrounds track Phase 1,
         // docs/background-implementation-brief.md) — game.json is v14 ("formatVersion"
         // in the serialized bytes; stage backgroundId omitted when null). BYTES ONLY,
@@ -146,6 +152,6 @@ public class Phase1PipelineTests
         // (fast fall/crouch/DI), 16079587979934170348 (dash slot),
         // 10607725140721060960 (shield), 5432710911100783110 (two moves),
         // 13551893661434631362, 9300943650238635838.
-        Assert.Equal(659201438368982369UL, RunPipeline(20260707));
+        Assert.Equal(10581963340493818369UL, RunPipeline(20260707));
     }
 }

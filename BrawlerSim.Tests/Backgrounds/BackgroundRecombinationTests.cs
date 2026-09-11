@@ -67,13 +67,20 @@ public class BackgroundRecombinationTests
     [Fact]
     public void CompositeGeneRoundTripsItsParts()
     {
-        var composite = new BackgroundComposite("sky_a", "town_b", "night");
-        Assert.Equal("far:sky_a|mid:town_b|remap:night", composite.ToGene());
+        var composite = new BackgroundComposite("sky_a", "town_b", "moon_c", "night");
+        Assert.Equal("far:sky_a|mid:town_b|near:moon_c|remap:night", composite.ToGene());
         Assert.Equal(composite, BackgroundComposite.TryParse(composite.ToGene()));
 
-        var native = new BackgroundComposite("sky_a", "town_b", null);
-        Assert.Equal("far:sky_a|mid:town_b|remap:none", native.ToGene());
-        Assert.Equal(native, BackgroundComposite.TryParse(native.ToGene()));
+        var bare = new BackgroundComposite("sky_a", "town_b", null, null);
+        Assert.Equal("far:sky_a|mid:town_b|near:none|remap:none", bare.ToGene());
+        Assert.Equal(bare, BackgroundComposite.TryParse(bare.ToGene()));
+
+        // A pre-v0.4 three-part gene still parses — near absent, flagged for repair.
+        BackgroundComposite legacy =
+            BackgroundComposite.TryParse("far:sky_a|mid:town_b|remap:night")!;
+        Assert.Equal("sky_a", legacy.FarId);
+        Assert.Null(legacy.NearId);
+        Assert.False(legacy.HasNear);
 
         Assert.Null(BackgroundComposite.TryParse("plain_single_id"));
         Assert.Null(BackgroundComposite.TryParse("far:only_far"));
@@ -87,7 +94,8 @@ public class BackgroundRecombinationTests
     public void RecombinedStagesSatisfyThePairingPredicates()
     {
         BackgroundSelector selector = NewSelector();
-        int composites = 0, singles = 0, goofChecked = 0;
+        BackgroundSelectionConfig config = TuningLazy.Value;
+        int composites = 0, singles = 0, goofChecked = 0, nears = 0, midRegisterWaived = 0;
         for (ulong seed = 1; seed <= 2000; seed++)
         {
             StageGenome bare = GameGenome.Generate(
@@ -107,9 +115,30 @@ public class BackgroundRecombinationTests
             Assert.Equal("far", far.LayerRole);
             Assert.Equal("mid", mid.LayerRole);
 
+            // Detail floor (remediation §3): no stack is boxes all the way down.
+            Assert.True(
+                far.Metrics.Detail >= config.DetailFloor
+                    || (!mid.BoxRisk && mid.Metrics.Detail >= config.DetailFloor),
+                $"box stack: {far.Id} + {mid.Id}");
+
+            // The near layer (remediation §2, in the gene since v0.4): a discrete
+            // prop, blocklist-clean against BOTH lower layers.
+            if (spec.Near is { } near)
+            {
+                nears++;
+                Assert.Equal("element", near.LayerRole);
+                Assert.True(Math.Max(near.Width, near.Height)
+                    <= config.NearMaxAspect * Math.Min(near.Width, near.Height) + 1e-3f,
+                    $"strip-shaped near: {near.Id}");
+                Assert.False(BackgroundSelector.PairExcluded(near, far));
+                Assert.False(BackgroundSelector.PairExcluded(near, mid));
+            }
+
             // (a) register intersection contains the stage register — except the
-            // goof lane, where the waiver is the point (and the full-library
-            // fallback for thin register pools, mirroring Phase 1).
+            // goof lane, where the waiver is the point; the full-library fallback
+            // for thin register pools (mirroring Phase 1); and the MID's necessity
+            // waiver (v0.4: an empty register-matched mid tier waives the predicate
+            // rather than abandoning the stack — bounded below).
             string register = selector.PickRegister(s);
             bool farPoolServed = LibraryLazy.Value.Entries.Count(e =>
                 e.LayerRole == "far" && e.Register.Contains(register))
@@ -117,7 +146,10 @@ public class BackgroundRecombinationTests
             if (!spec.Goof && farPoolServed)
             {
                 Assert.Contains(register, far.Register);
-                Assert.Contains(register, mid.Register);
+                if (!mid.Register.Contains(register))
+                {
+                    midRegisterWaived++;
+                }
             }
             if (spec.Goof)
             {
@@ -139,12 +171,15 @@ public class BackgroundRecombinationTests
                     : TuningLazy.Value.SeamHazeForced,
                 layout.SeamHaze);
         }
-        // Both paths reachable at the tuned probability (0.5 shipped; wide margins
-        // because the pair search can fall back to single).
-        double compositeFraction = composites / (double)(composites + singles);
-        Assert.InRange(compositeFraction, 0.3, 0.7);
-        // The goof lane fires at roughly its budget among recombination rolls.
+        // v0.4 (designer): the three-layer stack is the DEFAULT and the single path
+        // an EXTREME fallback — over the real corpus it should never fire, and the
+        // near plane should resolve everywhere.
+        Assert.Equal(0, singles);
+        Assert.Equal(composites, nears);
+        // The goof lane fires at roughly its budget, and the mid's necessity waiver
+        // stays the exception, not the rule.
         Assert.InRange(goofChecked, 1, composites / 3);
+        Assert.InRange(midRegisterWaived, 0, composites / 3);
     }
 
     [Fact]
@@ -229,10 +264,11 @@ public class BackgroundRecombinationTests
         }
 
         // Repair re-resolves the WHOLE composite: a half-dead gene never keeps its
-        // surviving layer.
+        // surviving layers.
         BackgroundComposite parsed = BackgroundComposite.TryParse(parents[0].Stage.BackgroundId)!;
         StageGenome halfDead = parents[0].Stage.WithBackgroundId(
-            new BackgroundComposite(parsed.FarId, "deleted_mid", parsed.Remap).ToGene());
+            new BackgroundComposite(
+                parsed.FarId, "deleted_mid", parsed.NearId, parsed.Remap).ToGene());
         Assert.True(selector.NeedsRepair(halfDead));
         StageGenome repaired = selector.EnsureGene(halfDead);
         BackgroundSpec repairedSpec = selector.ParseGene(repaired.BackgroundId)!;
@@ -240,16 +276,24 @@ public class BackgroundRecombinationTests
         Assert.DoesNotContain("deleted_mid", repaired.BackgroundId);
         // Stable: repairing again changes nothing.
         Assert.Same(repaired, selector.EnsureGene(repaired));
+
+        // A pre-v0.4 three-part gene repairs into the full three-layer stack.
+        StageGenome legacy = parents[0].Stage.WithBackgroundId(
+            $"far:{parsed.FarId}|mid:{parsed.MidId}|remap:{parsed.Remap ?? "none"}");
+        Assert.True(selector.NeedsRepair(legacy));
+        StageGenome grown = selector.EnsureGene(legacy);
+        Assert.True(BackgroundComposite.TryParse(grown.BackgroundId)!.HasNear);
+        Assert.Same(grown, selector.EnsureGene(grown));
     }
 
     // ── the render layout ──────────────────────────────────────────────────────
 
     [Fact]
-    public void LayoutIsDeterministicAndInsideTheTunedRanges()
+    public void LayoutIsDeterministicInsideTheBandsAndSpread()
     {
         BackgroundSelector selector = NewSelector();
         BackgroundSelectionConfig config = TuningLazy.Value;
-        int accents = 0, composites = 0;
+        int nears = 0, composites = 0;
         for (ulong seed = 1; seed <= 300; seed++)
         {
             StageGenome stage = Stage(seed);
@@ -262,50 +306,42 @@ public class BackgroundRecombinationTests
                 continue;
             }
             composites++;
+            // Remediation §2 bands + the minimum adjacent spread (under 0.25 apart
+            // two layers read as one plane).
             Assert.InRange(layout.MidFactor, config.MidFactorMin, config.MidFactorMax);
-            Assert.True(layout.FarFactor < layout.MidFactor, "far must sit deeper than mid");
-            if (layout.Accent is { } accent)
+            Assert.True(layout.MidFactor - layout.FarFactor >= config.LayerSpreadMin - 1e-4f,
+                "far and mid read as one plane");
+            if (layout.Accent is { } near)
             {
-                accents++;
-                Assert.Equal("element", accent.Element.LayerRole);
-                // Accents are discrete props, never scene strips (2026-09-03).
-                Assert.True(
-                    Math.Max(accent.Element.Width, accent.Element.Height)
-                        <= 1.6f * Math.Min(accent.Element.Width, accent.Element.Height) + 1e-3f,
-                    $"strip-shaped accent: {accent.Element.Id}");
-                Assert.InRange(accent.Anchor, 0, 2);
-                Assert.InRange(accent.Factor, config.AccentFactorMin, config.AccentFactorMax);
-                Assert.InRange(accent.Scale, config.AccentScaleMin, config.AccentScaleMax);
-                // The bokeh plane never spawns when platforms reach into its band.
-                float top = stage.Platforms.Max(p => p.Y + p.YSize);
-                Assert.True(top < StageRules.BlastHalfExtents(stage.Params).Y * 0.35f);
+                nears++;
+                Assert.Equal("element", near.Element.LayerRole);
+                Assert.InRange(near.Anchor, 0, 2);
+                Assert.InRange(near.Factor, config.NearFactorMin, config.NearFactorMax);
+                Assert.True(near.Factor - layout.MidFactor >= config.LayerSpreadMin - 1e-4f,
+                    "mid and near read as one plane");
+                Assert.InRange(near.Scale, config.NearScaleMin, config.NearScaleMax);
             }
         }
-        Assert.True(composites > 50, $"only {composites} composite layouts sampled");
-        Assert.True(accents > 0, "the accent path was never exercised");
+        Assert.True(composites > 250, $"only {composites} composite layouts sampled");
+        Assert.Equal(composites, nears); // three layers minimum over the real corpus
     }
 
     [Fact]
-    public void LegacySingleGenesLayoutExactlyAsPhaseOne()
+    public void ArchivedSingleGenesKeepThePhaseOneLayoutShape()
     {
-        // A plain single-id gene (every Phase-1 stage, and every recombination roll
-        // that lands single) keeps the Phase-1 layout shape: no mid, no seam, the
+        // A plain single-id gene (archived pre-v0.4 content, and the extreme
+        // fallback) keeps the Phase-1 layout shape: no mid, no seam, no near, the
         // variant's crop on the single entry.
         BackgroundSelector selector = NewSelector();
-        for (ulong seed = 1; seed <= 100; seed++)
-        {
-            StageGenome stage = Stage(seed);
-            if (BackgroundComposite.IsComposite(stage.BackgroundId))
-            {
-                continue;
-            }
-            ulong s = BackgroundSelector.BackgroundSeed(stage);
-            BackgroundLayout layout = selector.Layout(stage, s)!;
-            Assert.NotNull(layout.Single);
-            Assert.Null(layout.Mid);
-            Assert.Equal(0f, layout.SeamHaze);
-            Assert.Null(layout.Accent);
-            Assert.Equal(selector.Variant(layout.Single!, stage, s), layout.Variant);
-        }
+        BackgroundEntry full = LibraryLazy.Value.Entries.First(e => e.LayerRole == "full");
+        StageGenome stage = GameGenome.Generate(
+            GenerationConfig.Default, new Pcg32(11)).Stage.WithBackgroundId(full.Id);
+        ulong s = BackgroundSelector.BackgroundSeed(stage);
+        BackgroundLayout layout = selector.Layout(stage, s)!;
+        Assert.NotNull(layout.Single);
+        Assert.Null(layout.Mid);
+        Assert.Equal(0f, layout.SeamHaze);
+        Assert.Null(layout.Accent);
+        Assert.Equal(selector.Variant(layout.Single!, stage, s), layout.Variant);
     }
 }
