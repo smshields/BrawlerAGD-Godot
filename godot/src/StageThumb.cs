@@ -1,3 +1,4 @@
+using System.Linq;
 using Godot;
 using BrawlerSim.Backgrounds;
 using BrawlerSim.Genome;
@@ -109,10 +110,12 @@ public sealed partial class StageThumb : Control
         }
     }
 
-    /// <summary>The real backdrop inside the kill-box rect (designer 2026-09-02):
-    /// the variant-cropped, remapped far/single image, plus the width-fitted,
-    /// bottom-anchored mid for composites — dimmed like the arena, schematic
-    /// platforms drawn on top. Null-gene stages keep the plain thumb.</summary>
+    /// <summary>The real backdrop inside the kill-box rect (designer 2026-09-02;
+    /// v0.4 coverage plans 2026-09-11): the far/single layer with its top extension,
+    /// then the floor-anchored mid with its bottom extension — the SAME
+    /// BackgroundCoverage plans the arena renders, scaled into the thumb, dimmed
+    /// like the arena, schematic platforms drawn on top. Null-gene stages keep the
+    /// plain thumb.</summary>
     private void DrawBackdrop(Rect2 box)
     {
         if (_stage?.BackgroundId is null)
@@ -132,49 +135,78 @@ public sealed partial class StageThumb : Control
         var blast = StageRules.BlastHalfExtents(_stage.Params);
         float boxWpx = blast.X * 2f * ppu;
         float boxHpx = blast.Y * 2f * ppu;
+        float thumbScale = box.Size.X / boxWpx; // thumb px per arena px
 
-        // The far/single layer, mirror-tiled past the density cap exactly like the
-        // arena (BackgroundLayerFit is the shared rule).
         BackgroundEntry farEntry = layout.Single ?? layout.Far!;
         BackgroundVariant v = layout.Variant;
-        var src = new Rect2(v.Crop.X, v.Crop.Y, v.Crop.W, v.Crop.H);
-        Texture2D farTexture = BackgroundBank.TextureFor(farEntry, layout.Remap);
-        LayerFit farFit = BackgroundLayerFit.Far(v.Crop, boxHpx, selector.Config.LayerMaxScale);
-        if (farEntry.Tileable || farFit.Tiled)
+        CoveragePlan farPlan = BackgroundCoverage.Far(
+            farEntry, v.Crop, boxWpx, boxHpx, selector.Config.LayerMaxScale);
+        DrawPlan(farPlan, farEntry, v.Crop, layout.Remap, box, thumbScale, tint, v.FlipX);
+
+        if (layout.Mid is { } mid)
         {
-            float scale = farEntry.Tileable
-                ? Mathf.Min(10f * ppu / farEntry.Height, selector.Config.LayerMaxScale)
-                : farFit.Scale;
-            DrawTiledRow(farTexture, src, box, box.Size.Y,
-                copyWidth: box.Size.X * v.Crop.W * scale / boxWpx, tint, v.FlipX);
+            float floorWorldY = _stage.Platforms.Min(p => p.Y);
+            float floorY = (blast.Y - floorWorldY) * ppu;
+            CoveragePlan midPlan = BackgroundCoverage.Mid(
+                mid, boxWpx, boxHpx, floorY, selector.Config.LayerMaxScale);
+            DrawPlan(midPlan, mid, new BgRect(0, 0, mid.Width, mid.Height),
+                layout.Remap, box, thumbScale, tint, flipX: false);
+        }
+    }
+
+    /// <summary>One coverage plan into the thumb rect: base row (mirror-tiled when
+    /// wrapped), then the solid/smear extension strips.</summary>
+    private void DrawPlan(CoveragePlan plan, BackgroundEntry entry, BgRect crop,
+        string? remap, Rect2 box, float thumbScale, Color tint, bool flipX)
+    {
+        Texture2D texture = BackgroundBank.TextureFor(entry, remap);
+        var src = new Rect2(crop.X, crop.Y, crop.W, crop.H);
+        if (plan.TileBothAxes)
+        {
+            DrawTiledRow(texture, src, box, box.Size.Y,
+                copyWidth: crop.W * plan.Scale * thumbScale, tint, flipX);
+            return;
+        }
+        var baseBand = new Rect2(
+            box.Position.X + plan.BaseX * thumbScale,
+            box.Position.Y + plan.BaseY * thumbScale,
+            plan.BaseW * thumbScale,
+            plan.BaseH * thumbScale);
+        if (plan.Wrapped)
+        {
+            DrawTiledRow(texture, src, baseBand, baseBand.Size.Y,
+                copyWidth: crop.W * plan.Scale * thumbScale, tint, flipX);
         }
         else
         {
             // Flips go through a NEGATIVE-WIDTH SOURCE rect — a negative destination
             // rect draws nothing (found on a flipped single-image thumb, 2026-09-03).
-            Rect2 flippedSrc = v.FlipX
+            Rect2 flippedSrc = flipX
                 ? new Rect2(src.Position.X + src.Size.X, src.Position.Y, -src.Size.X, src.Size.Y)
                 : src;
-            DrawTextureRectRegion(farTexture, box, flippedSrc, tint);
+            DrawTextureRectRegion(texture, baseBand, flippedSrc, tint);
         }
+        DrawExtend(plan.Top, texture, crop, box, thumbScale, tint, smearTopRow: true);
+        DrawExtend(plan.Bottom, texture, crop, box, thumbScale, tint, smearTopRow: false);
+    }
 
-        if (layout.Mid is { } mid)
+    private void DrawExtend(CoveragePiece? piece, Texture2D texture, BgRect crop,
+        Rect2 box, float thumbScale, Color tint, bool smearTopRow)
+    {
+        if (piece is null || piece.Extend.Mode == BgExtend.Transparent)
         {
-            LayerFit midFit = BackgroundLayerFit.Mid(mid.Width, boxWpx, selector.Config.LayerMaxScale);
-            float midHThumb = box.Size.X * mid.Height * midFit.Scale / boxWpx;
-            var midBand = new Rect2(box.Position.X, box.End.Y - midHThumb, box.Size.X, midHThumb);
-            var midSrc = new Rect2(0, 0, mid.Width, mid.Height);
-            Texture2D midTexture = BackgroundBank.TextureFor(mid, layout.Remap);
-            if (midFit.Tiled)
-            {
-                DrawTiledRow(midTexture, midSrc, midBand, midHThumb,
-                    copyWidth: box.Size.X * mid.Width * midFit.Scale / boxWpx, tint, flipFirst: false);
-            }
-            else
-            {
-                DrawTextureRectRegion(midTexture, midBand, midSrc, tint);
-            }
+            return;
         }
+        var strip = new Rect2(
+            box.Position.X, box.Position.Y + piece.Y * thumbScale,
+            box.Size.X, piece.Height * thumbScale);
+        if (piece.Extend.Mode == BgExtend.Solid && piece.Extend.Color is { Count: 3 } c)
+        {
+            DrawRect(strip, new Color(c[0] / 255f, c[1] / 255f, c[2] / 255f) * tint);
+            return;
+        }
+        int rowY = smearTopRow ? crop.Y : crop.Y + crop.H - 1;
+        DrawTextureRectRegion(texture, strip, new Rect2(crop.X, rowY, crop.W, 1), tint);
     }
 
     /// <summary>Mirror-adjacent copies across a band — the thumb's rendition of the

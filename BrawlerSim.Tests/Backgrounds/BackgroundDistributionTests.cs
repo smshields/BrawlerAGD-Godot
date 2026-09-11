@@ -129,31 +129,86 @@ public class BackgroundDistributionTests
             "zero-remap mids never picked — the widened unified-remap rule is dead");
     }
 
-    [Fact]
-    public void LayerFitAlwaysCoversTheKillBoxWithinTheDensityCap()
+    /// <summary>Asserts one plan covers its required strip of the kill box: the base
+    /// row reaches full width (wrapped or wide enough), and every vertical gap is
+    /// closed by an OPAQUE extension piece. The magenta debug clear behind the stack
+    /// must be unreachable (remediation §1).</summary>
+    private static void AssertCovers(CoveragePlan plan, float boxW, float boxH,
+        float requiredTop, string what)
     {
-        const float maxScale = 8f;
-        foreach ((int cropW, int cropH, float boxW, float boxH) in new[]
+        if (plan.TileBothAxes)
         {
-            (480, 270, 1440f, 810f),      // typical map: single stretched copy
-            (480, 246, 3600f, 3600f),     // huge map: must tile
-            (65, 65, 2800f, 900f),        // tiny mid on a wide map: must tile
-            (576, 324, 1280f, 720f),      // dense art on a small map
-        })
-        {
-            LayerFit far = BackgroundLayerFit.Far(new BgRect(0, 0, cropW, cropH), boxH, maxScale);
-            Assert.True(far.Scale <= maxScale + 1e-4f);
-            if (!far.Tiled)
-            {
-                Assert.True(cropH * far.Scale >= boxH - 0.5f, "untiled far fails to cover");
-            }
-            LayerFit mid = BackgroundLayerFit.Mid(cropW, boxW, maxScale);
-            Assert.True(mid.Scale <= maxScale + 1e-4f);
-            if (!mid.Tiled)
-            {
-                Assert.True(cropW * mid.Scale >= boxW - 0.5f, "untiled mid fails to cover");
-            }
-            // Tiled fits cover by construction: repeats extend to any width.
+            return; // both-axes repetition covers by construction
         }
+        Assert.True(plan.Wrapped || plan.BaseW >= boxW - 0.5f, $"{what}: width gap");
+        if (plan.BaseY > requiredTop + 0.5f)
+        {
+            Assert.NotNull(plan.Top);
+            Assert.NotEqual(BgExtend.Transparent, plan.Top!.Extend.Mode);
+            Assert.True(plan.Top.Y <= requiredTop + 0.5f
+                && plan.Top.Y + plan.Top.Height >= plan.BaseY - 0.5f, $"{what}: top gap");
+        }
+        float bottomEdge = plan.BaseY + plan.BaseH;
+        if (bottomEdge < boxH - 0.5f)
+        {
+            Assert.NotNull(plan.Bottom);
+            Assert.NotEqual(BgExtend.Transparent, plan.Bottom!.Extend.Mode);
+            Assert.True(plan.Bottom.Y <= bottomEdge + 0.5f
+                && plan.Bottom.Y + plan.Bottom.Height >= boxH - 0.5f, $"{what}: bottom gap");
+        }
+    }
+
+    /// <summary>The remediation §1 property test: over 500 seeded stages, at arena
+    /// sizes up to (4x width, 3x height) of the base viewport, the coverage plans
+    /// leave zero clear-color pixels. Zoom needs no axis of its own — the camera is
+    /// hard-clamped inside the kill box at every zoom, and parallax factors in
+    /// [0, 1] can only shrink a layer's visible window, so covering the box IS
+    /// covering every camera framing.</summary>
+    [Fact]
+    public void CoveragePlansMakeClearColorUnreachable()
+    {
+        BackgroundSelector selector = NewSelector();
+        BackgroundSelectionConfig config = TuningLazy.Value;
+        var boxes = new (float W, float H)[]
+        {
+            (1280f, 720f),          // base viewport
+            (5120f, 720f),          // 4x wide
+            (1280f, 2160f),         // 3x tall
+            (5120f, 2160f),         // 4x x 3x
+        };
+        int plansChecked = 0;
+        for (ulong seed = 1; seed <= 500; seed++)
+        {
+            StageGenome stage = GameGenome.Generate(
+                GenerationConfig.Default, new Pcg32(seed)).Stage;
+            ulong s = BackgroundSelector.BackgroundSeed(stage);
+            BackgroundSpec spec = selector.ResolveSpec(stage, s, null);
+            BackgroundVariant variant = selector.Variant(
+                spec.Single ?? spec.Far!, stage, s);
+            foreach ((float boxW, float boxH) in boxes)
+            {
+                CoveragePlan far = BackgroundCoverage.Far(
+                    spec.Single ?? spec.Far!, variant.Crop, boxW, boxH, config.LayerMaxScale);
+                Assert.True(far.Scale <= config.LayerMaxScale + 1e-4f);
+                AssertCovers(far, boxW, boxH, requiredTop: 0f, $"far {spec.Gene()}");
+                plansChecked++;
+                if (spec.Mid is { } mid)
+                {
+                    // Floor lines from the top edge to the bottom edge — every
+                    // anchor must extend down to the box bottom.
+                    foreach (float floorY in new[] { 0f, boxH * 0.5f, boxH * 0.8f, boxH })
+                    {
+                        CoveragePlan midPlan = BackgroundCoverage.Mid(
+                            mid, boxW, boxH, floorY, config.LayerMaxScale);
+                        Assert.True(midPlan.Scale <= config.LayerMaxScale + 1e-4f);
+                        // A mid only owes coverage from its own top edge down.
+                        AssertCovers(midPlan, boxW, boxH,
+                            requiredTop: Math.Max(0f, midPlan.BaseY), $"mid {mid.Id}");
+                        plansChecked++;
+                    }
+                }
+            }
+        }
+        Assert.True(plansChecked > 4000, $"only {plansChecked} plans checked");
     }
 }
