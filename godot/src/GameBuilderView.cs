@@ -600,10 +600,13 @@ public partial class GameBuilderView : Control
         NewGame();
         _game!.Name = "AUTOBUILD SAMPLE";
         _gameName.Text = _game.Name;
-        string[] sources =
-            System.IO.Directory.GetFiles(AppPaths.DemoRoot(), "*.json")
-                .Concat(System.IO.Directory.GetFiles(AppPaths.FavoritesRoot(), "*.json"))
-                .OrderBy(p => p).ToArray();
+        // Both library dirs are optional (runs/demo comes and goes with curation
+        // sweeps — every interactive scan already guards; this one crashed the
+        // builder's automation when demo was archived, found 2026-09-11).
+        string[] sources = new[] { AppPaths.DemoRoot(), AppPaths.FavoritesRoot() }
+            .Where(System.IO.Directory.Exists)
+            .SelectMany(dir => System.IO.Directory.GetFiles(dir, "*.json"))
+            .OrderBy(p => p).ToArray();
         foreach (string path in sources)
         {
             GameRecord record;

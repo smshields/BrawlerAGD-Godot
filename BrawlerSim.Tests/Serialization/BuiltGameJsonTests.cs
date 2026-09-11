@@ -129,6 +129,11 @@ public class BuiltGameJsonTests
         Assert.True(BuiltGameNaming.NeedsGeneratedName("CANNONBALL-ARENA P1"));
         Assert.True(BuiltGameNaming.NeedsGeneratedName("RUN-1-G99-GAME22-2 P4"));
         Assert.True(BuiltGameNaming.NeedsGeneratedName("SPAWN-SANCTUARY STAGE"));
+        // Regression 2026-09-11: "EVOLUTION N" default run names (2026-09-10 UI
+        // rework) put SPACES into favorite file stems; those builder labels were
+        // read as manual renames and the naming pass skipped them forever.
+        Assert.True(BuiltGameNaming.NeedsGeneratedName("EVOLUTION 3-B264-GAME69 P1"));
+        Assert.True(BuiltGameNaming.NeedsGeneratedName("EVOLUTION 3-B296-GAME97 STAGE"));
         Assert.True(BuiltGameNaming.NeedsGeneratedName(""));
         Assert.True(BuiltGameNaming.NeedsGeneratedName("   "));
         Assert.True(BuiltGameNaming.NeedsGeneratedName(null));
@@ -138,6 +143,11 @@ public class BuiltGameJsonTests
         Assert.False(BuiltGameNaming.NeedsGeneratedName("The Obsidian Sanctum"));
         Assert.False(BuiltGameNaming.NeedsGeneratedName("GORTHAK JENKINS"));
         Assert.False(BuiltGameNaming.NeedsGeneratedName("P1 THE DESTROYER"));
+        // A SPACEY label counts as a default only when it carries a digit — a manual
+        // multi-word rename with a default-shape suffix still survives. (Single-word
+        // caps labels like "LAVA STAGE" have always matched the original shape.)
+        Assert.False(BuiltGameNaming.NeedsGeneratedName("MY COOL P2"));
+        Assert.False(BuiltGameNaming.NeedsGeneratedName("OBSIDIAN HOME STAGE"));
     }
 
     [Fact]
