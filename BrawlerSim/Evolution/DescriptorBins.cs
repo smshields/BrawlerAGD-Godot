@@ -23,6 +23,10 @@ public sealed class DescriptorBins
     public const int DefaultPilotSamples = 10_000;
     public const int CellCount = BinsPerAxis * BinsPerAxis * BinsPerAxis * BinsPerAxis;
 
+    /// <summary>Canonical file name for a cached bins document (the app layer's
+    /// per-run and per-screen caches address it through this const).</summary>
+    public const string DefaultFileName = "descriptor-bins.json";
+
     /// <summary>Interior edges per axis: BinsPerAxis − 1 ascending values.</summary>
     public IReadOnlyList<IReadOnlyList<float>> Edges { get; }
 

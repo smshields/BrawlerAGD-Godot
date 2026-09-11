@@ -291,6 +291,12 @@ public partial class MainMenu : Control
         evolve.Pressed += () => GetTree().ChangeSceneToFile(Scenes.Evolve);
         box.AddChild(evolve);
 
+        // QUALITY EXPLORATION (2026-09-11, designer): the descriptor hypercube across
+        // every saved game the app has ever generated.
+        var explore = new Button { Text = "QUALITY EXPLORATION" };
+        explore.Pressed += () => GetTree().ChangeSceneToFile(Scenes.QualityExploration);
+        box.AddChild(explore);
+
         box.AddChild(UiWidgets.Heading("WATCH GENERATED MATCH"));
 
         // Match rules (2026-08-12, four-player.md): STOCK (legacy last-man-standing)

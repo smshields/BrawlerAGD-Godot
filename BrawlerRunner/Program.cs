@@ -5,7 +5,6 @@ return args.Length == 0
     : args[0] switch
     {
         "evolve" => Commands.Evolve(args),
-        "mapelites" => Commands.MapElites(args),
         "evaluate" => Commands.Evaluate(args),
         "replay" => Commands.Replay(args),
         "import" => Commands.Import(args),

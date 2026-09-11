@@ -19,12 +19,13 @@ namespace BrawlerGodot;
 /// with an overlaid save button, and a generation progress bar under the chart.
 /// Automation: BRAWLER_AUTOEVOLVE="name=x;pop=24;gens=20;seed=9" starts on load;
 /// with BRAWLER_SHOT set it captures the finished dashboard and quits.
-/// MAP-Elites (2026-09-10, map-elites-descriptor-spec): the ALGORITHM option runs
-/// MapElitesEngine instead (POPULATION = batch size, GENERATIONS = batches), and the
-/// right column is a TabContainer — RUN = the existing dashboard, HYPERSPACE = the
-/// archive cube. GA runs feed the cube too via a view-only shadow archive
-/// (accumulated best-per-cell over the whole run; designer 2026-09-10). Automation
-/// tokens: mode=mapelites, tab=hyperspace, pilot=N (pilot sample override).
+/// Hyperspace tab (2026-09-10, map-elites-descriptor-spec §8; the standalone
+/// MAP-Elites ALGORITHM option was removed 2026-09-11, designer — the descriptor
+/// archive stays as a visualization): the right column is a TabContainer — RUN =
+/// the classic dashboard (chart + progress, untouched), HYPERSPACE = the run's
+/// accumulated best-per-cell descriptor cube, fed by a view-only shadow archive
+/// that consumes no engine RNG. Automation tokens: tab=hyperspace, pilot=N
+/// (pilot sample override), hslice=N.
 /// </summary>
 public partial class EvolveView : Control
 {
@@ -67,27 +68,11 @@ public partial class EvolveView : Control
     private string _runDir = "";
     private ulong _startTimeMs;
 
-    // MAP-Elites (2026-09-10): algorithm choice + the Hyperspace tab.
-    private OptionButton _mode = null!;
-    private SpinBox _initRandom = null!;
-    private Label _populationHeading = null!;
-    private Label _generationsHeading = null!;
+    // Hyperspace tab (2026-09-10): the run's descriptor-archive cube.
     private TabContainer _tabs = null!;
     private HyperspaceView _hyperspace = null!;
     private int _pilotSamples = BrawlerSim.Evolution.DescriptorBins.DefaultPilotSamples;
     private readonly System.Collections.Concurrent.ConcurrentQueue<HyperspaceSnapshot> _pendingSnapshots = new();
-
-    // The RUNNING run's identity — selection labels/provenance must describe the run
-    // that produced the data on screen, not the dropdown's current value.
-    private bool _runIsMapElites;
-    private int _runBatchSize = 1;
-
-    // Best chart point seen this run (per-batch archive best is monotone for
-    // MAP-Elites) — the end-of-run auto-select target for MAP-Elites runs, where the
-    // final batch's local best is usually NOT the run's best elite.
-    private float _uiBestFitness = float.MinValue;
-    private int _uiBestGen = -1;
-    private int _uiBestIndex;
 
     // Evolution Explorer (2026-07-27, designer): per-game chart points feed a live
     // match preview + the save-to-favorites button. Generations cross from the
@@ -123,30 +108,18 @@ public partial class EvolveView : Control
 
     private void StartRun()
     {
-        int steps = (int)_generations.Value;
+        int generations = (int)_generations.Value;
         _runDir = System.IO.Path.Combine(AppPaths.RunsRoot(), RunName());
         _chart.Clear();
         _hyperspace.Clear();
         ClearSelection();
         SetRunning(true);
-        _progress.MaxValue = steps;
+        _progress.MaxValue = generations;
         _progress.Value = 0;
         _status.Text = $"RUNNING → {_runDir}";
         _startTimeMs = Time.GetTicksMsec();
-        _runIsMapElites = _mode.Selected == 1;
-        _runBatchSize = (int)_population.Value;
-        _uiBestFitness = float.MinValue;
-        _uiBestGen = -1;
         _cancel = new CancellationTokenSource();
-
-        if (_runIsMapElites)
-        {
-            StartMapElitesRun(steps, _cancel.Token);
-        }
-        else
-        {
-            StartGaRun(steps, _cancel.Token);
-        }
+        StartGaRun(generations, _cancel.Token);
     }
 
     private void StartGaRun(int generations, CancellationToken token)
@@ -239,124 +212,15 @@ public partial class EvolveView : Control
         _status.Text = $"RUN FAILED — {message}";
     }
 
-    /// <summary>MAP-Elites run (2026-09-10): POPULATION = batch size, GENERATIONS =
-    /// batches. Pilot bins are computed once (cached in the run dir), frozen, and
-    /// stamped into every checkpoint by MapElitesStore.</summary>
-    private void StartMapElitesRun(int batches, CancellationToken token)
-    {
-        // Everything the worker needs, captured on the main thread.
-        GenerationConfig generation = BuildGenerationConfig();
-        ulong seed = (ulong)_seed.Value;
-        int batchSize = (int)_population.Value;
-        int initialRandom = (int)_initRandom.Value;
-        int rounds = (int)_rounds.Value;
-        float mutation = (float)_mutation.Value;
-        string runDir = _runDir;
-        string runName = RunName();
-        int pilotSamples = _pilotSamples;
-
-        Task.Run(() =>
-        {
-            try
-            {
-                CallDeferred(nameof(SetStatus), "MEASURING DESCRIPTOR SPACE (PILOT)…");
-                var config = new MapElitesConfig
-                {
-                    Seed = seed,
-                    BatchSize = batchSize,
-                    InitialRandomCandidates = initialRandom,
-                    RoundsPerIndividual = rounds,
-                    MutationRate = mutation,
-                    Generation = generation,
-                    Bins = LoadOrCreateBins(generation, seed, runDir, pilotSamples),
-                };
-                CallDeferred(nameof(SetStatus), $"RUNNING → {runDir}");
-                RunMapElitesWorker(config, batches, runDir, runName, token);
-            }
-            catch (System.Exception e)
-            {
-                CallDeferred(nameof(OnRunFailed), e.Message);
-            }
-        }, token);
-    }
-
-    private void RunMapElitesWorker(MapElitesConfig config, int batches, string runDir,
-        string runName, CancellationToken token)
-    {
-        var engine = new MapElitesEngine(config);
-        var history = new System.Collections.Generic.List<MapElitesBatchStats>();
-        float bestSoFar = float.MinValue;
-        while (engine.BatchesCompleted < batches && !token.IsCancellationRequested)
-        {
-            MapElitesBatchStats stats = engine.Step();
-            history.Add(stats);
-            if (stats.BestFitness > bestSoFar && engine.Archive.Best is { } best)
-            {
-                bestSoFar = stats.BestFitness;
-                (_, var trace) = engine.ReplayEvaluation(best);
-                MapElitesStore.SaveBest(runDir, best, trace);
-            }
-            MapElitesStore.SaveCheckpoint(runDir, engine, config, history);
-            // The chart plots the batch: top = archive best, average = batch mean,
-            // best index = the batch's own best (feeds the end-of-run auto-select).
-            float[] scores = engine.LastBatchFitness.ToArray();
-            int batchBest = 0;
-            for (int i = 1; i < scores.Length; i++)
-            {
-                if (scores[i] >= scores[batchBest])
-                {
-                    batchBest = i;
-                }
-            }
-            _pendingGenerations.Enqueue((
-                new GenerationStats(stats.Batch, stats.BestFitness,
-                    scores.Length > 0 ? scores.Average() : 0f, 0f, batchBest),
-                scores, engine.LastBatch.ToArray()));
-            bool last = engine.BatchesCompleted >= batches;
-            if (_pendingSnapshots.IsEmpty || last)
-            {
-                _pendingSnapshots.Enqueue(BuildMapElitesSnapshot(
-                    engine, runName, config.Generation.CharacterCount));
-            }
-            CallDeferred(nameof(DrainGenerations));
-        }
-        CallDeferred(nameof(OnRunFinished), engine.BatchesCompleted, token.IsCancellationRequested);
-    }
-
-    /// <summary>Pilot bin edges for the run dir: cached in descriptor-bins.json so a
-    /// second session over the same run bins identically (frozen-edges rule). The
-    /// cache only counts when it matches the CURRENT configuration and pilot — a
-    /// reused run name at a different player count/composition/seed must re-pilot,
-    /// never silently bin with stale edges (pilots are per-configuration). A corrupt
-    /// cache also just re-pilots.</summary>
+    /// <summary>Pilot bin edges for the run dir, cached so a second session over the
+    /// same run bins identically (DescriptorBinsCache owns the validation rules).</summary>
     private static BrawlerSim.Evolution.DescriptorBins LoadOrCreateBins(
-        GenerationConfig generation, ulong seed, string runDir, int samples)
-    {
-        string path = System.IO.Path.Combine(runDir, MapElitesStore.BinsFileName);
-        ulong pilotSeed = BrawlerSim.Evolution.DescriptorBins.DefaultPilotSeed(seed);
-        string configKey = BrawlerSim.Evolution.DescriptorBins.ConfigKeyFor(generation);
-        if (System.IO.File.Exists(path))
-        {
-            try
-            {
-                var cached = BrawlerSim.Evolution.DescriptorBins.Load(path);
-                if (cached.ConfigKey == configKey && cached.PilotSeed == pilotSeed
-                    && cached.PilotSamples == samples)
-                {
-                    return cached;
-                }
-                GD.Print($"descriptor bins cache is for another configuration — re-piloting ({path})");
-            }
-            catch (System.Exception e)
-            {
-                GD.Print($"descriptor bins cache unreadable — re-piloting ({e.Message})");
-            }
-        }
-        var bins = BrawlerSim.Evolution.DescriptorBins.FromPilot(generation, pilotSeed, samples);
-        System.IO.Directory.CreateDirectory(runDir);
-        bins.Save(path);
-        return bins;
-    }
+        GenerationConfig generation, ulong seed, string runDir, int samples) =>
+        DescriptorBinsCache.LoadOrCreate(
+            generation,
+            BrawlerSim.Evolution.DescriptorBins.DefaultPilotSeed(seed),
+            System.IO.Path.Combine(runDir, BrawlerSim.Evolution.DescriptorBins.DefaultFileName),
+            samples);
 
     private static HyperspaceSnapshot BuildGaSnapshot(
         MapElitesArchive shadow, int players, string runName, int populationSize)
@@ -376,23 +240,6 @@ public partial class EvolveView : Control
         return new HyperspaceSnapshot(shadow.Bins, players, entries, ArchiveStatusLine(shadow, "SHADOW OF GA RUN"));
     }
 
-    private static HyperspaceSnapshot BuildMapElitesSnapshot(
-        MapElitesEngine engine, string runName, int players)
-    {
-        var entries = new HyperspaceEntry[engine.Archive.Count];
-        int i = 0;
-        foreach (var kv in engine.Archive.Cells)
-        {
-            entries[i++] = new HyperspaceEntry(
-                kv.Value.Descriptor, kv.Value.Fitness, kv.Value.Genome,
-                $"{runName}-cell{kv.Key}",
-                $"mapelites:{runName} cell {kv.Key} cand {kv.Value.Candidate} fitness {kv.Value.Fitness:F1}",
-                PreviewSeed: (ulong)(kv.Value.Candidate + 1));
-        }
-        return new HyperspaceSnapshot(engine.Archive.Bins, players, entries,
-            ArchiveStatusLine(engine.Archive, "MAP-ELITES ARCHIVE"));
-    }
-
     private static string ArchiveStatusLine(MapElitesArchive archive, string kind) =>
         $"{kind} — CELLS {archive.Count}/{BrawlerSim.Evolution.DescriptorBins.CellCount} " +
         $"({archive.Coverage:P1}) · QD {archive.QdScore:F0} · BEST {archive.Best?.Fitness ?? 0f:F1}" +
@@ -404,12 +251,6 @@ public partial class EvolveView : Control
         {
             _chart.AddGeneration(gen.Stats.TopFitness, gen.Stats.AverageFitness, gen.Scores, gen.Genomes);
             _lastBestIndex = gen.Stats.BestIndex;
-            if (gen.Stats.TopFitness > _uiBestFitness)
-            {
-                _uiBestFitness = gen.Stats.TopFitness;
-                _uiBestGen = gen.Stats.Generation;
-                _uiBestIndex = gen.Stats.BestIndex;
-            }
             _progress.Value = gen.Stats.Generation;
             float elapsed = (Time.GetTicksMsec() - _startTimeMs) / 1000f;
             _status.Text = $"TOP {gen.Stats.TopFitness:F1} · AVG {gen.Stats.AverageFitness:F1} · {elapsed:F1}S";
@@ -436,20 +277,11 @@ public partial class EvolveView : Control
             : $"DONE — {generations} GENERATIONS IN {elapsed:F1}S") + $" — {_runDir}";
         SetRunning(false);
 
-        // Convenience: focus the best game so the preview is live the moment a run
-        // ends (also what automation screenshots capture). GA: the final generation's
-        // best (the run's champion by convention). MAP-Elites: the batch that set the
-        // archive best — the final batch's local best is usually NOT the run's best.
+        // Convenience: focus the final generation's best game so the preview is live
+        // the moment a run ends (also what automation screenshots capture).
         if (!cancelled && generations > 0)
         {
-            if (_runIsMapElites && _uiBestGen >= 0)
-            {
-                _chart.Select(_uiBestGen, _uiBestIndex);
-            }
-            else
-            {
-                _chart.Select(generations - 1, _lastBestIndex);
-            }
+            _chart.Select(generations - 1, _lastBestIndex);
             if (_autoFavorite)
             {
                 AddSelectionToGames();
@@ -522,20 +354,6 @@ public partial class EvolveView : Control
     private void OnPointSelected(int gen, int index, float score, GameGenome genome)
     {
         string runName = RunName();
-        if (_runIsMapElites)
-        {
-            // MAP-Elites provenance: the chart plots BATCHES, and the same genome
-            // picked from the cube carries candidate-derived naming/seeding — match it
-            // so the audit trail is one vocabulary regardless of which tab picked.
-            int candidate = gen * _runBatchSize + index;
-            SelectGame(
-                $"{runName}-b{gen}-game{index}",
-                $"mapelites:{runName} batch {gen} game {index} cand {candidate} fitness {score:F1}",
-                score, genome,
-                $"BATCH {gen} · GAME {index} · FITNESS {score:F1}",
-                previewSeed: (ulong)(candidate + 1));
-            return;
-        }
         SelectGame(
             $"{runName}-g{gen}-game{index}",
             $"evolve-explorer:{runName} gen {gen} game {index} fitness {score:F1}",
@@ -678,10 +496,6 @@ public partial class EvolveView : Control
                 case "favorite": // =1: save the auto-selected best to favorites (automation)
                     _autoFavorite = kv[1] == "1";
                     break;
-                case "mode": // ga|mapelites (2026-09-10)
-                    _mode.Selected = kv[1] == "mapelites" ? 1 : 0;
-                    OnModeChanged();
-                    break;
                 case "tab": // =hyperspace: open the archive cube (screenshots)
                     if (kv[1] == "hyperspace")
                     {
@@ -690,9 +504,6 @@ public partial class EvolveView : Control
                     break;
                 case "pilot": // pilot sample override so automation runs stay fast
                     _pilotSamples = int.Parse(kv[1]);
-                    break;
-                case "initrandom": // MAP-Elites initial random candidates
-                    _initRandom.Value = double.Parse(kv[1]);
                     break;
                 case "hslice": // hidden-axis slider position, 8 = ALL (screenshots)
                     _hyperspace.SetSliceForAutomation(int.Parse(kv[1]));
@@ -753,18 +564,6 @@ public partial class EvolveView : Control
         _numPlayers.AddItem("4 PLAYERS", 2);
         _numPlayers.Selected = 0;
         left.AddChild(Field("NUMBER OF PLAYERS", _numPlayers));
-
-        // Algorithm (2026-09-10, map-elites-descriptor-spec): the GA selects for
-        // fitness alone; MAP-Elites keeps one elite per descriptor cell — the archive
-        // renders in the HYPERSPACE tab. POPULATION/GENERATIONS re-read as
-        // BATCH SIZE/BATCHES in MAP-Elites mode (headings update live).
-        _mode = new OptionButton { FitToLongestItem = false, ClipText = true };
-        _mode.AddThemeFontSizeOverride("font_size", 14);
-        _mode.AddItem("GENETIC ALGORITHM", 0);
-        _mode.AddItem("MAP-ELITES (HYPERSPACE)", 1);
-        _mode.Selected = 0;
-        _mode.ItemSelected += _ => OnModeChanged();
-        left.AddChild(Field("ALGORITHM", _mode));
 
         // Composition (2026-07-14): PINNED = today's fixed attack/attack/shield/dash;
         // RANDOM = every button free; PER-BUTTON = pin some, free others.
@@ -833,18 +632,15 @@ public partial class EvolveView : Control
         _seed = Spin(RandomSeed(), 1, 999_999);
         _advancedBox.AddChild(Field("SEED", _seed));
         _population = Spin(100, 4, 500);
-        _advancedBox.AddChild(Field("POPULATION", _population, out _populationHeading));
+        _advancedBox.AddChild(Field("POPULATION", _population));
         _generations = Spin(300, 1, 5000);
-        _advancedBox.AddChild(Field("GENERATIONS", _generations, out _generationsHeading));
+        _advancedBox.AddChild(Field("GENERATIONS", _generations));
         _rounds = Spin(3, 1, 9);
         _advancedBox.AddChild(Field("ROUNDS / INDIVIDUAL", _rounds));
         _mutation = Slider(0.4f);
         _advancedBox.AddChild(Field("MUTATION RATE", _mutation));
         _dropout = Slider(0.5f);
         _advancedBox.AddChild(Field("DROPOUT RATE", _dropout));
-        // MAP-Elites only: candidates generated fresh before elite variation starts.
-        _initRandom = Spin(500, 10, 10_000);
-        _advancedBox.AddChild(Field("INITIAL RANDOM (MAP-ELITES)", _initRandom));
         _rangesToggle = new Button { Text = "PARAMETER RANGES", ToggleMode = true };
         _rangesToggle.Pressed += ToggleRanges;
         _advancedBox.AddChild(_rangesToggle);
@@ -1065,25 +861,12 @@ public partial class EvolveView : Control
     /// <summary>Field ritual (designer 2026-09-10): small caps label ABOVE the
     /// control so the column collapses as narrow as possible.</summary>
     private static Control Field(string text, Control control)
-        => Field(text, control, out _);
-
-    private static Control Field(string text, Control control, out Label heading)
     {
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 2);
-        heading = UiWidgets.Heading(text, 12);
-        box.AddChild(heading);
+        box.AddChild(UiWidgets.Heading(text, 12));
         control.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         box.AddChild(control);
         return box;
-    }
-
-    /// <summary>ALGORITHM change: the two shared spins mean different things per mode,
-    /// so their headings track the selection.</summary>
-    private void OnModeChanged()
-    {
-        bool mapElites = _mode.Selected == 1;
-        _populationHeading.Text = mapElites ? "BATCH SIZE" : "POPULATION";
-        _generationsHeading.Text = mapElites ? "BATCHES" : "GENERATIONS";
     }
 }

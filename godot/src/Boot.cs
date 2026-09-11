@@ -61,12 +61,14 @@ public partial class Boot : Node
             CallDeferred(nameof(GoToScene), Scenes.ForName(scene));
         }
 
-        // Screen capture support: BRAWLER_SHOT (without autoplay/autoevolve, which handle
+        // Screen capture support: BRAWLER_SHOT (without autoplay/autoevolve — and
+        // quality_exploration, whose scan finishes on its own clock — which handle
         // their own captures) saves whatever scene is up after a second, then quits.
         string shot = AutomationEnv.Shot;
         if (shot.Length > 0
             && AutomationEnv.Autoplay.Length == 0
-            && AutomationEnv.AutoEvolve.Length == 0)
+            && AutomationEnv.AutoEvolve.Length == 0
+            && scene != "quality_exploration")
         {
             // Shared capture helper (approved automation-only fix): this path now
             // awaits FramePostDraw like the arena/evolve captures do.

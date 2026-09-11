@@ -62,11 +62,6 @@ dotnet run --project BrawlerRunner -c Release -- evolve --out runs/x --seed 1 --
 
 # 3- or 4-player games (scored by the ffa-v1 fitness automatically)
 dotnet run --project BrawlerRunner -c Release -- evolve --out runs/x4 --seed 1 --pop 100 --generations 300 --rounds 5 --players 4
-
-# MAP-Elites illumination: one elite per cell of a 4-descriptor 8^4 grid
-# (move variety / character asymmetry / stage platform ratio / timing);
-# bin edges come from a 10k-genome pilot and are frozen into the checkpoint
-dotnet run --project BrawlerRunner -c Release -- mapelites --out runs/me --seed 1 --batch 100 --batches 300 --rounds 3
 ```
 
 Open `godot/project.godot` in the Godot editor for the game/view layer.

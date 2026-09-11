@@ -74,6 +74,11 @@ public partial class HyperspaceView : Control
     // Library landmarks (favorites + demo), loaded once per tab lifetime.
     private System.Collections.Generic.List<(string Name, GameGenome Genome, float[] Descriptor)>? _landmarks;
 
+    /// <summary>QUALITY EXPLORATION (2026-09-11) plots the library AS the entries, so
+    /// the landmark overlay there would duplicate every marker — screens whose
+    /// snapshot already IS the library turn it off.</summary>
+    public bool ShowLibraryLandmarks { get; set; } = true;
+
     /// <summary>Raised on cell/landmark pick — EvolveView routes it into the config
     /// column's match preview + ADD TO GAMES plumbing.</summary>
     public System.Action<HyperspaceEntry>? EntrySelected;
@@ -210,7 +215,7 @@ public partial class HyperspaceView : Control
     private void RebuildLandmarks(bool all, int slice)
     {
         MultiMesh marks = _landmarkMarks.Multimesh;
-        if (_snapshot is not { } snapshot)
+        if (_snapshot is not { } snapshot || !ShowLibraryLandmarks)
         {
             marks.InstanceCount = 0;
             _landmarkNote.Text = "";

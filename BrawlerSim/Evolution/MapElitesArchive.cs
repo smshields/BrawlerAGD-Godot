@@ -4,16 +4,18 @@ namespace BrawlerSim.Evolution;
 
 /// <summary>One archive elite: the genome, its (aggregated) fitness, the RAW
 /// descriptor 4-vector it was binned by (kept so a COPY can be re-binned later —
-/// re-binning a live archive is forbidden), and the monotone candidate counter it
-/// was evaluated under (the seed key that makes its evaluation replayable).</summary>
+/// re-binning a live archive is forbidden), and a caller-defined monotone counter
+/// identifying which evaluation produced the fitness.</summary>
 public sealed record ArchiveEntry(GameGenome Genome, float Fitness, float[] Descriptor, int Candidate);
 
 /// <summary>
-/// The MAP-Elites grid archive (2026-09-10, docs/features/map-elites.md): one elite
-/// per cell, standard insertion (empty cell, or strictly greater fitness). Shared by
-/// MapElitesEngine and the Evolve screen's shadow binning of legacy GA runs.
-/// Iteration order is always ascending cell index — parent selection and checkpoint
-/// writes must be deterministic, so no dictionary-order iteration ever escapes.
+/// The MAP-Elites-style quality-diversity grid archive (2026-09-10,
+/// docs/features/map-elites.md): one elite per cell, standard insertion (empty cell,
+/// or strictly greater fitness). Since 2026-09-11 (designer: the standalone
+/// MAP-Elites ALGORITHM was removed pending an algorithmic rethink) this is a pure
+/// visualization container — the Evolve screen's shadow binning of GA runs and the
+/// QUALITY EXPLORATION screen's saved-game archive. Iteration order is always
+/// ascending cell index, so no dictionary-order iteration ever escapes.
 /// </summary>
 public sealed class MapElitesArchive
 {

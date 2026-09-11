@@ -26,10 +26,6 @@ internal static class Commands
         Console.WriteLine("           [--range \"schema.key=min:max;...\"]  (schemas: character|move|shield|dash|projectile|stage)");
         Console.WriteLine("           [--fitness standard-v6|standard-v5|ffa-v2|standard-v4|ffa-v1|standard-v3|standard-v2]  (default: v5 at 2P, ffa-v2 at 3/4P; v6 = scaled-time experiment)");
         Console.WriteLine("           [--max-seconds 300]");
-        Console.WriteLine("  mapelites --out <dir> [--seed 1] [--batch 100] [--batches 100] [--rounds 1]");
-        Console.WriteLine("           [--players 2|3|4] [--mutation 0.4] [--init-random 500] [--pilot 10000] [--resume]");
-        Console.WriteLine("           [--agent ...] [--composition ...] [--range ...] [--fitness ...] [--max-seconds 300]");
-        Console.WriteLine("           — MAP-Elites illumination: 8^4 descriptor-grid archive of every generated game");
         Console.WriteLine("  evaluate --game <game.json> [--seed 7] [--rounds 5] [--fitness standard-v6|standard-v5|ffa-v2|standard-v4|ffa-v1|standard-v3|standard-v2]");
         Console.WriteLine("           [--breakdown] [--max-seconds 300] [--target-seconds 45]");
         Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
@@ -169,91 +165,6 @@ internal static class Commands
                 (improved ? "  ★ new best" : ""));
         }
         Console.WriteLine($"Done: {generations} generations in {stopwatch.Elapsed.TotalMinutes:F1} min. Run saved to {outDir}.");
-        return 0;
-    }
-
-    /// <summary>
-    /// MAP-Elites run (2026-09-10, docs/features/map-elites.md): pilot-binned 8^4
-    /// descriptor grid, per-batch checkpoints, resumable. The pilot (equal-frequency
-    /// bin edges from N random genomes at this exact configuration) runs once at run
-    /// start and its edges are FROZEN into every checkpoint.
-    /// </summary>
-    public static int MapElites(string[] args)
-    {
-        var opts = ParseOptions(args);
-        string outDir = Require(opts, "out");
-        int batches = GetInt(opts, "batches", 100);
-
-        MapElitesEngine engine;
-        MapElitesConfig config;
-        List<MapElitesBatchStats> history;
-        if (opts.ContainsKey("resume"))
-        {
-            (engine, config, history) = MapElitesStore.Load(outDir, LoadSpriteSelector(opts),
-                LoadStageThemeSelector(opts), LoadBackgroundSelector(opts));
-            Console.WriteLine(
-                $"Resumed {outDir} at batch {engine.BatchesCompleted} "
-                + $"({engine.Archive.Count} cells, {engine.CandidatesEvaluated} candidates).");
-        }
-        else
-        {
-            ulong seed = (ulong)GetInt(opts, "seed", 1);
-            GenerationConfig generation = ParseGenerationWithSelectors(opts);
-            int pilotSamples = GetInt(opts, "pilot", DescriptorBins.DefaultPilotSamples);
-            var pilotWatch = Stopwatch.StartNew();
-            DescriptorBins bins = DescriptorBins.FromPilot(
-                generation, DescriptorBins.DefaultPilotSeed(seed), pilotSamples);
-            Console.WriteLine(
-                $"Pilot: {pilotSamples} genomes in {pilotWatch.Elapsed.TotalSeconds:F1}s — bin edges frozen.");
-            config = new MapElitesConfig
-            {
-                Seed = seed,
-                BatchSize = GetInt(opts, "batch", 100),
-                InitialRandomCandidates = GetInt(opts, "init-random", 500),
-                MutationRate = GetFloat(opts, "mutation", 0.4f),
-                RoundsPerIndividual = GetInt(opts, "rounds", 1),
-                Agent = ParseAgent(opts),
-                TargetGameLengthSeconds = GetFloat(opts, "target-seconds", 45f),
-                Match = BuildMatchConfig(opts),
-                FitnessName = opts.GetValueOrDefault("fitness"),
-                FitnessCollisionScalar = CollisionScalar(opts),
-                Generation = generation,
-                Bins = bins,
-            };
-            engine = new MapElitesEngine(config);
-            history = new List<MapElitesBatchStats>();
-            // Checkpoint immediately: the (expensive) pilot's frozen edges are on
-            // disk and the dir is resumable even before the first batch completes.
-            MapElitesStore.SaveCheckpoint(outDir, engine, config, history);
-        }
-
-        float bestSoFar = history.Count > 0 ? history.Max(s => s.BestFitness) : float.MinValue;
-        var stopwatch = Stopwatch.StartNew();
-        while (engine.BatchesCompleted < batches)
-        {
-            MapElitesBatchStats stats = engine.Step();
-            history.Add(stats);
-
-            bool improved = stats.BestFitness > bestSoFar;
-            if (improved && engine.Archive.Best is { } best)
-            {
-                bestSoFar = stats.BestFitness;
-                (_, InputTrace trace) = engine.ReplayEvaluation(best);
-                MapElitesStore.SaveBest(outDir, best, trace);
-            }
-            MapElitesStore.SaveCheckpoint(outDir, engine, config, history);
-
-            Console.WriteLine(
-                $"batch {stats.Batch,4}  cells {stats.Filled,4} ({stats.Coverage:P1})  " +
-                $"qd {stats.QdScore,10:F1}  best {stats.BestFitness,8:F2}  " +
-                $"+{stats.Insertions}/^{stats.Replacements}  {stopwatch.Elapsed.TotalSeconds,7:F1}s" +
-                (stats.OutOfPilotRange > 0 ? $"  [out-of-pilot {stats.OutOfPilotRange}]" : "") +
-                (improved ? "  * new best" : ""));
-        }
-        Console.WriteLine(
-            $"Done: {batches} batches ({engine.CandidatesEvaluated} candidates) in "
-            + $"{stopwatch.Elapsed.TotalMinutes:F1} min — {engine.Archive.Count}/{DescriptorBins.CellCount} "
-            + $"cells filled. Run saved to {outDir}.");
         return 0;
     }
 

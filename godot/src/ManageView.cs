@@ -71,14 +71,6 @@ public partial class ManageView : Control
         {
             using JsonDocument doc = JsonDocument.Parse(System.IO.File.ReadAllText(manifestPath));
             JsonElement rootEl = doc.RootElement;
-            // MAP-Elites runs (2026-09-10) record kind + batch stats instead.
-            if (rootEl.TryGetProperty("kind", out JsonElement kind)
-                && kind.GetString() == BrawlerSim.Evolution.MapElitesStore.Kind)
-            {
-                int batches = rootEl.GetProperty("batchesCompleted").GetInt32();
-                int cells = rootEl.GetProperty("archive").GetArrayLength();
-                return $"(map-elites, {batches} batches, {cells} cells)";
-            }
             int generations = rootEl.GetProperty("generationsCompleted").GetInt32();
             JsonElement stats = rootEl.GetProperty("stats");
             float top = float.MinValue;
