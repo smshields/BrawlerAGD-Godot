@@ -55,6 +55,7 @@ public static class BuiltGameJson
             Characters = game.Characters.Select(c => new BuiltCharacterDoc
             {
                 DisplayName = c.DisplayName,
+                NamePlaceholder = c.NamePlaceholder,
                 Origin = c.Origin,
                 SpriteId = c.SpriteId,
                 Register = c.Register,
@@ -64,6 +65,7 @@ public static class BuiltGameJson
             Stages = game.Stages.Select(s => new BuiltStageDoc
             {
                 DisplayName = s.DisplayName,
+                NamePlaceholder = s.NamePlaceholder,
                 Origin = s.Origin,
                 ThemeId = s.ThemeId,
                 Register = s.Register,
@@ -97,7 +99,8 @@ public static class BuiltGameJson
                     config),
                 c.SpriteId,
                 c.Register,
-                c.MoveSpriteIds));
+                c.MoveSpriteIds,
+                c.NamePlaceholder));
         }
         foreach (BuiltStageDoc s in doc.Stages ?? new List<BuiltStageDoc>())
         {
@@ -110,7 +113,8 @@ public static class BuiltGameJson
                 s.ThemeId,
                 s.Register,
                 s.BackgroundId,
-                s.BackgroundRemap));
+                s.BackgroundRemap,
+                s.NamePlaceholder));
         }
         return game;
     }
@@ -135,6 +139,7 @@ public static class BuiltGameJson
     private sealed class BuiltCharacterDoc
     {
         public string? DisplayName { get; set; }
+        public bool? NamePlaceholder { get; set; } // 2026-09-11; null on pre-flag docs (shape inference)
         public string? Origin { get; set; }
         public string? SpriteId { get; set; } // v2+; the negotiated presentation
         public string? Register { get; set; } // v2+
@@ -145,6 +150,7 @@ public static class BuiltGameJson
     private sealed class BuiltStageDoc
     {
         public string? DisplayName { get; set; }
+        public bool? NamePlaceholder { get; set; } // 2026-09-11; null on pre-flag docs (shape inference)
         public string? Origin { get; set; }
         public string? ThemeId { get; set; }  // v5+; omitted when null
         public string? Register { get; set; } // v5+; omitted when null

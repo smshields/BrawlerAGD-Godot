@@ -11,7 +11,8 @@ namespace BrawlerSim.Serialization;
 /// (name compatibility, per-roster overuse), and what it settles on persists here,
 /// leaving the genome untouched.</summary>
 public sealed record BuiltCharacter(string DisplayName, string? Origin, CharacterGenome Character,
-    string? SpriteId = null, string? Register = null, IReadOnlyList<string?>? MoveSpriteIds = null)
+    string? SpriteId = null, string? Register = null, IReadOnlyList<string?>? MoveSpriteIds = null,
+    bool? NamePlaceholder = null)
 {
     /// <summary>The genome as this roster presents it: the negotiated character sprite
     /// and per-move attack sprites (M4b) injected over the inherited genes — views and
@@ -47,7 +48,8 @@ public sealed record BuiltCharacter(string DisplayName, string? Origin, Characte
 /// its palette remap target (null remap = the entry's native palette).</summary>
 public sealed record BuiltStage(string DisplayName, string? Origin, StageGenome Stage,
     string? ThemeId = null, string? Register = null,
-    string? BackgroundId = null, string? BackgroundRemap = null)
+    string? BackgroundId = null, string? BackgroundRemap = null,
+    bool? NamePlaceholder = null)
 {
     /// <summary>The stage as this game presents it: the negotiated theme + background
     /// injected over the inherited genes — views and match launches read this.</summary>

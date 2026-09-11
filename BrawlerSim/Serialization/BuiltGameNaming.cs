@@ -33,7 +33,22 @@ public static class BuiltGameNaming
     private static readonly Regex SpaceyDefaultShape =
         new(@"^[A-Z0-9_. \-]*\d[A-Z0-9_. \-]* (P\d+|STAGE)$", RegexOptions.Compiled);
 
-    /// <summary>True when the player's namegen pass should (re)name this element.</summary>
+    /// <summary>True when the player's namegen pass should (re)name this element.
+    /// The EXPLICIT NamePlaceholder flag is authoritative when present (2026-09-11,
+    /// designer: run/game-derived names must NEVER collide with aesthetics naming, so
+    /// the decision cannot rest on a shape filter) — the builder stamps true on its
+    /// provenance defaults, and any manual rename or completed naming pass stamps
+    /// false. The shape inference below survives ONLY for legacy documents that
+    /// predate the flag.</summary>
+    public static bool NeedsGeneratedName(BuiltCharacter entry) =>
+        entry.NamePlaceholder ?? NeedsGeneratedName(entry.DisplayName);
+
+    public static bool NeedsGeneratedName(BuiltStage entry) =>
+        entry.NamePlaceholder ?? NeedsGeneratedName(entry.DisplayName);
+
+    /// <summary>The legacy SHAPE inference — pre-flag documents only (and their
+    /// tests). New code paths must carry the explicit flag through the overloads
+    /// above instead.</summary>
     public static bool NeedsGeneratedName(string? displayName) =>
         string.IsNullOrWhiteSpace(displayName)
         || DefaultShape.IsMatch(displayName.Trim())

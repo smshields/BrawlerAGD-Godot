@@ -30,12 +30,12 @@ public static class BuiltGamePresentation
     {
         var session = new NG.UniqueNameSession(generator);
         var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (BuiltCharacter c in game.Characters.Where(c => !BuiltGameNaming.NeedsGeneratedName(c.DisplayName)))
+        foreach (BuiltCharacter c in game.Characters.Where(c => !BuiltGameNaming.NeedsGeneratedName(c)))
         {
             session.Reserve(c.DisplayName);
             taken.Add(c.DisplayName);
         }
-        foreach (BuiltStage s in game.Stages.Where(s => !BuiltGameNaming.NeedsGeneratedName(s.DisplayName)))
+        foreach (BuiltStage s in game.Stages.Where(s => !BuiltGameNaming.NeedsGeneratedName(s)))
         {
             session.Reserve(s.DisplayName);
             taken.Add(s.DisplayName);
@@ -71,7 +71,7 @@ public static class BuiltGamePresentation
         for (int i = 0; i < game.Characters.Count; i++)
         {
             BuiltCharacter entry = game.Characters[i];
-            bool needsName = BuiltGameNaming.NeedsGeneratedName(entry.DisplayName);
+            bool needsName = BuiltGameNaming.NeedsGeneratedName(entry);
             bool needsSprite = selector is not null
                 && (entry.SpriteId is null || !selector.Library.Contains(entry.SpriteId));
             if (!needsName && !needsSprite)
@@ -115,6 +115,7 @@ public static class BuiltGamePresentation
                 game.Characters[i] = entry with
                 {
                     DisplayName = name,
+                    NamePlaceholder = false, // settled: never re-inferred from shape
                     SpriteId = presented.SpriteId,
                     Register = presented.Register,
                 };
@@ -128,7 +129,7 @@ public static class BuiltGamePresentation
                 string name = session.GenerateCharacterName(
                     SpriteSelector.Map(entry.Character), new NG.NameOptions { Seed = seed }).Display;
                 taken.Add(name);
-                game.Characters[i] = entry with { DisplayName = name };
+                game.Characters[i] = entry with { DisplayName = name, NamePlaceholder = false };
                 changed++;
                 continue;
             }
@@ -199,7 +200,7 @@ public static class BuiltGamePresentation
         for (int i = 0; i < game.Stages.Count; i++)
         {
             BuiltStage entry = game.Stages[i];
-            bool needsName = BuiltGameNaming.NeedsGeneratedName(entry.DisplayName);
+            bool needsName = BuiltGameNaming.NeedsGeneratedName(entry);
             bool needsTheme = themes is not null
                 && (entry.ThemeId is null || !themes.Library.Contains(entry.ThemeId));
             bool needsBackground = backgrounds is not null
@@ -246,6 +247,9 @@ public static class BuiltGamePresentation
                     entry = entry with
                     {
                         DisplayName = stageName,
+                        // Settled whenever naming ran (needsName may have been false —
+                        // the kept name is equally final).
+                        NamePlaceholder = false,
                         ThemeId = presented.ThemeId,
                         Register = presented.Register,
                     };
@@ -257,7 +261,7 @@ public static class BuiltGamePresentation
                     string name = session.GenerateStageName(
                         StageThemeSelector.Map(entry.Stage),
                         new NG.NameOptions { Seed = seed }).Display;
-                    entry = entry with { DisplayName = name };
+                    entry = entry with { DisplayName = name, NamePlaceholder = false };
                     entryChanged = true;
                 }
             }

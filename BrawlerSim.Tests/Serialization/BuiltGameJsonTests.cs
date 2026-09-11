@@ -136,7 +136,7 @@ public class BuiltGameJsonTests
         Assert.True(BuiltGameNaming.NeedsGeneratedName("EVOLUTION 3-B296-GAME97 STAGE"));
         Assert.True(BuiltGameNaming.NeedsGeneratedName(""));
         Assert.True(BuiltGameNaming.NeedsGeneratedName("   "));
-        Assert.True(BuiltGameNaming.NeedsGeneratedName(null));
+        Assert.True(BuiltGameNaming.NeedsGeneratedName((string?)null));
         // Anything a human typed (or namegen produced) survives.
         Assert.False(BuiltGameNaming.NeedsGeneratedName("BOB"));
         Assert.False(BuiltGameNaming.NeedsGeneratedName("Dreadfang"));
@@ -148,6 +148,54 @@ public class BuiltGameJsonTests
         // caps labels like "LAVA STAGE" have always matched the original shape.)
         Assert.False(BuiltGameNaming.NeedsGeneratedName("MY COOL P2"));
         Assert.False(BuiltGameNaming.NeedsGeneratedName("OBSIDIAN HOME STAGE"));
+    }
+
+    [Fact]
+    public void ExplicitNamePlaceholderFlagBeatsShapeInference()
+    {
+        // 2026-09-11 (designer): run/game-derived names must NEVER collide with the
+        // aesthetics naming pass, so the flag is authoritative — shape inference is
+        // ONLY the fallback for legacy documents that predate it.
+        GameGenome source = Source(3);
+        var characterDefault = new BuiltCharacter(
+            "Totally A Real Name", null, source.Characters[0], NamePlaceholder: true);
+        var characterManual = new BuiltCharacter(
+            "EVOLUTION 3-B264-GAME69 P1", null, source.Characters[0], NamePlaceholder: false);
+        var characterLegacy = new BuiltCharacter(
+            "EVOLUTION 3-B264-GAME69 P1", null, source.Characters[0]);
+        Assert.True(BuiltGameNaming.NeedsGeneratedName(characterDefault));   // flag wins
+        Assert.False(BuiltGameNaming.NeedsGeneratedName(characterManual));   // flag wins
+        Assert.True(BuiltGameNaming.NeedsGeneratedName(characterLegacy));    // null → shape
+
+        var stageDefault = new BuiltStage("Mistgalade", null, source.Stage, NamePlaceholder: true);
+        var stageManual = new BuiltStage("CANNONBALL-ARENA STAGE", null, source.Stage,
+            NamePlaceholder: false);
+        var stageLegacy = new BuiltStage("CANNONBALL-ARENA STAGE", null, source.Stage);
+        Assert.True(BuiltGameNaming.NeedsGeneratedName(stageDefault));
+        Assert.False(BuiltGameNaming.NeedsGeneratedName(stageManual));
+        Assert.True(BuiltGameNaming.NeedsGeneratedName(stageLegacy));
+    }
+
+    [Fact]
+    public void NamePlaceholderRoundTripsAndStaysOffLegacyDocuments()
+    {
+        GameGenome source = Source(4);
+        var game = new BuiltGame { Name = "FLAGGED" };
+        game.Characters.Add(new BuiltCharacter("A P1", "origin/a", source.Characters[0],
+            NamePlaceholder: true));
+        game.Characters.Add(new BuiltCharacter("Keeper", "origin/b", source.Characters[1],
+            NamePlaceholder: false));
+        game.Stages.Add(new BuiltStage("A STAGE", "origin/s", source.Stage));
+
+        BuiltGame loaded = BuiltGameJson.Deserialize(BuiltGameJson.Serialize(game));
+        Assert.True(loaded.Characters[0].NamePlaceholder);
+        Assert.False(loaded.Characters[1].NamePlaceholder);
+        Assert.Null(loaded.Stages[0].NamePlaceholder); // legacy tri-state preserved
+
+        // Documents without the flag never gain the key (byte-stability rule).
+        var unflagged = new BuiltGame { Name = "LEGACY" };
+        unflagged.Stages.Add(new BuiltStage("A STAGE", "origin/s", source.Stage));
+        Assert.DoesNotContain("namePlaceholder", BuiltGameJson.Serialize(unflagged));
     }
 
     [Fact]
