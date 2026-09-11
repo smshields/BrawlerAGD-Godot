@@ -19,6 +19,13 @@ namespace BrawlerGodot;
 /// with an overlaid save button, and a generation progress bar under the chart.
 /// Automation: BRAWLER_AUTOEVOLVE="name=x;pop=24;gens=20;seed=9" starts on load;
 /// with BRAWLER_SHOT set it captures the finished dashboard and quits.
+/// Hyperspace tab (2026-09-10, map-elites-descriptor-spec §8; the standalone
+/// MAP-Elites ALGORITHM option was removed 2026-09-11, designer — the descriptor
+/// archive stays as a visualization): the right column is a TabContainer — RUN =
+/// the classic dashboard (chart + progress, untouched), HYPERSPACE = the run's
+/// accumulated best-per-cell descriptor cube, fed by a view-only shadow archive
+/// that consumes no engine RNG. Automation tokens: tab=hyperspace, pilot=N
+/// (pilot sample override), hslice=N.
 /// </summary>
 public partial class EvolveView : Control
 {
@@ -61,6 +68,12 @@ public partial class EvolveView : Control
     private string _runDir = "";
     private ulong _startTimeMs;
 
+    // Hyperspace tab (2026-09-10): the run's descriptor-archive cube.
+    private TabContainer _tabs = null!;
+    private HyperspaceView _hyperspace = null!;
+    private int _pilotSamples = BrawlerSim.Evolution.DescriptorBins.DefaultPilotSamples;
+    private readonly System.Collections.Concurrent.ConcurrentQueue<HyperspaceSnapshot> _pendingSnapshots = new();
+
     // Evolution Explorer (2026-07-27, designer): per-game chart points feed a live
     // match preview + the save-to-favorites button. Generations cross from the
     // engine thread through a queue (GameGenome is not a Variant, so no CallDeferred
@@ -74,7 +87,7 @@ public partial class EvolveView : Control
     private Button _addToGames = null!;
     private Label _savedNote = null!;
     private MatchPreview _preview = null!;
-    private (int Gen, int Index, float Score, GameGenome Genome)? _selection;
+    private (string Name, string Origin, float Score, GameGenome Genome)? _selection;
 
     public override void _Ready()
     {
@@ -95,6 +108,22 @@ public partial class EvolveView : Control
 
     private void StartRun()
     {
+        int generations = (int)_generations.Value;
+        _runDir = System.IO.Path.Combine(AppPaths.RunsRoot(), RunName());
+        _chart.Clear();
+        _hyperspace.Clear();
+        ClearSelection();
+        SetRunning(true);
+        _progress.MaxValue = generations;
+        _progress.Value = 0;
+        _status.Text = $"RUNNING → {_runDir}";
+        _startTimeMs = Time.GetTicksMsec();
+        _cancel = new CancellationTokenSource();
+        StartGaRun(generations, _cancel.Token);
+    }
+
+    private void StartGaRun(int generations, CancellationToken token)
+    {
         var config = new EvolutionConfig
         {
             Seed = (ulong)_seed.Value,
@@ -104,43 +133,117 @@ public partial class EvolveView : Control
             DropoutRate = (float)_dropout.Value,
             Generation = BuildGenerationConfig(),
         };
-        int generations = (int)_generations.Value;
-        _runDir = System.IO.Path.Combine(AppPaths.RunsRoot(), _runName.Text.Trim().Length > 0 ? _runName.Text.Trim() : "unnamed");
-
-        _chart.Clear();
-        ClearSelection();
-        SetRunning(true);
-        _progress.MaxValue = generations;
-        _progress.Value = 0;
-        _status.Text = $"RUNNING → {_runDir}";
-        _startTimeMs = Time.GetTicksMsec();
-        _cancel = new CancellationTokenSource();
-        CancellationToken token = _cancel.Token;
+        string runDir = _runDir;
+        string runName = RunName();
+        int pilotSamples = _pilotSamples;
 
         Task.Run(() =>
         {
-            var engine = new EvolutionEngine(config);
-            var history = new System.Collections.Generic.List<GenerationStats>();
-            float bestSoFar = float.MinValue;
-            while (engine.GenerationsCompleted < generations && !token.IsCancellationRequested)
+            try
             {
-                GenerationStats stats = engine.Step();
-                history.Add(stats);
-                if (stats.TopFitness > bestSoFar)
-                {
-                    bestSoFar = stats.TopFitness;
-                    (_, var trace) = engine.ReplayEvaluation(stats.BestIndex, stats.Generation);
-                    RunStore.SaveBest(_runDir, engine.Population[stats.BestIndex], stats, trace);
-                }
-                RunStore.SaveCheckpoint(_runDir, engine, config, history);
-                // Snapshot between Steps (the engine is idle): scores are copied
-                // (the engine reuses its buffer), genome refs are immutable.
-                _pendingGenerations.Enqueue((stats, engine.LastFitness.ToArray(), engine.Population.ToArray()));
-                CallDeferred(nameof(DrainGenerations));
+                RunGaWorker(config, generations, runDir, runName, pilotSamples, token);
             }
-            CallDeferred(nameof(OnRunFinished), engine.GenerationsCompleted, token.IsCancellationRequested);
+            catch (System.Exception e)
+            {
+                CallDeferred(nameof(OnRunFailed), e.Message);
+            }
         }, token);
     }
+
+    private void RunGaWorker(EvolutionConfig config, int generations, string runDir,
+        string runName, int pilotSamples, CancellationToken token)
+    {
+        // Shadow archive (designer 2026-09-10): the GA run gets MAP-Elites binning
+        // of everything it produces — ACCUMULATED best-per-cell over the whole run.
+        // View-only: it consumes no engine RNG and alters nothing in the run.
+        CallDeferred(nameof(SetStatus), "MEASURING DESCRIPTOR SPACE (PILOT)…");
+        var shadow = new MapElitesArchive(
+            LoadOrCreateBins(config.Generation, config.Seed, runDir, pilotSamples));
+        CallDeferred(nameof(SetStatus), $"RUNNING → {runDir}");
+        var engine = new EvolutionEngine(config);
+        var history = new System.Collections.Generic.List<GenerationStats>();
+        float bestSoFar = float.MinValue;
+        while (engine.GenerationsCompleted < generations && !token.IsCancellationRequested)
+        {
+            // Snapshot the population BEFORE Step: Step evaluates exactly these
+            // genomes, then replaces the bottom-dropout slots in place with fresh
+            // UNEVALUATED children — pairing post-Step Population with LastFitness
+            // would credit child genomes with scores they never earned (found in
+            // the 2026-09-10 review; the chart had the same latent mismatch).
+            GameGenome[] evaluated = engine.Population.ToArray();
+            GenerationStats stats = engine.Step();
+            float[] scores = engine.LastFitness.ToArray(); // the scores of `evaluated`
+            history.Add(stats);
+            if (stats.TopFitness > bestSoFar)
+            {
+                bestSoFar = stats.TopFitness;
+                (_, var trace) = engine.ReplayEvaluation(stats.BestIndex, stats.Generation);
+                RunStore.SaveBest(runDir, evaluated[stats.BestIndex], stats, trace);
+            }
+            RunStore.SaveCheckpoint(runDir, engine, config, history);
+            _pendingGenerations.Enqueue((stats, scores, evaluated));
+            for (int i = 0; i < evaluated.Length; i++)
+            {
+                shadow.Offer(new BrawlerSim.Evolution.ArchiveEntry(
+                    evaluated[i], scores[i], BrawlerSim.Evolution.Descriptors.Compute(evaluated[i]),
+                    stats.Generation * evaluated.Length + i), out _);
+            }
+            // The drain keeps only the newest snapshot, so building one is wasted
+            // work unless the UI consumed the last — except at the end of the run.
+            bool last = engine.GenerationsCompleted >= generations;
+            if (_pendingSnapshots.IsEmpty || last)
+            {
+                _pendingSnapshots.Enqueue(BuildGaSnapshot(
+                    shadow, config.Generation.CharacterCount, runName, evaluated.Length));
+            }
+            CallDeferred(nameof(DrainGenerations));
+        }
+        CallDeferred(nameof(OnRunFinished), engine.GenerationsCompleted, token.IsCancellationRequested);
+    }
+
+    private void SetStatus(string text) => _status.Text = text;
+
+    /// <summary>A faulted worker (corrupt bins cache, disk error, …) must not leave
+    /// the screen stuck on RUNNING with START disabled.</summary>
+    private void OnRunFailed(string message)
+    {
+        DrainGenerations();
+        SetRunning(false);
+        _status.Text = $"RUN FAILED — {message}";
+    }
+
+    /// <summary>Pilot bin edges for the run dir, cached so a second session over the
+    /// same run bins identically (DescriptorBinsCache owns the validation rules).</summary>
+    private static BrawlerSim.Evolution.DescriptorBins LoadOrCreateBins(
+        GenerationConfig generation, ulong seed, string runDir, int samples) =>
+        DescriptorBinsCache.LoadOrCreate(
+            generation,
+            BrawlerSim.Evolution.DescriptorBins.DefaultPilotSeed(seed),
+            System.IO.Path.Combine(runDir, BrawlerSim.Evolution.DescriptorBins.DefaultFileName),
+            samples);
+
+    private static HyperspaceSnapshot BuildGaSnapshot(
+        MapElitesArchive shadow, int players, string runName, int populationSize)
+    {
+        var entries = new HyperspaceEntry[shadow.Count];
+        int i = 0;
+        foreach (var kv in shadow.Cells)
+        {
+            int gen = kv.Value.Candidate / populationSize;
+            int index = kv.Value.Candidate % populationSize;
+            entries[i++] = new HyperspaceEntry(
+                kv.Value.Descriptor, kv.Value.Fitness, kv.Value.Genome,
+                $"{runName}-g{gen}-game{index}",
+                $"evolve-explorer:{runName} gen {gen} game {index} fitness {kv.Value.Fitness:F1}",
+                PreviewSeed: (ulong)(gen * 1000 + index + 1));
+        }
+        return new HyperspaceSnapshot(shadow.Bins, players, entries, ArchiveStatusLine(shadow, "SHADOW OF GA RUN"));
+    }
+
+    private static string ArchiveStatusLine(MapElitesArchive archive, string kind) =>
+        $"{kind} — CELLS {archive.Count}/{BrawlerSim.Evolution.DescriptorBins.CellCount} " +
+        $"({archive.Coverage:P1}) · QD {archive.QdScore:F0} · BEST {archive.Best?.Fitness ?? 0f:F1}" +
+        (archive.OutOfPilotRangeCount > 0 ? $" · OUT-OF-PILOT {archive.OutOfPilotRangeCount}" : "");
 
     private void DrainGenerations()
     {
@@ -151,6 +254,17 @@ public partial class EvolveView : Control
             _progress.Value = gen.Stats.Generation;
             float elapsed = (Time.GetTicksMsec() - _startTimeMs) / 1000f;
             _status.Text = $"TOP {gen.Stats.TopFitness:F1} · AVG {gen.Stats.AverageFitness:F1} · {elapsed:F1}S";
+        }
+        // The Hyperspace tab re-renders per snapshot, never per insertion — only the
+        // newest queued archive state matters.
+        HyperspaceSnapshot? latest = null;
+        while (_pendingSnapshots.TryDequeue(out HyperspaceSnapshot? snapshot))
+        {
+            latest = snapshot;
+        }
+        if (latest is not null)
+        {
+            _hyperspace.SetSnapshot(latest);
         }
     }
 
@@ -195,6 +309,7 @@ public partial class EvolveView : Control
     private void ResetForNewRun()
     {
         _chart.Clear();
+        _hyperspace.Clear();
         ClearSelection();
         _runName.Text = NextEvolutionName(_runName.Text);
         _seed.Value = RandomSeed();
@@ -238,17 +353,34 @@ public partial class EvolveView : Control
 
     private void OnPointSelected(int gen, int index, float score, GameGenome genome)
     {
-        string runName = _runName.Text.Trim().Length > 0 ? _runName.Text.Trim() : "unnamed";
-        var record = new GameRecord(
+        string runName = RunName();
+        SelectGame(
             $"{runName}-g{gen}-game{index}",
             $"evolve-explorer:{runName} gen {gen} game {index} fitness {score:F1}",
-            genome);
-        _selection = (gen, index, score, genome);
-        _previewInfo.Text = $"GEN {gen} · GAME {index} · FITNESS {score:F1}";
+            score, genome,
+            $"GEN {gen} · GAME {index} · FITNESS {score:F1}",
+            previewSeed: (ulong)(gen * 1000 + index + 1));
+    }
+
+    /// <summary>A Hyperspace cube pick lands in the same preview/save plumbing as a
+    /// chart point (map-elites-descriptor-spec §8 selection contract).</summary>
+    private void OnHyperspaceEntrySelected(HyperspaceEntry entry)
+    {
+        SelectGame(entry.Name, entry.Origin, entry.Fitness, entry.Genome,
+            $"{entry.Name.ToUpperInvariant()} · FITNESS {entry.Fitness:F1}", entry.PreviewSeed);
+    }
+
+    private void SelectGame(string name, string origin, float score, GameGenome genome,
+        string info, ulong previewSeed)
+    {
+        _selection = (name, origin, score, genome);
+        _previewInfo.Text = info;
         _addToGames.Disabled = false;
         _savedNote.Visible = false;
-        _preview.ShowGame(record, firstSeed: (ulong)(gen * 1000 + index + 1));
+        _preview.ShowGame(new GameRecord(name, origin, genome), firstSeed: previewSeed);
     }
+
+    private string RunName() => _runName.Text.Trim().Length > 0 ? _runName.Text.Trim() : "unnamed";
 
     private void ClearSelection()
     {
@@ -267,12 +399,8 @@ public partial class EvolveView : Control
         {
             return;
         }
-        string runName = _runName.Text.Trim().Length > 0 ? _runName.Text.Trim() : "unnamed";
-        string baseName = Sanitize($"{runName}-g{sel.Gen}-game{sel.Index}");
-        var record = new GameRecord(
-            baseName,
-            $"evolve-explorer:{runName} gen {sel.Gen} game {sel.Index} fitness {sel.Score:F1}",
-            sel.Genome);
+        string baseName = Sanitize(sel.Name);
+        var record = new GameRecord(baseName, sel.Origin, sel.Genome);
         string dir = AppPaths.FavoritesRoot();
         string path = System.IO.Path.Combine(dir, baseName + ".json");
         for (int n = 2; System.IO.File.Exists(path); n++)
@@ -367,6 +495,18 @@ public partial class EvolveView : Control
                     break;
                 case "favorite": // =1: save the auto-selected best to favorites (automation)
                     _autoFavorite = kv[1] == "1";
+                    break;
+                case "tab": // =hyperspace: open the archive cube (screenshots)
+                    if (kv[1] == "hyperspace")
+                    {
+                        _tabs.CurrentTab = 1;
+                    }
+                    break;
+                case "pilot": // pilot sample override so automation runs stay fast
+                    _pilotSamples = int.Parse(kv[1]);
+                    break;
+                case "hslice": // hidden-axis slider position, 8 = ALL (screenshots)
+                    _hyperspace.SetSliceForAutomation(int.Parse(kv[1]));
                     break;
             }
         }
@@ -548,11 +688,21 @@ public partial class EvolveView : Control
         left.AddChild(_previewInfo);
     }
 
+    /// <summary>The right column is a TabContainer (map-elites-descriptor-spec §8):
+    /// RUN = the existing dashboard column unchanged, HYPERSPACE = the archive cube.
+    /// Both algorithms feed both tabs.</summary>
     private void BuildChartColumn(HBoxContainer root)
     {
-        var right = new VBoxContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _tabs = new TabContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        root.AddChild(_tabs);
+
+        var right = new VBoxContainer { Name = "RUN" };
         right.AddThemeConstantOverride("separation", 8);
-        root.AddChild(right);
+        _tabs.AddChild(right);
+
+        _hyperspace = new HyperspaceView { Name = "HYPERSPACE" };
+        _hyperspace.EntrySelected += OnHyperspaceEntrySelected;
+        _tabs.AddChild(_hyperspace);
         _chart = new FitnessChart { SizeFlagsVertical = SizeFlags.ExpandFill };
         _chart.PointSelected += OnPointSelected;
         right.AddChild(_chart);

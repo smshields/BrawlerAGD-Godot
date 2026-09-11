@@ -192,7 +192,11 @@ public partial class GameBuilderView : Control
                 entry.Presented, entry.DisplayName, entry.Origin,
                 rename: newName =>
                 {
-                    _game.Characters[index] = _game.Characters[index] with { DisplayName = newName };
+                    // A manual rename is final: the naming pass must never touch it.
+                    _game.Characters[index] = _game.Characters[index] with
+                    {
+                        DisplayName = newName, NamePlaceholder = false,
+                    };
                     SaveOpenGame();
                     RefreshLibrary();
                 },
@@ -213,7 +217,10 @@ public partial class GameBuilderView : Control
                 entry.Stage, entry.DisplayName, entry.Origin,
                 rename: newName =>
                 {
-                    _game.Stages[index] = _game.Stages[index] with { DisplayName = newName };
+                    _game.Stages[index] = _game.Stages[index] with
+                    {
+                        DisplayName = newName, NamePlaceholder = false,
+                    };
                     SaveOpenGame();
                     RefreshLibrary();
                 },
@@ -244,12 +251,16 @@ public partial class GameBuilderView : Control
     // AutoBuildSample. The origin strings feed provenance/credits — outputs must
     // stay byte-identical between the two paths.
 
+    // NamePlaceholder: true marks these provenance defaults for the player's namegen
+    // pass EXPLICITLY (2026-09-11, designer) — run/game-derived labels must never
+    // collide with aesthetics naming, so the pass no longer infers from name shape.
     private static BuiltCharacter CharacterFrom(GameRecord record, string label, int index)
         => new($"{label} P{index + 1}", $"{record.Origin ?? label}/char{index}",
-            record.Genome.Characters[index]);
+            record.Genome.Characters[index], NamePlaceholder: true);
 
     private static BuiltStage StageFrom(GameRecord record, string label)
-        => new($"{label} STAGE", $"{record.Origin ?? label}/stage", record.Genome.Stage);
+        => new($"{label} STAGE", $"{record.Origin ?? label}/stage", record.Genome.Stage,
+            NamePlaceholder: true);
 
     private void OpenSource(string path)
     {
@@ -600,10 +611,13 @@ public partial class GameBuilderView : Control
         NewGame();
         _game!.Name = "AUTOBUILD SAMPLE";
         _gameName.Text = _game.Name;
-        string[] sources =
-            System.IO.Directory.GetFiles(AppPaths.DemoRoot(), "*.json")
-                .Concat(System.IO.Directory.GetFiles(AppPaths.FavoritesRoot(), "*.json"))
-                .OrderBy(p => p).ToArray();
+        // Both library dirs are optional (runs/demo comes and goes with curation
+        // sweeps — every interactive scan already guards; this one crashed the
+        // builder's automation when demo was archived, found 2026-09-11).
+        string[] sources = new[] { AppPaths.DemoRoot(), AppPaths.FavoritesRoot() }
+            .Where(System.IO.Directory.Exists)
+            .SelectMany(dir => System.IO.Directory.GetFiles(dir, "*.json"))
+            .OrderBy(p => p).ToArray();
         foreach (string path in sources)
         {
             GameRecord record;

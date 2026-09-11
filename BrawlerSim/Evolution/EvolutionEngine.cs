@@ -196,29 +196,6 @@ public sealed class EvolutionEngine
         return MatchRunner.Run(genome, sources, _config.Match, recordTrace);
     }
 
-    private float Aggregate(Span<float> rounds)
-    {
-        // In-place insertion sort: rounds counts are tiny and this allocates nothing.
-        for (int i = 1; i < rounds.Length; i++)
-        {
-            float value = rounds[i];
-            int j = i - 1;
-            while (j >= 0 && rounds[j] > value)
-            {
-                rounds[j + 1] = rounds[j];
-                j--;
-            }
-            rounds[j + 1] = value;
-        }
-        if (_config.Aggregate == FitnessAggregate.Median)
-        {
-            return rounds[rounds.Length / 2]; // Unity parity: upper median
-        }
-        float total = 0f;
-        foreach (float value in rounds)
-        {
-            total += value;
-        }
-        return total / rounds.Length;
-    }
+    private float Aggregate(Span<float> rounds) =>
+        FitnessAggregation.Aggregate(rounds, _config.Aggregate);
 }

@@ -34,10 +34,14 @@ namespace BrawlerSim.Serialization;
 ///       settled by the same pass after the tile theme; omitted when null). ≤5
 ///       files load with nulls and get both on their next open. ContentKey excludes
 ///       the background gene.
+///   7 — 2026-09-11 backgrounds v0.4: no field change — persisted backgroundId
+///       strings may now carry the four-part composite grammar (near layer in the
+///       gene). ≤6 three-part composites re-settle into three-layer stacks on
+///       their next open.
 /// </summary>
 public static class BuiltGameJson
 {
-    public const int CurrentFormatVersion = 6;
+    public const int CurrentFormatVersion = 7;
     private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = JsonOptions.Document;
@@ -51,6 +55,7 @@ public static class BuiltGameJson
             Characters = game.Characters.Select(c => new BuiltCharacterDoc
             {
                 DisplayName = c.DisplayName,
+                NamePlaceholder = c.NamePlaceholder,
                 Origin = c.Origin,
                 SpriteId = c.SpriteId,
                 Register = c.Register,
@@ -60,6 +65,7 @@ public static class BuiltGameJson
             Stages = game.Stages.Select(s => new BuiltStageDoc
             {
                 DisplayName = s.DisplayName,
+                NamePlaceholder = s.NamePlaceholder,
                 Origin = s.Origin,
                 ThemeId = s.ThemeId,
                 Register = s.Register,
@@ -93,7 +99,8 @@ public static class BuiltGameJson
                     config),
                 c.SpriteId,
                 c.Register,
-                c.MoveSpriteIds));
+                c.MoveSpriteIds,
+                c.NamePlaceholder));
         }
         foreach (BuiltStageDoc s in doc.Stages ?? new List<BuiltStageDoc>())
         {
@@ -106,7 +113,8 @@ public static class BuiltGameJson
                 s.ThemeId,
                 s.Register,
                 s.BackgroundId,
-                s.BackgroundRemap));
+                s.BackgroundRemap,
+                s.NamePlaceholder));
         }
         return game;
     }
@@ -131,6 +139,7 @@ public static class BuiltGameJson
     private sealed class BuiltCharacterDoc
     {
         public string? DisplayName { get; set; }
+        public bool? NamePlaceholder { get; set; } // 2026-09-11; null on pre-flag docs (shape inference)
         public string? Origin { get; set; }
         public string? SpriteId { get; set; } // v2+; the negotiated presentation
         public string? Register { get; set; } // v2+
@@ -141,6 +150,7 @@ public static class BuiltGameJson
     private sealed class BuiltStageDoc
     {
         public string? DisplayName { get; set; }
+        public bool? NamePlaceholder { get; set; } // 2026-09-11; null on pre-flag docs (shape inference)
         public string? Origin { get; set; }
         public string? ThemeId { get; set; }  // v5+; omitted when null
         public string? Register { get; set; } // v5+; omitted when null

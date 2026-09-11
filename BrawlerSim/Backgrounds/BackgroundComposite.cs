@@ -2,17 +2,24 @@ namespace BrawlerSim.Backgrounds;
 
 /// <summary>
 /// The parsed form of a recombined background gene (backgrounds track Phase 2,
-/// 2026-09-02 — brief decision 1): far and mid layer entries plus the UNIFIED palette
-/// remap, serialized as "far:&lt;id&gt;|mid:&lt;id&gt;|remap:&lt;group|none&gt;". A
-/// composite inherits and repairs AS A UNIT — repair re-resolves the whole gene,
-/// never one layer, so children cannot drift into illegal pairs. A plain entry id
-/// (no "far:" prefix) is the Phase-1 single-image gene.
+/// 2026-09-02 — brief decision 1): far, mid, and — since v0.4 (2026-09-11, designer:
+/// the near layer joins the gene) — the near bokeh entry, plus the UNIFIED palette
+/// remap, serialized as "far:&lt;id&gt;|mid:&lt;id&gt;|near:&lt;id|none&gt;|remap:
+/// &lt;group|none&gt;". A composite inherits and repairs AS A UNIT — repair
+/// re-resolves the whole gene, never one layer, so children cannot drift into
+/// illegal stacks. A plain entry id (no "far:" prefix) is the single-image gene —
+/// the EXTREME fallback since v0.4, kept loadable for archived content.
+/// HasNear distinguishes a pre-v0.4 three-part gene (near key absent — repairs into
+/// the three-layer stack) from a modern gene whose near legitimately resolved to
+/// "none" (an empty near pool, accepted as-is so repair terminates).
 /// </summary>
-public sealed record BackgroundComposite(string FarId, string MidId, string? Remap)
+public sealed record BackgroundComposite(
+    string FarId, string MidId, string? NearId, string? Remap, bool HasNear = true)
 {
-    public const string NoneRemap = "none";
+    public const string None = "none";
 
-    public string ToGene() => $"far:{FarId}|mid:{MidId}|remap:{Remap ?? NoneRemap}";
+    public string ToGene() =>
+        $"far:{FarId}|mid:{MidId}|near:{NearId ?? None}|remap:{Remap ?? None}";
 
     /// <summary>True when the gene string is a composite (vs a single entry id).</summary>
     public static bool IsComposite(string? gene) =>
@@ -24,7 +31,8 @@ public sealed record BackgroundComposite(string FarId, string MidId, string? Rem
         {
             return null;
         }
-        string? far = null, mid = null, remap = null;
+        string? far = null, mid = null, near = null, remap = null;
+        bool hasNear = false;
         foreach (string part in gene.Split('|'))
         {
             int colon = part.IndexOf(':');
@@ -38,6 +46,7 @@ public sealed record BackgroundComposite(string FarId, string MidId, string? Rem
             {
                 case "far": far = value; break;
                 case "mid": mid = value; break;
+                case "near": near = value; hasNear = true; break;
                 case "remap": remap = value; break;
                 default: return null;
             }
@@ -46,6 +55,9 @@ public sealed record BackgroundComposite(string FarId, string MidId, string? Rem
         {
             return null;
         }
-        return new BackgroundComposite(far, mid, remap == NoneRemap ? null : remap);
+        return new BackgroundComposite(far, mid,
+            near is null or None or "" ? null : near,
+            remap == None ? null : remap,
+            hasNear);
     }
 }

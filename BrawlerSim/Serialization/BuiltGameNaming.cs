@@ -22,9 +22,37 @@ public static class BuiltGameNaming
     private static readonly Regex DefaultShape =
         new(@"^[A-Z0-9_.\-]+ (P\d+|STAGE)$", RegexOptions.Compiled);
 
-    /// <summary>True when the player's namegen pass should (re)name this element.</summary>
+    // Regression 2026-09-11: the evolve screen's default run names became
+    // "EVOLUTION N" (2026-09-10 UI rework), so favorite FILE names — and therefore
+    // builder labels — now contain SPACES ("EVOLUTION 3-B264-GAME69 P1"). Those
+    // labels failed DefaultShape and were treated as manual renames: the naming
+    // pass skipped them forever while sprites/registers/backgrounds presented fine.
+    // A spacey LABEL counts as a builder default only when the label itself carries
+    // a digit (every run-derived file stem embeds gen/batch/game numbers), so actual
+    // manual renames like "LAVA STAGE" or "MY COOL P2" still survive the pass.
+    private static readonly Regex SpaceyDefaultShape =
+        new(@"^[A-Z0-9_. \-]*\d[A-Z0-9_. \-]* (P\d+|STAGE)$", RegexOptions.Compiled);
+
+    /// <summary>True when the player's namegen pass should (re)name this element.
+    /// The EXPLICIT NamePlaceholder flag is authoritative when present (2026-09-11,
+    /// designer: run/game-derived names must NEVER collide with aesthetics naming, so
+    /// the decision cannot rest on a shape filter) — the builder stamps true on its
+    /// provenance defaults, and any manual rename or completed naming pass stamps
+    /// false. The shape inference below survives ONLY for legacy documents that
+    /// predate the flag.</summary>
+    public static bool NeedsGeneratedName(BuiltCharacter entry) =>
+        entry.NamePlaceholder ?? NeedsGeneratedName(entry.DisplayName);
+
+    public static bool NeedsGeneratedName(BuiltStage entry) =>
+        entry.NamePlaceholder ?? NeedsGeneratedName(entry.DisplayName);
+
+    /// <summary>The legacy SHAPE inference — pre-flag documents only (and their
+    /// tests). New code paths must carry the explicit flag through the overloads
+    /// above instead.</summary>
     public static bool NeedsGeneratedName(string? displayName) =>
-        string.IsNullOrWhiteSpace(displayName) || DefaultShape.IsMatch(displayName.Trim());
+        string.IsNullOrWhiteSpace(displayName)
+        || DefaultShape.IsMatch(displayName.Trim())
+        || SpaceyDefaultShape.IsMatch(displayName.Trim());
 
     /// <summary>Deterministic naming seed from the element's CONTENT — the same
     /// fighter gets the same name no matter which built game or session names it

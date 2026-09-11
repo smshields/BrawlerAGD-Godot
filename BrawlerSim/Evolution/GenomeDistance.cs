@@ -63,7 +63,11 @@ public static class GenomeDistance
         return (float)(sum / pairs);
     }
 
-    private static void Accumulate(ParamSchema schema, ParamSet a, ParamSet b, ref float sum, ref int dims)
+    /// <summary>Shared normalization core (internal since 2026-09-10 — MAP-Elites
+    /// axis 1 repoints it from cross-genome positional pairing to cross-character
+    /// button pairing; see Descriptors.MoveVariety). One dimension per spec with a
+    /// positive generation-range width, each |a−b| normalized by that width.</summary>
+    internal static void Accumulate(ParamSchema schema, ParamSet a, ParamSet b, ref float sum, ref int dims)
     {
         foreach (ParamSpec spec in schema.Specs)
         {

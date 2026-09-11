@@ -1,3 +1,4 @@
+using System.Linq;
 using Godot;
 using BrawlerSim.Backgrounds;
 using BrawlerSim.Genome;
@@ -6,15 +7,19 @@ using BrawlerSim.Serialization;
 namespace BrawlerGodot;
 
 /// <summary>
-/// The stage backdrop (backgrounds track Phases 1-2, 2026-09-02 —
-/// docs/background-implementation-brief.md). Drawn FIRST in the arena view stack.
-/// Single-image stages render one remapped static texture; recombined stages render
-/// the PARALLAX STACK — L0 far (factor 0.05-0.15), a theme-tinted seam-haze band at
-/// the mid skyline, L1 mid (0.3-0.5, alpha above its silhouette), and the optional
-/// L2 near-accent bokeh element (0.7-1.3, heavy blur, capped opacity) — everything
-/// under the pair's UNIFIED remap. Every quad is sized against the kill box, which
-/// the camera view is hard-clamped inside, so parallax offsets can never expose an
-/// edge (factor in [0,1]). All variation comes from the selector's seeded
+/// The stage backdrop (backgrounds track Phases 1-2, 2026-09-02; v0.4 coverage +
+/// three-layer contract, 2026-09-11 — docs/background-implementation-brief.md +
+/// background-playtest-remediation.md). Drawn FIRST in the arena view stack. Stages
+/// render the PARALLAX STACK — L0 far (factor 0.05-0.15), a theme-tinted seam-haze
+/// band at the mid skyline, L1 mid (0.35-0.55, alpha above its silhouette, anchored
+/// at the arena floor line), and the L2 near bokeh element from the gene (0.75-1.3,
+/// heavy blur, capped opacity, dropped to unreadable opacity when platforms reach
+/// its band) — everything under the stack's UNIFIED remap. Coverage follows
+/// BackgroundCoverage plans: every layer wraps to width (real seam or mirror) and
+/// extends to height (solid fill / edge smear), so the clear color is UNREACHABLE —
+/// in editor builds a MAGENTA leak detector sits behind the stack (release builds
+/// omit it). Vertical parallax runs at VerticalParallaxRatio x the horizontal
+/// factor (remediation §2). All variation comes from the selector's seeded
 /// BackgroundLayout — same genome + seed renders the same backdrop everywhere. The
 /// tilt-shift focal band is the platform envelope, converted to screen space every
 /// frame; per-layer blur grows with depth (far blurriest). Null-gene (pre-v14)
@@ -27,6 +32,7 @@ public partial class BackgroundView : Node2D
     private ArenaCamera? _camera;
     private float _bandTopLocalY;
     private float _bandBottomLocalY;
+    private float _verticalRatio = 0.6f;
 
     /// <summary>The attribution lines of the rendered entries (pause-menu credits,
     /// designer 2026-09-02), null when nothing is rendered.</summary>
@@ -57,6 +63,7 @@ public partial class BackgroundView : Node2D
             return;
         }
         BackgroundSelectionConfig config = selector.Config;
+        _verticalRatio = config.VerticalParallaxRatio;
         FarFactor = layout.FarFactor;
         MidFactor = layout.Mid is null ? MidFactor : layout.MidFactor;
         BrawlerSim.Determinism.Vec2 blast = StageRules.BlastHalfExtents(stage.Params);
@@ -65,63 +72,42 @@ public partial class BackgroundView : Node2D
         BackgroundVariant variant = layout.Variant;
         float baseBlur = config.BlurMaxRadius * variant.BlurScale;
 
-        // L0 — the far (or single) image covering the whole box. Scene images take
-        // the variant crop at the kill-box aspect while that stays within the
-        // density cap; TILEABLE textures repeat at design density (one repeat ≈ the
-        // legacy 10-world-unit view height); anything that would stretch past
-        // LayerMaxScale MIRROR-TILES at the cap instead (designer 2026-09-03:
-        // coverage at sane density beats stretch). The variant crop origin doubles
-        // as the seeded tile offset in every repeating mode.
+        // The remediation's debug-only clear-color canary: a magenta world-static
+        // quad behind the whole stack. Any visible magenta in a capture is a failing
+        // coverage test, never a style choice. Exported builds omit it entirely.
+        if (OS.HasFeature("editor"))
+        {
+            AddChild(new Sprite2D
+            {
+                Texture = SolidTexture(new Color(1f, 0f, 1f)),
+                Scale = new Vector2(boxW, boxH),
+                ZIndex = -1,
+            });
+        }
+
+        // L0 — the far (or single) image: bottom-anchored at its density-capped
+        // scale, wrapped to width (real seam when canTileX, else mirror), the sky
+        // gap above closed by its extendTop rule (BackgroundCoverage.Far).
         BackgroundEntry farEntry = layout.Single ?? layout.Far!;
-        LayerFit farFit = BackgroundLayerFit.Far(variant.Crop, boxH, config.LayerMaxScale);
-        Sprite2D farSprite;
-        if (farEntry.Tileable || farFit.Tiled)
-        {
-            float tileScale = farEntry.Tileable
-                ? Mathf.Min(10f * ppu / farEntry.Height, config.LayerMaxScale)
-                : farFit.Scale;
-            farSprite = new Sprite2D
-            {
-                Texture = BackgroundBank.TextureFor(farEntry, layout.Remap),
-                RegionEnabled = true,
-                RegionRect = new Rect2(
-                    variant.Crop.X, variant.Crop.Y, boxW / tileScale, boxH / tileScale),
-                TextureRepeat = farEntry.Tileable
-                    ? TextureRepeatEnum.Enabled
-                    : TextureRepeatEnum.Mirror, // seam-free copies of a scene image
-                FlipH = variant.FlipX,
-                TextureFilter = TextureFilterEnum.Nearest,
-                Material = LayerMaterial(baseBlur, config.BaseDim, variant),
-                Scale = new Vector2(tileScale, tileScale),
-            };
-        }
-        else
-        {
-            farSprite = new Sprite2D
-            {
-                Texture = BackgroundBank.TextureFor(farEntry, layout.Remap),
-                RegionEnabled = true,
-                RegionRect = new Rect2(variant.Crop.X, variant.Crop.Y, variant.Crop.W, variant.Crop.H),
-                FlipH = variant.FlipX,
-                TextureFilter = TextureFilterEnum.Nearest,
-                Material = LayerMaterial(baseBlur, config.BaseDim, variant),
-                Scale = new Vector2(boxW / variant.Crop.W, boxH / variant.Crop.H),
-            };
-        }
-        AddLayer(farSprite, layout.FarFactor);
+        CoveragePlan farPlan = BackgroundCoverage.Far(
+            farEntry, variant.Crop, boxW, boxH, config.LayerMaxScale);
+        ShaderMaterial farMaterial = LayerMaterial(baseBlur, config.BaseDim, variant);
+        var farHolder = NewLayer(layout.FarFactor);
+        AddPlanSprites(farHolder, farPlan, farEntry, layout.Remap, variant,
+            boxW, boxH, farMaterial);
 
         if (layout.Mid is { } midEntry)
         {
-            // The mid is width-fitted to the kill box and bottom-anchored: its alpha
-            // skyline lands where its aspect puts it, and the seam haze welds it to
-            // the far behind (strength raised when atmospheric ordering failed).
-            // Past the density cap it MIRROR-TILES horizontally instead of
-            // stretching (designer 2026-09-03 — tiny mids on wide maps).
-            Texture2D midTexture = BackgroundBank.TextureFor(midEntry, layout.Remap);
-            LayerFit midFit = BackgroundLayerFit.Mid(midEntry.Width, boxW, config.LayerMaxScale);
-            float midScale = midFit.Scale;
-            float midH = midEntry.Height * midScale;
-            float skylineLocalY = blast.Y * ppu - midH; // the mid quad's top edge
+            // L1 — the mid skyline strip: BOTTOM anchored at the arena floor line
+            // (the lowest platform's underside) and extended DOWN by its
+            // extendBottom rule, so tall arenas never show sky under the ground
+            // (remediation §1); width-fitted within the density cap, wrapped past
+            // it. The seam haze welds its skyline to the far behind.
+            float floorWorldY = stage.Platforms.Min(p => p.Y);
+            float floorY = (blast.Y - floorWorldY) * ppu; // box-local, from the top
+            CoveragePlan midPlan = BackgroundCoverage.Mid(
+                midEntry, boxW, boxH, floorY, config.LayerMaxScale);
+            float skylineLocalY = midPlan.BaseY - boxH / 2f;
 
             (byte hr, byte hg, byte hb) = BackgroundBank.Palette.RemapDomLight(farEntry, layout.Remap);
             float hazeH = boxH * 0.18f;
@@ -133,39 +119,30 @@ public partial class BackgroundView : Node2D
                 Scale = new Vector2(boxW / 8f, hazeH / 64f),
                 Modulate = new Color(1f, 1f, 1f, layout.SeamHaze),
             };
-            AddLayer(haze, layout.MidFactor);
-
-            var midSprite = new Sprite2D
-            {
-                Texture = midTexture,
-                Centered = false,
-                Position = new Vector2(-boxW / 2f, skylineLocalY),
-                TextureFilter = TextureFilterEnum.Nearest,
-                Material = LayerMaterial(baseBlur * config.MidBlurFraction, config.BaseDim, variant),
-                Scale = new Vector2(midScale, midScale),
-            };
-            if (midFit.Tiled)
-            {
-                midSprite.RegionEnabled = true;
-                midSprite.RegionRect = new Rect2(0, 0, boxW / midScale, midEntry.Height);
-                midSprite.TextureRepeat = midEntry.Tileable
-                    ? TextureRepeatEnum.Enabled
-                    : TextureRepeatEnum.Mirror;
-            }
-            AddLayer(midSprite, layout.MidFactor);
+            var midHolder = NewLayer(layout.MidFactor);
+            midHolder.AddChild(haze);
+            ShaderMaterial midMaterial = LayerMaterial(
+                baseBlur * config.MidBlurFraction, config.BaseDim, variant);
+            AddPlanSprites(midHolder, midPlan, midEntry, layout.Remap, variant,
+                boxW, boxH, midMaterial);
         }
 
         if (layout.Accent is { } accent && BackgroundBank.IsDiscreteProp(accent.Element))
         {
-            // L2 — the bokeh plane: one sparse element, heavy blur, capped opacity,
-            // anchored in the upper band (the selector already skipped stages whose
-            // platforms reach that high). Square-canvas SCENE SLICES mistagged as
-            // elements are dropped by the border-alpha guard above.
+            // L2 — the near bokeh plane, from the GENE since v0.4: one sparse
+            // element, heavy blur, capped opacity — dropped below readability when
+            // the platform envelope reaches into its band (three layers minimum
+            // beats vanishing; remediation §2). Square-canvas SCENE SLICES mistagged
+            // as elements are dropped by the border-alpha guard.
             BackgroundEntry element = accent.Element;
             string? accentRemap = layout.Remap is { } target
                 && System.Linq.Enumerable.Contains(selector.LegalRemaps(element), target)
                     ? target
                     : null;
+            float envelopeTop = stage.Platforms.Max(p => p.Y + p.YSize);
+            float opacity = envelopeTop >= blast.Y * 0.35f
+                ? config.NearOverActionOpacity
+                : config.NearOpacity;
             float targetH = boxH * accent.Scale;
             float accentScale = targetH / element.Height;
             float anchorX = (accent.Anchor - 1) * blast.X * 0.55f * ppu;
@@ -174,17 +151,16 @@ public partial class BackgroundView : Node2D
                 Texture = BackgroundBank.TextureFor(element, accentRemap),
                 Position = new Vector2(anchorX, -blast.Y * 0.6f * ppu),
                 TextureFilter = TextureFilterEnum.Nearest,
-                Material = LayerMaterial(config.AccentBlurRadius, config.BaseDim, variant),
-                Modulate = new Color(1f, 1f, 1f, config.AccentOpacity),
+                Material = LayerMaterial(config.NearBlurRadius, config.BaseDim, variant),
+                Modulate = new Color(1f, 1f, 1f, opacity),
                 Scale = new Vector2(accentScale, accentScale),
             };
-            AddLayer(accentSprite, accent.Factor);
+            NewLayer(accent.Factor).AddChild(accentSprite);
         }
 
         AttributionLine = BuildAttribution(layout);
         GD.Print($"backdrop: {stage.BackgroundId}"
-            + (layout.Remap is { } r ? $" (remap {r})" : "")
-            + (layout.Accent is { } a ? $" + accent {a.Element.Id}" : ""));
+            + (layout.Remap is { } r ? $" (remap {r})" : ""));
 
         // The sharp focal band = the platform envelope (world units), pinned here in
         // LOCAL pixels; _Process converts it through the live camera transform.
@@ -205,13 +181,18 @@ public partial class BackgroundView : Node2D
         {
             return;
         }
-        // Parallax: each layer trails the camera by (1 − factor) of its motion; the
-        // camera's Position lives in the same parent space as this node's layers.
+        // Parallax: each layer trails the camera by (1 − factor) of its motion;
+        // vertically the factor runs at VerticalParallaxRatio x the horizontal one
+        // (remediation §2 — a large readability win under a pan+zoom camera, and
+        // still coverage-safe: both effective factors stay in [0, 1]). The camera's
+        // Position lives in the same parent space as this node's layers.
         if (_camera is not null)
         {
             foreach ((Node2D holder, float factor) in _layers)
             {
-                holder.Position = _camera.Position * (1f - factor);
+                holder.Position = new Vector2(
+                    _camera.Position.X * (1f - factor),
+                    _camera.Position.Y * (1f - _verticalRatio * factor));
             }
         }
         // Platform envelope → screen UV under the current pan/zoom, so the focal
@@ -231,12 +212,113 @@ public partial class BackgroundView : Node2D
         }
     }
 
-    private void AddLayer(Node2D sprite, float factor)
+    private Node2D NewLayer(float factor)
     {
         var holder = new Node2D();
         AddChild(holder);
-        holder.AddChild(sprite);
         _layers.Add((holder, factor));
+        return holder;
+    }
+
+    /// <summary>Renders one coverage plan into a layer holder: the base row (wrapped
+    /// per the plan), plus its solid/smear extension pieces — all in box-local
+    /// coordinates (plan origin = box top-left; node origin = box center) under one
+    /// shared blur material.</summary>
+    private void AddPlanSprites(Node2D holder, CoveragePlan plan, BackgroundEntry entry,
+        string? remap, BackgroundVariant variant, float boxW, float boxH,
+        ShaderMaterial material)
+    {
+        Texture2D texture = BackgroundBank.TextureFor(entry, remap);
+        float left = -boxW / 2f;
+        float topLocal = plan.BaseY - boxH / 2f;
+        BgRect crop = entry.LayerRole is "far" or "full"
+            ? variant.Crop
+            : new BgRect(0, 0, entry.Width, entry.Height);
+
+        var sprite = new Sprite2D
+        {
+            Texture = texture,
+            Centered = false,
+            Position = new Vector2(left + plan.BaseX, topLocal),
+            FlipH = variant.FlipX,
+            TextureFilter = TextureFilterEnum.Nearest,
+            Material = material,
+            Scale = new Vector2(plan.Scale, plan.Scale),
+            RegionEnabled = true,
+        };
+        if (plan.TileBothAxes)
+        {
+            sprite.RegionRect = new Rect2(
+                crop.X, crop.Y, boxW / plan.Scale, boxH / plan.Scale);
+            sprite.TextureRepeat = TextureRepeatEnum.Enabled;
+            sprite.Position = new Vector2(left, -boxH / 2f);
+        }
+        else if (plan.Wrapped)
+        {
+            // The crop origin doubles as the seeded tile offset in repeating modes.
+            sprite.RegionRect = new Rect2(crop.X, crop.Y, boxW / plan.Scale, crop.H);
+            sprite.TextureRepeat = plan.WrapSeamless
+                ? TextureRepeatEnum.Enabled
+                : TextureRepeatEnum.Mirror;
+        }
+        else
+        {
+            sprite.RegionRect = new Rect2(crop.X, crop.Y, crop.W, crop.H);
+        }
+        holder.AddChild(sprite);
+
+        AddExtendPiece(holder, plan.Top, entry, texture, crop, plan, boxW, boxH,
+            material, smearTopRow: true);
+        AddExtendPiece(holder, plan.Bottom, entry, texture, crop, plan, boxW, boxH,
+            material, smearTopRow: false);
+    }
+
+    /// <summary>One vertical extension strip: mode "solid" fills with the index's
+    /// color; "smear" clamp-stretches the image's edge row across the strip
+    /// (transparent pieces never reach here — coverage plans coerce them opaque
+    /// wherever the layer must cover).</summary>
+    private static void AddExtendPiece(Node2D holder, CoveragePiece? piece,
+        BackgroundEntry entry, Texture2D texture, BgRect crop, CoveragePlan plan,
+        float boxW, float boxH, ShaderMaterial material, bool smearTopRow)
+    {
+        if (piece is null || piece.Extend.Mode == BgExtend.Transparent)
+        {
+            return;
+        }
+        float left = -boxW / 2f;
+        float yLocal = piece.Y - boxH / 2f;
+        if (piece.Extend.Mode == BgExtend.Solid && piece.Extend.Color is { Count: 3 } c)
+        {
+            holder.AddChild(new Sprite2D
+            {
+                Texture = SolidTexture(new Color(c[0] / 255f, c[1] / 255f, c[2] / 255f)),
+                Centered = false,
+                Position = new Vector2(left, yLocal),
+                Material = material,
+                Scale = new Vector2(boxW, piece.Height),
+            });
+            return;
+        }
+        // Edge smear: the crop's outermost row, stretched across the strip. The row
+        // wraps horizontally exactly like the base sprite so their seams align.
+        int rowY = smearTopRow ? crop.Y : crop.Y + crop.H - 1;
+        var smear = new Sprite2D
+        {
+            Texture = texture,
+            Centered = false,
+            Position = new Vector2(left, yLocal),
+            TextureFilter = TextureFilterEnum.Nearest,
+            Material = material,
+            RegionEnabled = true,
+            RegionRect = new Rect2(
+                crop.X, rowY,
+                plan.Wrapped ? boxW / plan.Scale : crop.W, 1),
+            TextureRepeat = plan.Wrapped && !plan.WrapSeamless
+                ? TextureRepeatEnum.Mirror
+                : TextureRepeatEnum.Enabled,
+            Scale = new Vector2(plan.Scale, piece.Height),
+        };
+        holder.AddChild(smear);
     }
 
     private ShaderMaterial LayerMaterial(float blurPx, float dim, BackgroundVariant variant)
@@ -252,6 +334,14 @@ public partial class BackgroundView : Node2D
         material.SetShaderParameter("contrast", variant.Contrast);
         _materials.Add(material);
         return material;
+    }
+
+    /// <summary>A 1x1 solid texture (extend fills, the editor-only leak canary).</summary>
+    private static ImageTexture SolidTexture(Color color)
+    {
+        var image = Image.CreateEmpty(1, 1, false, Image.Format.Rgba8);
+        image.SetPixel(0, 0, color);
+        return ImageTexture.CreateFromImage(image);
     }
 
     /// <summary>An 8x64 vertical gradient (transparent → color → transparent), the

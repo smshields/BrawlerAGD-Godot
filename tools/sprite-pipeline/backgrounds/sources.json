@@ -178,6 +178,66 @@
    "license": "CC-BY-4.0",
    "required_attribution": "Desert moon background by Emcee Flesher, CC-BY 4.0",
    "courtesy": false
+  },
+  {
+   "id": "glitch-tinyspeck",
+   "title": "HD multi-layer parallax samples of Glitch game assets",
+   "author": "Tiny Speck (Glitch), sampler by OGA user",
+   "url": "https://opengameart.org/content/hd-multi-layer-parallex-background-samples-of-glitch-game-assets",
+   "license": "CC0-1.0",
+   "courtesy": true
+  },
+  {
+   "id": "oga-round5-cc0",
+   "title": "Round-5 CC0 packs: Forest Pass, forest parallax pack, scrolling runners set, seamless HD landscape (olrac), castle platformer (working title), seamless cave, Mixed Fantasy Backgrounds (LudicArts)",
+   "author": "various OGA artists",
+   "url": "https://opengameart.org (per-pack pages in manifest)",
+   "license": "CC0-1.0",
+   "courtesy": true
+  },
+  {
+   "id": "ludicarts-flat",
+   "title": "Handpainted Platform Tileset",
+   "author": "LudicArts (Franco Giachetti)",
+   "url": "https://opengameart.org/content/handpainted-platform-tileset",
+   "license": "CC-BY-3.0",
+   "required_attribution": "Handpainted platform tileset by LudicArts (Franco Giachetti), CC-BY 3.0",
+   "courtesy": false
+  },
+  {
+   "id": "greggman-platformer-bgs",
+   "title": "Backgrounds for 2D Platformers",
+   "author": "Zeyu Ren, submitted by greggman",
+   "url": "https://opengameart.org/content/backgrounds-for-2d-platformers",
+   "license": "CC-BY-3.0",
+   "required_attribution": "Platformer backgrounds by Zeyu Ren, CC-BY 3.0",
+   "courtesy": false
+  },
+  {
+   "id": "zombcool-polar",
+   "title": "Polar Bear Platformer (arctic backgrounds/tiles)",
+   "author": "ZomBCool",
+   "url": "https://opengameart.org/content/polar-bear-platformer",
+   "license": "CC-BY-3.0",
+   "required_attribution": "Arctic art by ZomBCool, CC-BY 3.0",
+   "courtesy": false
+  },
+  {
+   "id": "pyromantic-sunset-temple",
+   "title": "Sunset Temple background",
+   "author": "Pyromantic",
+   "url": "https://opengameart.org/content/sunset-temple-tiles",
+   "license": "CC0-1.0 (dual CC-BY 3.0/CC0; CC0 elected)",
+   "courtesy": true
+  },
+  {
+   "id": "note-round5-gate",
+   "title": "Round-5 gate note",
+   "author": "-",
+   "url": "-",
+   "license": "-",
+   "courtesy": true,
+   "note": "Style gate relaxed 2026-09-10: painted/vector/HD admitted; coherence enforced by policy-D quantization + 480x270 normalization + QA sheets. License gate unchanged. Rejected: 3 Parallax Backgrounds (GPL 3.0 only)."
   }
  ],
  "rejected_postverification": [

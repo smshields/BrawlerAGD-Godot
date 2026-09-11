@@ -13,6 +13,7 @@ public static class Scenes
     public const string GameSelect = "res://scenes/game_select.tscn";
     public const string MainMenu = "res://scenes/main_menu.tscn";
     public const string Manage = "res://scenes/manage.tscn";
+    public const string QualityExploration = "res://scenes/quality_exploration.tscn";
     public const string Title = "res://scenes/title.tscn";
 
     /// <summary>BRAWLER_SCENE automation: scene path from a bare scene name.</summary>
