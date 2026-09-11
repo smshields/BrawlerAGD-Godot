@@ -34,10 +34,14 @@ namespace BrawlerSim.Serialization;
 ///       settled by the same pass after the tile theme; omitted when null). ≤5
 ///       files load with nulls and get both on their next open. ContentKey excludes
 ///       the background gene.
+///   7 — 2026-09-11 backgrounds v0.4: no field change — persisted backgroundId
+///       strings may now carry the four-part composite grammar (near layer in the
+///       gene). ≤6 three-part composites re-settle into three-layer stacks on
+///       their next open.
 /// </summary>
 public static class BuiltGameJson
 {
-    public const int CurrentFormatVersion = 6;
+    public const int CurrentFormatVersion = 7;
     private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = JsonOptions.Document;

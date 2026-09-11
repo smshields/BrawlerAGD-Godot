@@ -125,11 +125,18 @@ public sealed record BackgroundSelectionConfig
     /// sharp zone hugs the action).</summary>
     public float FocalMarginWorld { get; init; } = 1.0f;
 
-    // ── Phase 2: parallax recombination (brief §Phase 2) ───────────────────────
+    // ── Phase 2: parallax recombination (brief §Phase 2; remediation §2 made the
+    // far + mid + near stack the DEFAULT — the single-image path is the extreme
+    // fallback, so the old recombination probability is gone) ──────────────────
 
-    /// <summary>Seeded chance a stage recombines a far + mid pair instead of taking
-    /// a single full-scene entry (brief start value).</summary>
-    public float RecombinationProbability { get; init; } = 0.5f;
+    /// <summary>The detail floor (remediation §3): every stack needs at least one
+    /// large layer with metrics.detail at or above this (the far, or failing that a
+    /// non-boxRisk mid); boxRisk fulls are excluded from the single path.</summary>
+    public float DetailFloor { get; init; } = 0.25f;
+
+    /// <summary>Score weight on metrics.detail — the softmax prefers detailed
+    /// layers (remediation §3), on top of the hard floor above.</summary>
+    public float DetailWeight { get; init; } = 0.3f;
 
     /// <summary>Seeded chance a recombining stage enters the GOOF LANE: the register
     /// -intersection predicate is waived (a nebula over a sunny meadow) and pair
@@ -149,27 +156,40 @@ public sealed record BackgroundSelectionConfig
     /// <summary>Score bonus for pairs that satisfy atmospheric ordering outright.</summary>
     public float OrderingBonus { get; init; } = 0.1f;
 
-    /// <summary>Parallax factor ranges per layer (seeded per stage). Foreground = 1.</summary>
+    /// <summary>Parallax factor ranges per layer (seeded per stage; remediation §2
+    /// bands: far &lt;= 0.15, mid 0.35-0.55, near &gt;= 0.75). Foreground = 1.</summary>
     public float FarFactorMin { get; init; } = 0.05f;
     public float FarFactorMax { get; init; } = 0.15f;
-    public float MidFactorMin { get; init; } = 0.30f;
-    public float MidFactorMax { get; init; } = 0.50f;
+    public float MidFactorMin { get; init; } = 0.35f;
+    public float MidFactorMax { get; init; } = 0.55f;
 
-    /// <summary>Optional L2 near-accent (bokeh plane): seeded chance, factor range,
-    /// scale range (fraction of the kill-box height), and its opacity cap — sparse,
-    /// heavily blurred, never over the platform envelope at readable opacity.</summary>
-    public float AccentProbability { get; init; } = 0.35f;
+    /// <summary>Minimum parallax-factor spread between adjacent layers — under this
+    /// two layers read as one plane (remediation §2). Layout clamps draws to it.</summary>
+    public float LayerSpreadMin { get; init; } = 0.25f;
 
-    /// <summary>Accents must be DISCRETE props (planets, clouds, trees — roughly
-    /// square): elements whose aspect ratio exceeds this are scene strips or prop
-    /// SHEETS and never join the bokeh plane (2026-09-03 — a full-width foreground
-    /// slice read as a floating billboard). 1.6 keeps 273 of the 319 elements.</summary>
-    public float AccentMaxAspect { get; init; } = 1.6f;
-    public float AccentFactorMin { get; init; } = 0.7f;
-    public float AccentFactorMax { get; init; } = 1.3f;
-    public float AccentScaleMin { get; init; } = 0.12f;
-    public float AccentScaleMax { get; init; } = 0.28f;
-    public float AccentOpacity { get; init; } = 0.5f;
+    /// <summary>Each layer's vertical parallax factor as a fraction of its
+    /// horizontal one (remediation §2: y-factor = 0.6 x x-factor — a large
+    /// readability win under a pan+zoom camera).</summary>
+    public float VerticalParallaxRatio { get; init; } = 0.6f;
+
+    /// <summary>The near bokeh layer (remediation §2 made it the mandatory third
+    /// plane; the gene owns WHICH element): factor range, scale range (fraction of
+    /// the kill-box height), and its opacity cap — sparse, heavily blurred.</summary>
+    /// <remarks>Near elements must be DISCRETE props (planets, clouds, trees —
+    /// roughly square): elements whose aspect ratio exceeds NearMaxAspect are scene
+    /// strips or prop SHEETS and never join the bokeh plane (2026-09-03 — a
+    /// full-width foreground slice read as a floating billboard).</remarks>
+    public float NearMaxAspect { get; init; } = 1.6f;
+    public float NearFactorMin { get; init; } = 0.75f;
+    public float NearFactorMax { get; init; } = 1.3f;
+    public float NearScaleMin { get; init; } = 0.12f;
+    public float NearScaleMax { get; init; } = 0.28f;
+    public float NearOpacity { get; init; } = 0.5f;
+
+    /// <summary>Near opacity when the platform envelope reaches into the bokeh band:
+    /// the plane stays (three layers minimum) but drops below readability — the
+    /// remediation's "never over the platform envelope at readable opacity".</summary>
+    public float NearOverActionOpacity { get; init; } = 0.18f;
 
     /// <summary>Seam haze strengths at the mid skyline: the base value, and the
     /// forced value when atmospheric ordering is violated (predicate c's remedy).</summary>
@@ -177,9 +197,9 @@ public sealed record BackgroundSelectionConfig
     public float SeamHazeForced { get; init; } = 0.55f;
 
     /// <summary>Mid-layer blur as a fraction of the far layer's blur (far reads
-    /// blurriest); the accent layer's fixed heavy blur radius in texture pixels.</summary>
+    /// blurriest); the near layer's fixed heavy blur radius in texture pixels.</summary>
     public float MidBlurFraction { get; init; } = 0.45f;
-    public float AccentBlurRadius { get; init; } = 5f;
+    public float NearBlurRadius { get; init; } = 5f;
 
     public static readonly BackgroundSelectionConfig Default = new();
 

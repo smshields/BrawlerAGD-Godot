@@ -66,10 +66,16 @@ namespace BrawlerSim.Serialization;
 ///       renders the blank pre-feature backdrop and is resolved fresh only in a
 ///       background-enabled pipeline. Purely cosmetic — replays and match goldens
 ///       untouched.
+///  15 — 2026-09-11 backgrounds v0.4 (designer: the near layer joins the gene): no
+///       field change — the composite backgroundId grammar grew a
+///       "near:&lt;id|none&gt;" segment ("far:|mid:|near:|remap:"). v14 three-part
+///       composites still parse and repair into the three-layer stack at the next
+///       breeding/presentation pass. Purely cosmetic — replays and match goldens
+///       untouched.
 /// </summary>
 public static class GameGenomeJson
 {
-    public const int CurrentFormatVersion = 14; // 2026-09-02 backgrounds (see header)
+    public const int CurrentFormatVersion = 15; // 2026-09-11 backgrounds v0.4 (see header)
     private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = JsonOptions.Document;
