@@ -16,6 +16,7 @@ public partial class PlayerView : Node2D
     private Vector2[] _moveBases = System.Array.Empty<Vector2>(); // hitbox-fill divisors per move
     private Sprite2D _body = null!;
     private Sprite2D _move = null!;
+    private ShieldOverlay _shield = null!;
     private Label _name = null!;
     private float _ppu;
     private Vector2 _spriteBase = new(16f, 16f); // scale divisor: 16 (v1 parity) or the v2 rect size
@@ -134,6 +135,12 @@ public partial class PlayerView : Node2D
         };
         AddChild(_move);
 
+        // Shield on its own child AFTER the body/move sprites: a canvas item's own
+        // drawing renders beneath its children, so drawing the circle from this
+        // node's _Draw put it under the character (fixed 2026-09-14).
+        _shield = new ShieldOverlay { View = this };
+        AddChild(_shield);
+
         // Name tag in a colored pill (HUD polish, 2026-07-23): slight transparent
         // pill background in the player's assigned identity color, matching the HUD.
         _name = new Label
@@ -169,13 +176,13 @@ public partial class PlayerView : Node2D
         if (absent)
         {
             _move.Visible = false;
-            QueueRedraw(); // clears any stale shield circle
+            _shield.QueueRedraw(); // clears any stale shield circle
             DetachTrail();
             SyncDyingTrail();
             return;
         }
         Position = new Vector2(_player.Position.X * _ppu, -_player.Position.Y * _ppu);
-        QueueRedraw(); // shield circle tracks sim state every frame
+        _shield.QueueRedraw(); // shield circle tracks sim state every frame
         // Crouch squish (2026-07-13): scale from sim state, feet planted.
         float crouch = _player.CrouchScale;
         _body.Scale = new Vector2(
@@ -350,26 +357,35 @@ public partial class PlayerView : Node2D
     }
 
     /// <summary>Shield circle (2026-07-12): white outline that turns red as the shield
-    /// degrades; radius, offset, and grow/shrink animation all come from sim state.</summary>
-    public override void _Draw()
+    /// degrades; radius, offset, and grow/shrink animation all come from sim state.
+    /// Lives on a child added after the body/move sprites so it draws over the
+    /// character (2026-09-14).</summary>
+    private sealed partial class ShieldOverlay : Node2D
     {
-        if (_player is null || _player.State != PlayerState.Shield)
+        public PlayerView View = null!;
+
+        public override void _Draw()
         {
-            return;
+            SimPlayer player = View._player;
+            if (player is null || player.State != PlayerState.Shield)
+            {
+                return;
+            }
+            float ppu = View._ppu;
+            float radius = player.ShieldRadius * ppu;
+            if (radius <= 0f)
+            {
+                return;
+            }
+            var center = new Vector2(player.ShieldOffset.X * ppu, -player.ShieldOffset.Y * ppu);
+            SimShield? shield = player.ActiveShield;
+            float health = shield is null || shield.InitialRadius <= 0f
+                ? 0f
+                : player.ShieldHealths[player.CurrentMoveIndex] / shield.InitialRadius;
+            Color color = Colors.White.Lerp(Colors.Red, Mathf.Clamp(1f - health, 0f, 1f));
+            DrawArc(center, radius, 0f, Mathf.Tau, 48, color with { A = 0.9f }, 2f, antialiased: false);
+            DrawCircle(center, radius, color with { A = 0.12f });
         }
-        float radius = _player.ShieldRadius * _ppu;
-        if (radius <= 0f)
-        {
-            return;
-        }
-        var center = new Vector2(_player.ShieldOffset.X * _ppu, -_player.ShieldOffset.Y * _ppu);
-        SimShield? shield = _player.ActiveShield;
-        float health = shield is null || shield.InitialRadius <= 0f
-            ? 0f
-            : _player.ShieldHealths[_player.CurrentMoveIndex] / shield.InitialRadius;
-        Color color = Colors.White.Lerp(Colors.Red, Mathf.Clamp(1f - health, 0f, 1f));
-        DrawArc(center, radius, 0f, Mathf.Tau, 48, color with { A = 0.9f }, 2f, antialiased: false);
-        DrawCircle(center, radius, color with { A = 0.12f });
     }
 
 }
