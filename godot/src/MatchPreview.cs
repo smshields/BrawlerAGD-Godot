@@ -27,6 +27,8 @@ public partial class MatchPreview : Node2D
     private IInputSource[] _sources = System.Array.Empty<IInputSource>();
     private InputFrame[] _inputs = new InputFrame[2]; // resized per game (2026-08-12)
     private PlayerView[] _views = System.Array.Empty<PlayerView>();
+    private GroundFxView _groundFx = null!;
+    private GroundFxDetector? _groundFxDetector;
     private ProjectileLayer _projectiles = null!;
     private SpawnPadView _spawnPads = null!;
     private ArenaCamera _camera = null!;
@@ -81,6 +83,13 @@ public partial class MatchPreview : Node2D
         var stage = new StageView();
         AddChild(stage);
         stage.Setup(_world, Ppu, _record.Genome.Stage); // themed tiles (M4d)
+
+        // Ground FX (2026-09-14, designer: previews included): theme-colored dust,
+        // no weather plan here — the preview stack carries no WeatherSystem.
+        _groundFx = new GroundFxView();
+        AddChild(_groundFx);
+        _groundFx.Setup(Ppu, _record.Genome.Stage, weatherPlan: null);
+        _groundFxDetector = new GroundFxDetector(_world);
 
         _views = new PlayerView[players];
         for (int i = 0; i < players; i++)
@@ -140,7 +149,9 @@ public partial class MatchPreview : Node2D
             {
                 _inputs[i] = _sources[i].GetInput(_world, i);
             }
+            _groundFxDetector?.BeforeTick();
             _world.Tick(_inputs);
+            _groundFxDetector?.AfterTick();
         }
 
         foreach (PlayerView view in _views)
@@ -150,5 +161,6 @@ public partial class MatchPreview : Node2D
         _projectiles.Sync();
         _spawnPads.Sync();
         _camera.Sync((float)delta);
+        _groundFxDetector?.Drain(_groundFx, weatherGate: 0f);
     }
 }

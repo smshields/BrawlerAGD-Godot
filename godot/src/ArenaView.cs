@@ -35,6 +35,8 @@ public partial class ArenaView : Node2D
     private WeatherSystem _weather = null!;
     private StageView _stage = null!;
     private LightAccentView _lightAccents = null!;
+    private GroundFxView _groundFx = null!;
+    private GroundFxDetector _groundFxDetector = null!;
     private BrawlerSim.Lighting.LightRigPlan _lightRig = BrawlerSim.Lighting.LightRigPlan.Neutral;
     private ShaderMaterial? _tileRig;
     // KO edge detection for the flash (2026-08-12): the per-life ledger catches
@@ -120,6 +122,13 @@ public partial class ArenaView : Node2D
         _lightAccents = new LightAccentView();
         AddChild(_lightAccents);
 
+        // Ground FX (particle prototype, 2026-09-14; render-chain entry 3b): dust
+        // draws BEHIND the fighters by tree order. Set up after the weather plan
+        // exists below; landings/strides detected inside the tick loop.
+        _groundFx = new GroundFxView();
+        AddChild(_groundFx);
+        _groundFxDetector = new GroundFxDetector(_world);
+
         _views = new PlayerView[players];
         for (int i = 0; i < players; i++)
         {
@@ -149,6 +158,7 @@ public partial class ArenaView : Node2D
             MatchSession.StageBackgroundRemap);
         _weather.Setup(Ppu, _game.Genome.Stage, _camera,
             _background.FarFactor, _background.MidFactor);
+        _groundFx.Setup(Ppu, _game.Genome.Stage, _weather.Plan);
 
         // Light rig (backgrounds Phase 4): ambient/cap tinting derived from the
         // composited backdrop — tiles through tile_rig.gdshader (the tested C#
@@ -174,6 +184,7 @@ public partial class ArenaView : Node2D
             {
                 view.LightTint = new Color(tr, tg, tb);
             }
+            _groundFx.LightTint = new Color(tr, tg, tb);
             _lightAccents.Setup(Ppu, _game.Genome.Stage, _lightRig, LightBank.Config);
         }
 
@@ -234,8 +245,10 @@ public partial class ArenaView : Node2D
             {
                 pre[i] = (_world.Players[i].Position, _world.Players[i].Velocity, _world.Players[i].Damage);
             }
+            _groundFxDetector.BeforeTick();
             _world.Tick(_inputs);
             DetectDeaths(pre);
+            _groundFxDetector.AfterTick();
             if (_pauseAtTick >= 0 && _world.TickCount >= _pauseAtTick)
             {
                 _pauseAtTick = -1;
@@ -269,15 +282,18 @@ public partial class ArenaView : Node2D
         _weather.Sync(_world.TickCount);
         // Weather nudges the rig's ambient within its hard amplitude cap (embers
         // warm, precipitation darkens); the rig is otherwise static during play.
-        if (_tileRig is not null && _weather.Plan.Instances.Count > 0)
+        // The same gate x intensity blends ground dust toward the weather color.
+        float weatherGate = 0f;
+        if (_weather.Plan.Instances.Count > 0)
         {
             BrawlerSim.Weather.WeatherInstancePlan w = _weather.Plan.Instances[0];
             float t = _world.TickCount / 60f;
-            _tileRig.SetShaderParameter("weather_mod",
+            weatherGate = w.EpisodeGate.Evaluate(t) * w.Intensity.Evaluate(t);
+            _tileRig?.SetShaderParameter("weather_mod",
                 BrawlerSim.Lighting.LightRig.WeatherModulation(
-                    _lightRig, w.Preset.Type,
-                    w.EpisodeGate.Evaluate(t) * w.Intensity.Evaluate(t)));
+                    _lightRig, w.Preset.Type, weatherGate));
         }
+        _groundFxDetector.Drain(_groundFx, weatherGate);
         _minimap.Sync();
         _hud.Sync(_inputs);
     }
