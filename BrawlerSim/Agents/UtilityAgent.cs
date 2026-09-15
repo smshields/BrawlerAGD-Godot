@@ -798,7 +798,7 @@ public sealed partial class UtilityAgent : IInputSource
             // closing target's led position falls inside the close-range gate and
             // the shot is refused; a retreating target must still be in range at
             // release. Loose by design: horizontal lead only. The gate is TRUE
-            // distance since directional launch (2026-09-14, DEVIATIONS #39) so a
+            // distance since directional launch (2026-09-14, CHANGE_LOG #39) so a
             // vertical bolt can fire at a target overhead at small dx.
             float warmUpSeconds = ranged.WarmUpTicks * world.Config.Dt;
             var led = new Determinism.Vec2(
@@ -972,7 +972,7 @@ public sealed partial class UtilityAgent : IInputSource
 
     /// <summary>
     /// The spec's "loose range of hits" test, generalized for DIRECTIONAL launch
-    /// (2026-09-14, DEVIATIONS #39; previously a horizontal corridor: dx within the
+    /// (2026-09-14, CHANGE_LOG #39; previously a horizontal corridor: dx within the
     /// closed-form range, vertical offset within the lateral envelope). Samples the
     /// bolt's ACTUAL closed-form path — from its real perimeter spawn, with the
     /// shooter's real facing — every few ticks of its TTL; a sample inside the

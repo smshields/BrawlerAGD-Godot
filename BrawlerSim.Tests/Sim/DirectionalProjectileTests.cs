@@ -9,7 +9,7 @@ using Xunit;
 namespace BrawlerSim.Tests.Sim;
 
 /// <summary>
-/// Directional projectiles (2026-09-14, designer-directed; DEVIATIONS #39): bolts
+/// Directional projectiles (2026-09-14, designer-directed; CHANGE_LOG #39): bolts
 /// gained melee's directionality — a launchAngle gene with moveAngle's polar
 /// convention (0 = straight ahead, mirrored by facing; π/2 = straight up), a
 /// PERIMETER spawn (the body-edge exit point along the launch direction, replacing
@@ -156,7 +156,7 @@ public class DirectionalProjectileTests
         Assert.Equal(1, world.Players[0].ProjectileHits);
     }
 
-    // ── The agent sees direction (DEVIATIONS #39) ──────────────────────────────
+    // ── The agent sees direction (CHANGE_LOG #39) ──────────────────────────────
 
     /// <summary>The aim test samples the bolt's actual path: a straight-up bolt can
     /// never hit a level target, so the agent must not fire it; the same-speed
