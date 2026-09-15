@@ -2,15 +2,17 @@
 
 Automated game design for 2D brawler (platform-fighter) games: a genetic algorithm evolves
 characters, moves, and stages, evaluated by AI self-play against a fitness function. This is
-the Godot 4 / C# successor to the Unity project behind *"Searching for Balanced 2D Brawler
-Games: Successes and Failures of Automated Evaluation"* (Shields, Mawhorter, Melcer, Mateas —
-AIIDE 2022). Original Unity implementation: [smshields/BrawlerAGD](https://github.com/smshields/BrawlerAGD).
+built in Godot 4 / C#. The idea comes from *"Searching for Balanced 2D Brawler Games:
+Successes and Failures of Automated Evaluation"* (Shields, Mawhorter, Melcer, Mateas —
+AIIDE 2022), whose Unity implementation lives at
+[smshields/BrawlerAGD](https://github.com/smshields/BrawlerAGD). This project began as a
+rewrite of that system, but has since moved well beyond it: the two share concepts, not
+behavior, and parity with the original is no longer a design goal.
 
-**Status:** the Unity→Godot conversion is complete — schema/genome layer, deterministic sim
-core, evolution engine + CLI, full Godot app (Play / Watch / Evolve / Manage), export
-pipeline, and a replication study validating evolution dynamics against the paper. Current
-work adds new evolvable mechanics (multi-move controls, shields, dashes, projectiles,
-evolvable stages, 2–4 player matches with stock/timed rules) on top;
+**Status:** the foundation is done — schema/genome layer, deterministic sim core, evolution
+engine + CLI, full Godot app (Play / Watch / Evolve / Manage), and an export pipeline.
+Current work adds new evolvable mechanics (multi-move controls, shields, dashes,
+projectiles, evolvable stages, 2–4 player matches with stock/timed rules) on top;
 [FEATURES.md](FEATURES.md) is the design spec.
 
 Characters look like what they are: each genome carries a heritable sprite gene selected

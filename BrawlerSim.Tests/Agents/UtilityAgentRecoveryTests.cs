@@ -8,7 +8,7 @@ using Xunit;
 namespace BrawlerSim.Tests.Agents;
 
 /// <summary>
-/// Nearest-platform recovery (2026-09-10, designer-directed — DEVIATIONS #38).
+/// Nearest-platform recovery (2026-09-10, designer-directed — CHANGE_LOG #38).
 /// The designer's bug report: agents chased enemies off stage and self-destructed
 /// because recovery targeted the platform nearest the OPPONENT (the far, risky
 /// option) instead of the reliable ledge back. Recovery now favors the nearest
@@ -55,7 +55,7 @@ public class UtilityAgentRecoveryTests
     [Fact]
     public void ReachabilityMeasuresTheLandingSurfaceNotThePlatformSide()
     {
-        // 2026-09-10 designer amendment to DEVIATIONS #38: a TALL platform one unit
+        // 2026-09-10 designer amendment to CHANGE_LOG #38: a TALL platform one unit
         // to the right — its SIDE is at the agent's own height (the old collision-box
         // ClosestPoint called that trivially reachable, dy = 0), but its TOP (y = 2)
         // is 4.4 above, beyond the 8-force jump peak (~3.3 at g = 9.81). A LOW

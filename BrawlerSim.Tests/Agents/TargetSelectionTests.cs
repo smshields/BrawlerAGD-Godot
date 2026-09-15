@@ -8,7 +8,7 @@ using Xunit;
 namespace BrawlerSim.Tests.Agents;
 
 /// <summary>
-/// UtilityAgent target selection for 3-4 players (2026-08-12, DEVIATIONS #32):
+/// UtilityAgent target selection for 3-4 players (2026-08-12, CHANGE_LOG #32):
 /// nearest non-eliminated enemy, present preferred over blacked-out, vulnerable over
 /// spawn-immune, squared-distance nearest within a tier, lower index on ties, zero
 /// RNG. The N=2 reduction (target ≡ the single opponent, whatever its condition) is
@@ -144,17 +144,17 @@ public class TargetSelectionTests
         // goldens unmoved. Prior pin: 16047808205587140936.
         // Re-pinned 2026-09-01 (thin platforms, agent step — FEATURE-FINAL): the
         // utility agents now read the thin flags (drop-route traversal, safe-drop
-        // escape, gated crouch utilities — DEVIATIONS #34), which changes their
+        // escape, gated crouch utilities — CHANGE_LOG #34), which changes their
         // Re-pinned 2026-09-10 (fourth pin that day): recovery reachability measures
-        // the LANDING SURFACE, not the collision box's closest point (DEVIATIONS #38
+        // the LANDING SURFACE, not the collision box's closest point (CHANGE_LOG #38
         // amendment). The 2P utility golden is unmoved by this one — its GameC match
         // has no recovery this changes. Prior pin: 16241560751694857092.
         // Re-pinned 2026-09-10 (third pin that day): nearest-platform recovery
-        // (DEVIATIONS #38). Prior pin: 8122319624593953844.
+        // (CHANGE_LOG #38). Prior pin: 8122319624593953844.
         // Re-pinned 2026-09-10 (second pin that day): agent chain defense
-        // (DEVIATIONS #37 — percent-aware DI + stun-exit chain escape). Prior pin:
+        // (CHANGE_LOG #37 — percent-aware DI + stun-exit chain escape). Prior pin:
         // 6268288007970569437.
-        // Re-pinned 2026-09-10: knockback X-flip quirk removed (DEVIATIONS #36,
+        // Re-pinned 2026-09-10: knockback X-flip quirk removed (CHANGE_LOG #36,
         // designer-directed; see MatchTests.GoldenMatchHashMatches). Prior pin:
         // 4158844278074372289.
         // decisions on this thin-carrying fixture. The 2P utility golden (thin-free
@@ -170,7 +170,7 @@ public class TargetSelectionTests
         // generation draws changed this GENERATED fixture genome. Thin platforms do
         // not behave differently yet at this pin — expect further dated re-pins as
         // the sim and agent steps land. Prior pin: 12249141685285748551.
-        // Re-pinned 2026-08-13: Smash-style stage containment (DEVIATIONS #33)
+        // Re-pinned 2026-08-13: Smash-style stage containment (CHANGE_LOG #33)
         // changed generation, so this generated fixture genome changed. Prior pin:
         // 8893643871391191293.
         // Pinned 2026-08-12 (first pin — the 4P mode is new with this feature):

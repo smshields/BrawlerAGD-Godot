@@ -209,7 +209,7 @@ public sealed partial class UtilityAgent
     /// hittable — canHit already encodes the close-range gate, the RELEASE-MOMENT
     /// lead (2026-09-04), and the loose aim, so this behavior only prices the
     /// candidate — at PARITY with melee since 2026-09-04 (designer-directed,
-    /// DEVIATIONS #35). A break-stunned opponent gets the half punish bonus (the
+    /// CHANGE_LOG #35). A break-stunned opponent gets the half punish bonus (the
     /// full one belongs to melee, which actually confirms).</summary>
     private sealed class ProjectileBehavior : IUtilityBehavior
     {
@@ -232,7 +232,7 @@ public sealed partial class UtilityAgent
         }
     }
 
-    /// <summary>Zoning stance (2026-09-04, designer-directed — DEVIATIONS #35): a
+    /// <summary>Zoning stance (2026-09-04, designer-directed — CHANGE_LOG #35): a
     /// character holding a fireable projectile plays RANGE instead of pure rushdown.
     /// Too close for the firing gate → back out (edge-safe via the shared retreat
     /// helper); inside the firing pocket → plant and let the attack channel shoot.
@@ -370,7 +370,7 @@ public sealed partial class UtilityAgent
                 scores.Vertical[UtilityScores.Down] += DropPursuit;
             }
             // DI pre-positioning: about to be hit (or being juggled) → hold and up.
-            // Percent-aware since 2026-09-10 (DEVIATIONS #37): at low damage there is
+            // Percent-aware since 2026-09-10 (CHANGE_LOG #37): at low damage there is
             // no kill risk and the always-toward-center hold FED stun chains (mid-
             // stage, the attacker usually IS center-ward — the victim's own DI pulled
             // it back into the chain), so the low-damage hold breaks adjacency by
@@ -420,7 +420,7 @@ public sealed partial class UtilityAgent
             }
             int away = SafeRetreatDirection(in ctx, requireGrounded: true);
             scores.Horizontal[UtilityScores.Toward(away)] += ThreatDodgeMove;
-            // Hop away only when GROUNDED (2026-07-22, DEVIATIONS #28): a flinch-dodge
+            // Hop away only when GROUNDED (2026-07-22, CHANGE_LOG #28): a flinch-dodge
             // is a cheap ground hop. Spending the AIR jump to flinch mid-air was the
             // large-map oscillation bug — the agent burned its second jump dodging
             // while airborne (which happens constantly on wide/tall maps), stranding

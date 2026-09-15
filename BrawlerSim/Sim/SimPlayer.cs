@@ -405,7 +405,7 @@ public sealed class SimPlayer
     /// airtime (the spec's third air action, usable even with jumps spent).</summary>
     public bool CanDash => IsGrounded || !AirDashUsed;
 
-    /// <summary>The air budget is FULLY spent (2026-07-23 designer rule, DEVIATIONS
+    /// <summary>The air budget is FULLY spent (2026-07-23 designer rule, CHANGE_LOG
     /// #31): the AirJumpsExhausted state — and its movement-only lockout — now
     /// requires the air jump AND the air dash when the character has one
     /// (jump, jump, and dash in any order). Jumps spent with a dash still in hand
@@ -555,7 +555,7 @@ public sealed class SimPlayer
             {
                 State = PlayerState.AirJumpsExhausted;
             }
-            // else (2026-07-23, DEVIATIONS #31): an unused air dash keeps the
+            // else (2026-07-23, CHANGE_LOG #31): an unused air dash keeps the
             // character in Air with full air abilities — exhaustion requires
             // jump, jump, AND dash.
         }
@@ -568,7 +568,7 @@ public sealed class SimPlayer
     private void StepAirJumpsExhausted(in InputFrame input)
     {
         // Unity parity: movement only — no attacks once the air budget is
-        // spent. Since the 2026-07-23 exhaustion rule (DEVIATIONS #31) this
+        // spent. Since the 2026-07-23 exhaustion rule (CHANGE_LOG #31) this
         // state is only entered FULLY spent (jumps AND dash), so the old
         // dash-entry branch here is unreachable and gone — a dash in hand
         // keeps the player in Air instead.
@@ -608,7 +608,7 @@ public sealed class SimPlayer
     }
 
     /// <summary>Which airborne state the current air budget puts the player in
-    /// (DEVIATIONS #31: exhaustion requires jump, jump, AND dash).</summary>
+    /// (CHANGE_LOG #31: exhaustion requires jump, jump, AND dash).</summary>
     private PlayerState AirStateForBudget() =>
         FullyAirExhausted ? PlayerState.AirJumpsExhausted : PlayerState.Air;
 

@@ -29,7 +29,7 @@ public static class MoveRules
     /// <summary>
     /// Effective knockback direction: the raw gene vector, verbatim.
     ///
-    /// HISTORY (DEVIATIONS #36): through 2026-09-09 this was the Unity-parity rule
+    /// HISTORY (CHANGE_LOG #36): through 2026-09-09 this was the Unity-parity rule
     /// "if the raw knockback vector points within 45° of the hitbox direction, flip
     /// its X" — the paper's documented "knockback pointing diagonally backwards"
     /// quirk. Evolution learned to TARGET the flip: aligning moveAngle with the

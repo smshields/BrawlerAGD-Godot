@@ -62,7 +62,7 @@ public class UtilityAgentTests
     }
 
     /// <summary>
-    /// Regression for the 2026-07-22 air-jump-conservation fix (DEVIATIONS #28). Two
+    /// Regression for the 2026-07-22 air-jump-conservation fix (CHANGE_LOG #28). Two
     /// platforms adjacent at the SAME height (touching at x = 0) are one walkable
     /// surface: an agent at the seam edge with the opponent on the far platform must
     /// WALK across, not hop. The pre-fix traversal always jumped for a same-or-higher
@@ -345,17 +345,17 @@ public class UtilityAgentTests
             AgentConfig.Default.CreateSource(new Pcg32(20260709, 1)),
         });
         // Re-pinned 2026-09-10 (third pin that day): nearest-platform recovery
-        // (DEVIATIONS #38) — the reachable recovery pick is now nearest-to-self with
+        // (CHANGE_LOG #38) — the reachable recovery pick is now nearest-to-self with
         // the momentum split, not nearest-to-the-opponent. Prior pin:
         // 2527329711807338059.
         // Re-pinned 2026-09-10 (second pin that day): agent chain defense
-        // (DEVIATIONS #37) — percent-aware DI and the stun-exit chain-escape
+        // (CHANGE_LOG #37) — percent-aware DI and the stun-exit chain-escape
         // defense trigger change the instrument's decisions in stun exchanges.
         // Prior pin: 16643597873151639441.
-        // Re-pinned 2026-09-10: knockback X-flip quirk removed (DEVIATIONS #36,
+        // Re-pinned 2026-09-10: knockback X-flip quirk removed (CHANGE_LOG #36,
         // designer-directed; see MatchTests.GoldenMatchHashMatches). Prior pin:
         // 6003077694252399340.
-        // Re-pinned 2026-07-22: agent air-jump-conservation (DEVIATIONS #28 — the
+        // Re-pinned 2026-07-22: agent air-jump-conservation (CHANGE_LOG #28 — the
         // large-map oscillation fix). Two behavior refinements changed the utility
         // instrument's decisions: ThreatDodge no longer spends the AIR jump to flinch
         // (grounded hops only), and traversal only jumps for a real height gain or gap

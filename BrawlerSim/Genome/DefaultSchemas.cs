@@ -177,7 +177,7 @@ public static class DefaultSchemas
         new ParamSpec(CharacterParams.CrouchHeightRatio, 0.4f, 0.9f),
         // DI genes GENERATE in the live ranges but VALIDATE down to 0: the loader's
         // neutral default for pre-feature genomes is 0 = mechanic off (same
-        // generation-vs-valid-domain split as knockbackModX, DEVIATIONS #13).
+        // generation-vs-valid-domain split as knockbackModX, CHANGE_LOG #13).
         new ParamSpec(CharacterParams.DirectionalInfluence, 0.02f, 0.10f) { ValidMin = 0f },
         new ParamSpec(CharacterParams.DiKnockbackReduction, 0.05f, 0.20f) { ValidMin = 0f },
         // Thin platforms (2026-09-01, designer bounds: "very slight delay", up to

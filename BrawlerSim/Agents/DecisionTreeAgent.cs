@@ -75,7 +75,7 @@ public sealed class DecisionTreeAgent : IInputSource
         // 2026-07-08 multi-move controls: the agent's decisions are unchanged, only the
         // encoding — "attack" now means pressing the lowest-index button mapped to the
         // move it wants. The ported tree only ever wants move 0 (the single Unity move);
-        // move selection for multi-move genomes is future agent work (DEVIATIONS.md).
+        // move selection for multi-move genomes is future agent work (CHANGE_LOG.md).
         byte actions = 0;
         if (_pressAttack)
         {

@@ -52,7 +52,7 @@ public class MoveRulesTests
     [Fact]
     public void KnockbackAlignedWithHitboxIsNoLongerFlipped()
     {
-        // DEVIATIONS #36 (2026-09-10): through 2026-09-09 a knockback vector within
+        // CHANGE_LOG #36 (2026-09-10): through 2026-09-09 a knockback vector within
         // 45° of the hitbox direction had its X flipped (the Unity/paper quirk), and
         // evolution aligned genes deliberately to mint inward-knockback stun chains.
         // The gene vector now applies verbatim: hitbox +X, knockback +X → stays +X.

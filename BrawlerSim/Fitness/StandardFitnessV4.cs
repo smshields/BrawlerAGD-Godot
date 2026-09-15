@@ -7,7 +7,7 @@ namespace BrawlerSim.Fitness;
 /// standard-v3's EXACT terms plus a SELF-DESTRUCT punishment — "punish stages that
 /// have characters who self-destruct" (leave a platform and die without a hit that
 /// knocked them off or a person who pushed them off; see the KO-attribution rules in
-/// DEVIATIONS #32). The term: −1 per self-destruct summed over both players, CAPPED
+/// CHANGE_LOG #32). The term: −1 per self-destruct summed over both players, CAPPED
 /// at −4 per match so one degenerate match cannot drown every other signal.
 ///
 /// v3 remains frozen and selectable; v4 is the default for NEW two-player runs.

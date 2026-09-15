@@ -8,7 +8,7 @@ using Xunit;
 namespace BrawlerSim.Tests.Agents;
 
 /// <summary>
-/// Chain defense (2026-09-10, designer-directed — DEVIATIONS #37). The designer's bug
+/// Chain defense (2026-09-10, designer-directed — CHANGE_LOG #37). The designer's bug
 /// report: inward-knockback kits chained stunned victims because (a) the stunned DI
 /// hold always pointed toward stage center — mid-stage that is usually INTO the
 /// attacker — and (b) nothing treated stun exit as a moment to defend, so the victim

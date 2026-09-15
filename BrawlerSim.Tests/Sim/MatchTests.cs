@@ -108,7 +108,7 @@ public class MatchTests
     public void GoldenMatchHashMatches()
     {
         MatchResult result = RunAiMatch(StudyGame("GameC"), seed: 20260707);
-        // Re-pinned 2026-09-10: knockback X-flip quirk REMOVED (DEVIATIONS #36,
+        // Re-pinned 2026-09-10: knockback X-flip quirk REMOVED (CHANGE_LOG #36,
         // designer-directed) — EffectiveKnockback now returns the gene vector
         // verbatim, so every hit whose knockback aligned within 45° of the hitbox
         // direction sends the victim the other way. Prior pin: 14074722867888814238.

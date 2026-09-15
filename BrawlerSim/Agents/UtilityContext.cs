@@ -36,11 +36,11 @@ public readonly record struct UtilityContext(
     bool CrouchClearsThreat,
     bool ProjectileThreat,
     bool RangedThreat,
-    // Thin platforms (2026-09-01, DEVIATIONS #34) — all false on thin-free stages.
+    // Thin platforms (2026-09-01, CHANGE_LOG #34) — all false on thin-free stages.
     bool OnThinPlatform,
     bool CanDropSafely,
     bool TraversalDrop,
-    // Chain defense (2026-09-10, DEVIATIONS #37): true on exactly the first tick
+    // Chain defense (2026-09-10, CHANGE_LOG #37): true on exactly the first tick
     // after leaving Stun — the chain-escape window an adjacent attacker exploits.
     bool JustExitedStun);
 

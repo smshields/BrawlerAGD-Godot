@@ -13,7 +13,7 @@ namespace BrawlerGodot;
 /// panels, whose gaps show the world — never extends past the kill (blast) box, so a
 /// kill line is never on screen and characters never vanish mid-screen; the zoom never
 /// goes tighter than the legacy framing (10 world units tall — the legibility floor).
-/// Generation guarantees the complementary half (DEVIATIONS #33): every platform sits
+/// Generation guarantees the complementary half (CHANGE_LOG #33): every platform sits
 /// inside the kill box with the floor clear of the HUD band at the widest legal zoom.
 /// Purely cosmetic — reads sim state only.
 /// </summary>

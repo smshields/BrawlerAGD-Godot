@@ -40,7 +40,7 @@ public sealed partial class UtilityAgent : IInputSource
     private const float AttackDamagePreference = 0.05f; // dmg ≤ ~15 → bonus ≤ 0.75 < base 4
 
     // Projectiles (2026-07-14, FEATURES.md §Projectiles agent spec). EQUAL WEIGHTING
-    // since 2026-09-04 (designer-directed, DEVIATIONS #35): the original 2.6/0.04
+    // since 2026-09-04 (designer-directed, CHANGE_LOG #35): the original 2.6/0.04
     // soft melee preference — on top of the melee-first movement stack — helped
     // drive projectile slots extinct under random composition (probe: bolts released
     // at median dx 1.3-2.2 after the target closed during warm-up, 87-91% cross-match
@@ -49,7 +49,7 @@ public sealed partial class UtilityAgent : IInputSource
     private const float ProjectileDamagePreference = 0.05f; // == AttackDamagePreference
     private const float MinProjectileRange = 2.5f;      // the close-range gate
     private const float ProjectileCorridorSlack = 0.6f; // vertical looseness of the aim test
-    // Zoning stance (2026-09-04, designer-directed — DEVIATIONS #35): a projectile
+    // Zoning stance (2026-09-04, designer-directed — CHANGE_LOG #35): a projectile
     // carrier plays RANGE. Retreat must beat Approach (1.5) but stay below Flank
     // (2.5) so platform routing still wins; the hold keeps the agent planted in the
     // firing pocket instead of drifting in. All O(moves) arithmetic per decision —
@@ -113,7 +113,7 @@ public sealed partial class UtilityAgent : IInputSource
     private const float DefenseFastFallVulnerable = 2.8f; // favored in warm-up/cool-down/exhausted (spec)
     private const float DefenseCrouch = 2.5f;       // only when the crouched hurtbox clears the arc
     // Thin platforms (2026-09-01, FEATURES.md: drop-through as an ESCAPE route, only
-    // with a safe landing below — DEVIATIONS #34): a defense-channel option (hold
+    // with a safe landing below — CHANGE_LOG #34): a defense-channel option (hold
     // down, the crouch drop does the rest), plus a grounded drop-pursuit and a
     // vulnerable drop-disengage on the vertical channel.
     private const float DefenseDrop = 2.5f;
@@ -122,13 +122,13 @@ public sealed partial class UtilityAgent : IInputSource
     // the better answer to a ranged threat (designer: reflect should increase
     // defensive usage of these options).
     private const float ReflectDefenseBoost = 1.5f;
-    // Chain defense (2026-09-10, DEVIATIONS #37 — designer bug report: inward-knockback
+    // Chain defense (2026-09-10, CHANGE_LOG #37 — designer bug report: inward-knockback
     // kits chained stunned victims who neither DI'd out nor defended on stun exit):
     // the defense channel also triggers on the first decision after leaving Stun with
     // the attacker inside this range, and low-damage DI holds AWAY from the attacker
     // (survival DI toward the far blast line takes over past HighDamageThreshold).
     private const float ChainEscapeRange = 3f;
-    // Nearest-platform recovery (2026-09-10, DEVIATIONS #38): below this horizontal
+    // Nearest-platform recovery (2026-09-10, CHANGE_LOG #38): below this horizontal
     // speed the momentum split is off and recovery is purely nearest-reachable.
     private const float RecoverMomentumEpsilon = 0.1f;
     private const float BaselineVerticalNeutral = 0.5f;
@@ -249,7 +249,7 @@ public sealed partial class UtilityAgent : IInputSource
 
         bool salient =
             (self.State == PlayerState.Stun && !_wasStunned) ||
-            // Stun EXIT is as salient as entry (2026-09-10, DEVIATIONS #37): waiting
+            // Stun EXIT is as salient as entry (2026-09-10, CHANGE_LOG #37): waiting
             // out the decision interval hands a chaining attacker up to 8 free ticks.
             ctx.JustExitedStun ||
             (self.IsGrounded != _wasGrounded) ||
@@ -306,7 +306,7 @@ public sealed partial class UtilityAgent : IInputSource
     private void ApplyDefenseChannel(in UtilityContext ctx, UtilityScores scores,
         ref int moveChoice, ref int verticalChoice, ref int jumpChoice, ref int attackChoice)
     {
-        // Chain escape (2026-09-10, DEVIATIONS #37): the first decision after leaving
+        // Chain escape (2026-09-10, CHANGE_LOG #37): the first decision after leaving
         // Stun with the attacker in chain range is a defense moment even before any
         // telegraph — inward-knockback kits re-swing faster than the telegraph scan
         // reacts. A counter-hit in hand still takes priority (trade-commit: landing
@@ -551,7 +551,7 @@ public sealed partial class UtilityAgent : IInputSource
         return scores.Length - 1; // float round-off guard
     }
 
-    // ── Target selection (2026-08-12, four-player.md; DEVIATIONS #32) ──────────
+    // ── Target selection (2026-08-12, four-player.md; CHANGE_LOG #32) ──────────
 
     /// <summary>
     /// The enemy this agent fights: nearest non-eliminated enemy, preferring PRESENT
@@ -610,7 +610,7 @@ public sealed partial class UtilityAgent : IInputSource
         bool targetSensed = false, reachable = false;
         if (overPit)
         {
-            // Nearest-platform recovery (2026-09-10, DEVIATIONS #38 — reverses the
+            // Nearest-platform recovery (2026-09-10, CHANGE_LOG #38 — reverses the
             // 2026-07-10 chase-preserving pick): among REACHABLE sensed platforms,
             // prefer the one closest to SELF — the reliable ledge back, not the
             // opponent's far platform.
@@ -621,7 +621,7 @@ public sealed partial class UtilityAgent : IInputSource
         int facingToOpponent = opponent.Position.X >= self.Position.X ? 1 : -1;
         var canHit = new bool[self.Moves.Count];
         bool anyCanHit = false;
-        // Spawn immunity (2026-07-22, DEVIATIONS #29): an intangible/invulnerable
+        // Spawn immunity (2026-07-22, CHANGE_LOG #29): an intangible/invulnerable
         // opponent takes no damage — "agents shouldn't attempt to attack an invulnerable
         // enemy." Force every hit-check false so attack/projectile/doomed don't swing at
         // a ghost. Gated on the SPAWN immunity only (not the 0.1 s post-hit
@@ -639,7 +639,7 @@ public sealed partial class UtilityAgent : IInputSource
         bool underThreat = ScanEnemyThreatReach(world, self);
 
         // Vulnerable = cannot attack (CoolDown / AirJumpsExhausted). Since the
-        // 2026-07-23 exhaustion rule (DEVIATIONS #31) a dash in hand keeps the
+        // 2026-07-23 exhaustion rule (CHANGE_LOG #31) a dash in hand keeps the
         // character in Air — able to attack, so chasing is legitimate there; the
         // exhausted state now always means the WHOLE air budget is gone.
         bool vulnerable = self.State is PlayerState.CoolDown or PlayerState.AirJumpsExhausted;
@@ -653,7 +653,7 @@ public sealed partial class UtilityAgent : IInputSource
 
         (int flankDirection, bool flankSafe) = ComputeFlank(world, self, opponent);
 
-        // Thin platforms (2026-09-01, DEVIATIONS #34): where the character stands and
+        // Thin platforms (2026-09-01, CHANGE_LOG #34): where the character stands and
         // whether a crouch drop from here lands somewhere. All false on thin-free
         // stages — the instrument is untouched there (utility golden unmoved).
         int myPlatform = graph.PlatformAt(self.Position);
@@ -791,7 +791,7 @@ public sealed partial class UtilityAgent : IInputSource
             {
                 continue;
             }
-            // Commit awareness + horizontal lead (2026-09-04, DEVIATIONS #35): the
+            // Commit awareness + horizontal lead (2026-09-04, CHANGE_LOG #35): the
             // shot is a warm-up commitment, so AIM AT THE RELEASE MOMENT — the
             // target's position led by its current velocity over the warm-up. A
             // closing target's led position falls inside the close-range gate and
@@ -956,7 +956,7 @@ public sealed partial class UtilityAgent : IInputSource
         var launch = new Vec2(launchX, mine.Top);
         int direction = next.Center.X >= mine.Center.X ? 1 : -1;
         // Hop only for a real height gain or a real horizontal gap (2026-07-22,
-        // DEVIATIONS #28). The old test (next.Top >= mine.Top − 0.5) jumped between
+        // CHANGE_LOG #28). The old test (next.Top >= mine.Top − 0.5) jumped between
         // platforms at the SAME height that were horizontally ADJACENT — common on
         // large mirrored maps, where the two center halves touch — burning the air
         // jump to "hop" across ground the agent could simply walk onto. A gap of 0
@@ -1096,7 +1096,7 @@ public sealed partial class UtilityAgent : IInputSource
     /// LANDING SURFACE (nearest point on the top edge) is nearest to SELF; when none
     /// is reachable, the nearest-to-self landing point (the Doomed check's subject).
     ///
-    /// HISTORY (DEVIATIONS #38): from 2026-07-10 to 2026-09-10 the reachable pick was
+    /// HISTORY (CHANGE_LOG #38): from 2026-07-10 to 2026-09-10 the reachable pick was
     /// nearest-to-the-OPPONENT (chase-preserving directional recovery). The designer
     /// reversed it 2026-09-10: agents chasing an enemy off stage aimed their recovery
     /// at the enemy's platform — the far, risky option — and self-destructed when the
@@ -1135,7 +1135,7 @@ public sealed partial class UtilityAgent : IInputSource
                 continue;
             }
             // Measure to the LANDING SURFACE (2026-09-10 designer amendment to
-            // DEVIATIONS #38): the nearest point on the platform's TOP edge, x
+            // CHANGE_LOG #38): the nearest point on the platform's TOP edge, x
             // clamped to its span. The old collision-box ClosestPoint let a tall
             // solid platform's low SIDE point pass the reachability test — but
             // reaching a side is not landing, so agents committed to ledges they

@@ -66,7 +66,7 @@ public sealed class SimWorld
     public Vec2 VisibleHalf { get; }
 
     /// <summary>
-    /// AI platform-sensing half extents (2026-07-21, DEVIATIONS #27): the fixed Unity
+    /// AI platform-sensing half extents (2026-07-21, CHANGE_LOG #27): the fixed Unity
     /// 20×15 sense box scaled by how much larger than legacy this map is (never
     /// scaled DOWN — small maps keep the full instrument). On legacy-size maps the
     /// factor is exactly 1, leaving the fitness instrument untouched.

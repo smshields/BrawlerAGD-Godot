@@ -140,7 +140,7 @@ public class DashTests
     public void AirBudgetAllowsAllThreeOrderingsThenExhausts()
     {
         // jump - jump - dash: both jumps spent but the dash in hand keeps the
-        // character in Air (2026-07-23 exhaustion rule, DEVIATIONS #31); the dash
+        // character in Air (2026-07-23 exhaustion rule, CHANGE_LOG #31); the dash
         // still fires; afterwards the character is fully exhausted until landing.
         SimWorld world = Grounded(DashArena(), -6f, 6f);
         SimPlayer p = world.Players[0];
@@ -349,7 +349,7 @@ public class DashTests
     [Fact]
     public void JumpsSpentWithADashInHandIsNotExhausted()
     {
-        // Designer bug report (2026-07-23, DEVIATIONS #31): air jumps were flipping
+        // Designer bug report (2026-07-23, CHANGE_LOG #31): air jumps were flipping
         // the character into the EXHAUSTED state with the dash still unused. The
         // exhausted state (and its movement-only lockout) must require jump, jump,
         // AND dash — with a dash in hand the character stays in Air, where attacks

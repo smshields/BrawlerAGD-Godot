@@ -110,7 +110,7 @@ public class Phase1PipelineTests
         // goldens + utility golden + 4P golden unmoved. ContentKey/naming seeds
         // verified byte-stable (null suppression). Prior pin: 14350526745249818436.
         // Re-pinned 2026-08-13: Smash-style stage containment (designer;
-        // docs/features/four-player.md follow-up, DEVIATIONS #33) — every platform
+        // docs/features/four-player.md follow-up, CHANGE_LOG #33) — every platform
         // must sit completely inside the kill box and the floor must clear the bottom
         // kill line by the derived HUD-band clearance. Generator acceptance, crossover
         // platform repair, mirror-transform validity, and the platform-fit bounds all

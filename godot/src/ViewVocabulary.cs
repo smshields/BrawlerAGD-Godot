@@ -95,7 +95,7 @@ public static class StateVocabulary
     }
 }
 
-/// <summary>The five-button control scheme's keycap labels (2026-07-20, DEVIATIONS
+/// <summary>The five-button control scheme's keycap labels (2026-07-20, CHANGE_LOG
 /// #25), previously triplicated across HudView / CharacterSelectView / EvolveView.
 /// Slot order is the genome's button order: I/J/K/U/L on keyboard maps to
 /// L1/X/A/Y/R1 on pad. INVARIANT: the L (pad R1) slot stays PINNED LAST — U (pad Y)

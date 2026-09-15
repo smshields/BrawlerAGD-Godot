@@ -9,7 +9,7 @@ using Xunit;
 namespace BrawlerSim.Tests.Agents;
 
 /// <summary>
-/// The agent zoning upgrade (2026-09-04, designer-directed — DEVIATIONS #35):
+/// The agent zoning upgrade (2026-09-04, designer-directed — CHANGE_LOG #35):
 /// projectile/melee score parity, the release-moment lead (aim at where the target
 /// will be when the shot actually comes out — which doubles as the commit gate
 /// against point-blank releases), and the zoner stance (a projectile carrier plays

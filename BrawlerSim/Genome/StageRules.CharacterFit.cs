@@ -4,7 +4,7 @@ using BrawlerSim.Params;
 namespace BrawlerSim.Genome;
 
 /// <summary>StageRules — the per-character platform-fit solver (2026-07-23,
-/// DEVIATIONS #30 and its 2026-07-27 iterative amendment): traversability +
+/// CHANGE_LOG #30 and its 2026-07-27 iterative amendment): traversability +
 /// asymmetric-body-gap repair, RNG-free and structurally terminating. Split
 /// from StageRules.cs 2026-09-01, pure text move.</summary>
 public static partial class StageRules

@@ -8,7 +8,7 @@ using Xunit;
 namespace BrawlerSim.Tests.Agents;
 
 /// <summary>
-/// Thin platforms, agent layer (2026-09-01, DEVIATIONS #34): drop-through as an
+/// Thin platforms, agent layer (2026-09-01, CHANGE_LOG #34): drop-through as an
 /// escape/traversal option — the platform graph gains downward drop edges from thin
 /// platforms, and the utility channels use them ONLY with a safe landing below
 /// (FEATURES.md: "only if there is a reachable platform below that they can safely
