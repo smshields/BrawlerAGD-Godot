@@ -601,7 +601,16 @@ public sealed class SimWorld
             ApplyCleanHit(victim, scaledDamage, proj.Position, proj.Move.KnockbackDirection,
                 proj.Facing, proj.Move.KnockbackScalar * proj.DamageScale,
                 proj.Move.HitstunDuration, proj.Owner);
-            _players[proj.Owner].ProjectileHits++;
+            // A self-hit is not a landed hit (2026-09-14, designer): the split keeps
+            // the research data honest about zoning accuracy.
+            if (proj.Owner != victim.Index)
+            {
+                _players[proj.Owner].ProjectileHits++;
+            }
+            else
+            {
+                victim.ProjectileSelfHits++;
+            }
             proj.Alive = false;
         }
     }
@@ -656,6 +665,10 @@ public sealed class SimWorld
         {
             victim.MarkInfluence(attackerIndex); // blocked knockback still shoves (2026-08-12)
         }
+        else
+        {
+            victim.SelfBlockedHits++; // blocking your own bolt is not rewarded interaction (2026-09-14)
+        }
         victim.InvincibleTicksLeft = Config.InvincibilityTicks;
         DegradeShield(victim, shield, damage);
     }
@@ -691,6 +704,14 @@ public sealed class SimWorld
         {
             victim.MarkInfluence(attackerIndex);
             _players[attackerIndex].DamageDealt += damage;
+        }
+        else
+        {
+            // Self-inflicted (hitsSelf bolt): stats-class split so fitness v7+ can
+            // count opponent interaction only (2026-09-14).
+            victim.SelfDamageTaken += damage;
+            victim.SelfStockDamage += damage;
+            victim.SelfHitsReceived++;
         }
         victim.InvincibleTicksLeft = Config.InvincibilityTicks;
     }
@@ -1112,7 +1133,12 @@ public sealed class SimWorld
                 KOs: p.KOs,
                 DamageDealt: p.DamageDealt,
                 SelfDestructs: p.SelfDestructs,
-                DropThroughs: p.DropThroughs)).ToArray(),
+                DropThroughs: p.DropThroughs,
+                SelfDamageTaken: p.SelfDamageTaken,
+                SelfHitsReceived: p.SelfHitsReceived,
+                SelfBlockedHits: p.SelfBlockedHits,
+                ProjectileSelfHits: p.ProjectileSelfHits,
+                SelfDamagePerStock: p.CompletedStockSelfDamage.Append(p.SelfStockDamage).ToArray())).ToArray(),
             LoserIndex,
             TickCount,
             TickCount / (float)Config.TicksPerSecond,

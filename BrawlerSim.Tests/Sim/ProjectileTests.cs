@@ -302,6 +302,53 @@ public class ProjectileTests
         }
     }
 
+    /// <summary>Regression (2026-09-14, designer report): self-hits were rewarded —
+    /// they inflated TotalDamageTaken/TotalHitsReceived (the fitness damage and
+    /// collisions inputs) and even the shooter's ProjectileHits stat. The sim now
+    /// splits self-inflicted interaction into its own stats-class counters, and
+    /// ProjectileHits counts opponent hits only.</summary>
+    [Fact]
+    public void SelfHitIsSplitIntoSelfStatsAndNotCountedAsALandedHit()
+    {
+        // The reversal fixture from OwnerIsImmuneOnLaunchAndHitsSelfGeneGovernsAfter:
+        // a decelerating bolt comes back through the shooter with hitsSelf on.
+        var genome = ProjectileArena(
+            (ProjectileParams.Velocity, 4f),
+            (ProjectileParams.DoesAccelerate, 1f),
+            (ProjectileParams.Acceleration, -8f),
+            (ProjectileParams.TimeToDecay, 3f),
+            (ProjectileParams.HitsSelf, 1f));
+        SimWorld world = Grounded(genome, -4f, 7f);
+        SimPlayer shooter = world.Players[0];
+        FireAndWait(world);
+        int ticks = 0;
+        while (world.Projectiles.Count > 0 && shooter.TotalHitsReceived == 0 && ticks < 240)
+        {
+            world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
+            ticks++;
+        }
+
+        // The victim-side totals still see the hit (frozen fitness reads unchanged)…
+        Assert.Equal(1, shooter.TotalHitsReceived);
+        Assert.Equal(7.5f, shooter.TotalDamageTaken, 0.01f); // 5 + (0.2+0.1+0.2)·5
+        // …but the self split isolates all of it.
+        Assert.Equal(1, shooter.SelfHitsReceived);
+        Assert.Equal(shooter.TotalDamageTaken, shooter.SelfDamageTaken);
+        Assert.Equal(1, shooter.ProjectileSelfHits);
+        Assert.Equal(0, shooter.ProjectileHits);     // a self-hit is not a landed hit
+        Assert.Equal(0f, shooter.DamageDealt);       // and credits no damage dealt
+
+        MatchResult result = world.BuildResult();
+        PlayerStats stats = result.Players[0];
+        Assert.NotNull(stats.SelfDamagePerStock);
+        Assert.Equal(stats.DamagePerStock!.Count, stats.SelfDamagePerStock!.Count);
+        Assert.Equal(stats.TotalDamageTaken, stats.SelfDamagePerStock.Sum(), 0.001f);
+        // The opponent never touched anyone: recorded, but all zero.
+        Assert.Equal(0, result.Players[1].SelfHitsReceived);
+        Assert.All(result.Players[1].SelfDamagePerStock!, d => Assert.Equal(0f, d));
+        Assert.Equal(0f, result.Players[1].TotalDamageTaken);
+    }
+
     [Fact]
     public void ShieldBlocksAProjectileAndItIsSpent()
     {

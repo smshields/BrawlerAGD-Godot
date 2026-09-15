@@ -199,6 +199,25 @@ public sealed class SimPlayer
     /// stock's running damage is `Damage`; BuildResult appends it non-mutatingly.</summary>
     public readonly List<float> CompletedStockDamage = new();
 
+    // Self-inflicted interaction split (2026-09-14, projectile self-hit reward fix):
+    // the hitsSelf gene lets a bolt hit its shooter, and every fitness through v6
+    // counted that damage/those hits exactly like enemy interaction (the damage,
+    // collisions, and blocks terms all read victim-side totals). These stats-class
+    // accumulators (never hashed, never read by gameplay) let standard-v7/ffa-v3
+    // count OPPONENT interaction only. Attribution happens in SimWorld's hit
+    // pipeline (the only place that knows the attacker), not in ApplyHit.
+    public float SelfDamageTaken;
+    public int SelfHitsReceived;
+    public int SelfBlockedHits;
+
+    /// <summary>Self-inflicted damage within the LIVE stock; banked into
+    /// CompletedStockSelfDamage in CloseOutStock exactly like Damage.</summary>
+    public float SelfStockDamage;
+
+    /// <summary>Self-inflicted damage in each COMPLETED life — index-parallel with
+    /// CompletedStockDamage, so per-stock opponent damage is the pairwise difference.</summary>
+    public readonly List<float> CompletedStockSelfDamage = new();
+
     /// <summary>How many times each move was started (2026-07-10, second-move stats).</summary>
     public readonly int[] MoveUses;
 
@@ -229,7 +248,13 @@ public sealed class SimPlayer
 
     // Projectile stats (2026-07-14, research-only).
     public int ProjectilesFired;
+
+    /// <summary>Bolts landed on OPPONENTS only (2026-09-14 amendment, designer: a
+    /// self-hit is not a landed hit — it previously counted here too).</summary>
     public int ProjectileHits;
+
+    /// <summary>Bolts that hit their own shooter via the hitsSelf gene (2026-09-14).</summary>
+    public int ProjectileSelfHits;
 
     /// <summary>Bolts re-fired by this player's reflect shield/dash (2026-07-20).</summary>
     public int ProjectilesReflected;
@@ -632,6 +657,7 @@ public sealed class SimPlayer
     private void CloseOutStock()
     {
         CompletedStockDamage.Add(Damage);
+        CompletedStockSelfDamage.Add(SelfStockDamage);
         Stocks--;
     }
 
@@ -641,6 +667,7 @@ public sealed class SimPlayer
     private void ResetToSpawnPose()
     {
         Damage = 0f;
+        SelfStockDamage = 0f;
         Velocity = Vec2.Zero;
         Position = SpawnPosition;
         State = PlayerState.Idle;
