@@ -24,9 +24,9 @@ internal static class Commands
         Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
         Console.WriteLine("           [--composition pinned|random|<attack,shield,dash,random x4>] [--type-reroll 0.2]");
         Console.WriteLine("           [--range \"schema.key=min:max;...\"]  (schemas: character|move|shield|dash|projectile|stage)");
-        Console.WriteLine("           [--fitness standard-v6|standard-v5|ffa-v2|standard-v4|ffa-v1|standard-v3|standard-v2]  (default: v5 at 2P, ffa-v2 at 3/4P; v6 = scaled-time experiment)");
+        Console.WriteLine("           [--fitness standard-v7|ffa-v3|standard-v6|standard-v5|ffa-v2|standard-v4|ffa-v1|standard-v3|standard-v2]  (default: v7 at 2P, ffa-v3 at 3/4P — self-hit-blind + scaled time)");
         Console.WriteLine("           [--max-seconds 300]");
-        Console.WriteLine("  evaluate --game <game.json> [--seed 7] [--rounds 5] [--fitness standard-v6|standard-v5|ffa-v2|standard-v4|ffa-v1|standard-v3|standard-v2]");
+        Console.WriteLine("  evaluate --game <game.json> [--seed 7] [--rounds 5] [--fitness standard-v7|ffa-v3|standard-v6|standard-v5|ffa-v2|standard-v4|ffa-v1|standard-v3|standard-v2]");
         Console.WriteLine("           [--breakdown] [--max-seconds 300] [--target-seconds 45]");
         Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
         Console.WriteLine("  replay   --game <game.json> --trace <trace.json>");
@@ -134,7 +134,7 @@ internal static class Commands
                 TargetGameLengthSeconds = GetFloat(opts, "target-seconds", 45f),
                 Match = BuildMatchConfig(opts),
                 DiversityWeight = GetFloat(opts, "diversity-weight", 0f),
-                // Absent --fitness = auto: standard-v5 at 2 players, ffa-v2 at 3/4 (2026-09-01).
+                // Absent --fitness = auto: standard-v7 at 2 players, ffa-v3 at 3/4 (2026-09-14).
                 FitnessName = opts.GetValueOrDefault("fitness"),
                 FitnessCollisionScalar = CollisionScalar(opts),
                 Generation = ParseGenerationWithSelectors(opts),
@@ -209,7 +209,8 @@ internal static class Commands
                 $"dash(n-dodge) {Per(p => $"{p.DashCount}-{p.DashInvulnDodges}")}  " +
                 $"ff-crouch-di {Per(p => $"{p.FastFallTicks}-{p.CrouchTicks}-{p.DIInfluencedHits}")}  " +
                 $"drops {Per(p => p.DropThroughs.ToString())}  " +
-                $"proj(fired-hit-refl) {Per(p => $"{p.ProjectilesFired}-{p.ProjectileHits}-{p.ProjectilesReflected}")}");
+                $"proj(fired-hit-refl) {Per(p => $"{p.ProjectilesFired}-{p.ProjectileHits}-{p.ProjectilesReflected}")}  " +
+                $"self(dmg-hits-ret) {Per(p => $"{p.SelfDamageTaken:F0}-{p.SelfHitsReceived}-{p.ProjectilesReturned}")}");
             if (breakdown && fitness is IFitnessBreakdown itemized)
             {
                 Console.WriteLine("           " + string.Join("  ",

@@ -27,7 +27,7 @@ public sealed record EvolutionConfig
 
     /// <summary>Which versioned fitness scores this run (FitnessRegistry). Recorded in
     /// run.json; resuming honors the recorded name, so old runs keep standard-v2.
-    /// Null (default) = auto: standard-v5 for two-player runs, ffa-v2 for 3/4-player
+    /// Null (default) = auto: standard-v7 for two-player runs, ffa-v3 for 3/4-player
     /// runs (2026-08-12, four-player.md).</summary>
     public string? FitnessName { get; init; }
 

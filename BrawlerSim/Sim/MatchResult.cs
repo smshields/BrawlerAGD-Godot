@@ -34,7 +34,21 @@ public sealed record PlayerStats(
     int KOs = 0,
     float DamageDealt = 0f,
     int SelfDestructs = 0,
-    int DropThroughs = 0); // thin-platform crouch drops (2026-09-01)
+    int DropThroughs = 0, // thin-platform crouch drops (2026-09-01)
+    // Self-inflicted interaction split (2026-09-14, projectile self-hit reward fix):
+    // hitsSelf-gene damage/hits/blocks landed on ONESELF, so fitness v7+ can count
+    // opponent interaction only. SelfDamagePerStock is index-parallel with
+    // DamagePerStock (opponent damage per stock = pairwise difference); null only in
+    // hand-built legacy fixtures, like DamagePerStock. ProjectileHits counts OPPONENT
+    // hits only from this date; ProjectileSelfHits keeps the self-landed count.
+    float SelfDamageTaken = 0f,
+    int SelfHitsReceived = 0,
+    int SelfBlockedHits = 0,
+    int ProjectileSelfHits = 0,
+    IReadOnlyList<float>? SelfDamagePerStock = null,
+    // 2026-09-15 never-point-back rule: own bolts spent on arrival because their
+    // own motion was carrying them back into the shooter. Fitness-blind.
+    int ProjectilesReturned = 0);
 
 /// <summary>Stage facts a fitness function may condition on (2026-09-09, scaled-time
 /// fitness): the genome's visible-map half extents, copied from SimWorld.VisibleHalf.

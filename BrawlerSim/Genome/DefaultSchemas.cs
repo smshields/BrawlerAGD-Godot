@@ -87,8 +87,9 @@ public static class ProjectileParams
     public const string DecayRate = "decayRate";
     public const string HitstunDuration = "hitstunDuration";
     public const string HitsSelf = "hitsSelf";
-    public const string LaunchX = "launchX";
-    public const string LaunchY = "launchY";
+    public const string LaunchX = "launchX";   // DEAD gene since 2026-09-14 (see schema)
+    public const string LaunchY = "launchY";   // DEAD gene since 2026-09-14 (see schema)
+    public const string LaunchAngle = "launchAngle"; // 2026-09-14 directional launch
 }
 
 /// <summary>Stable param keys for the stage schema (2026-07-21, FEATURES.md §Map Size;
@@ -324,16 +325,31 @@ public static class DefaultSchemas
         new ParamSpec(ProjectileParams.DoesRotate, 0f, 1f),
         new ParamSpec(ProjectileParams.RotationRate, 0.5f, 8f), // rad/s
         new ParamSpec(ProjectileParams.KnockbackScalar, 1f, 16f),
-        // No ConstrainKnockback for projectiles (that lerp is hitbox-location-relative,
-        // a melee concept) — so no widened valid domain either; genes stay as generated.
-        new ParamSpec(ProjectileParams.KnockbackModX, 0f, 1f),
+        // Knockback parity with melee (2026-09-14, designer: "same directionality and
+        // knockback behaviors as melee"): generation applies
+        // MoveRules.ConstrainProjectileKnockback — the melee lerp with the LAUNCH
+        // DIRECTION unit vector standing in for the hitbox location. The lerp pulls
+        // components toward [-1, 1], so ModX's valid domain widens to -1 (the same
+        // generation-vs-valid split as the melee ranges above).
+        new ParamSpec(ProjectileParams.KnockbackModX, 0f, 1f) { ValidMin = -1f },
         new ParamSpec(ProjectileParams.KnockbackModY, -1f, 1f),
         new ParamSpec(ProjectileParams.DamageFactor, 0f, 10f),
         new ParamSpec(ProjectileParams.DamageDecay, 0f, 1f),
         new ParamSpec(ProjectileParams.DecayRate, 0.1f, 1f),    // damage-scale units per second
         new ParamSpec(ProjectileParams.HitstunDuration, 0f, 1f),
         new ParamSpec(ProjectileParams.HitsSelf, 0f, 1f),
-        new ParamSpec(ProjectileParams.LaunchX, -0.5f, 0.5f),   // × body half extents
+        // DEAD GENES (2026-09-14, perimeter launch): launchX/launchY placed the spawn
+        // INSIDE the body (the original sketch's exit point) — replaced by the
+        // launchAngle perimeter exit below. The specs stay so crossover indexing and
+        // every existing file keep working (append-only rule); the sim no longer
+        // reads them. Retire them at the next structural format break.
+        new ParamSpec(ProjectileParams.LaunchX, -0.5f, 0.5f),
         new ParamSpec(ProjectileParams.LaunchY, -0.5f, 0.5f),
+        // Directional launch (2026-09-14, designer: projectiles get melee's
+        // directionality — moveAngle's exact range). 0 = straight ahead (facing-
+        // mirrored, the legacy loader default); π/2 = straight up. The bolt spawns
+        // ON the body perimeter along this direction and travels along it; path
+        // shapes bend around the launch axis, gravity stays world-down.
+        new ParamSpec(ProjectileParams.LaunchAngle, 0f, 2f * MathF.PI),
     });
 }

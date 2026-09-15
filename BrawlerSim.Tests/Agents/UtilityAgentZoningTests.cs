@@ -75,6 +75,26 @@ public class UtilityAgentZoningTests
         Assert.Equal(-1f, input.Horizontal);
     }
 
+    /// <summary>Angle-aware spacing (2026-09-15, designer: account for vertical
+    /// distance, for angle diversity). The stance's bands now measure the offset
+    /// PROJECTED ON THE BOLT'S LAUNCH AXIS instead of an isotropic ring, so two kits
+    /// at the SAME 5.8 u separation read opposite situations: an up-angled bolt has
+    /// the target 5 u up its firing line (plant and shoot), a level bolt flies away
+    /// from it entirely (no stance — close the distance instead).</summary>
+    [Theory]
+    [InlineData(MathF.PI / 2f, 0f)]  // up-angled: the target IS up the firing line
+    [InlineData(0f, -1f)]            // level: bolt points away — approach instead
+    public void ZonerSpacingFollowsTheLaunchAxisNotARingAroundIt(float angle, float expected)
+    {
+        GameGenome genome = ZonerArena((ProjectileParams.LaunchAngle, angle));
+        SimWorld world = Grounded(genome, -1f, 2f);
+        // Park the opponent ABOVE and BEHIND the (right-facing) zoner: offset (-3, +5).
+        world.Players[1].Position = new Vec2(
+            world.Players[0].Position.X - 3f, world.Players[0].Position.Y + 5f);
+        InputFrame input = new UtilityAgent(new Pcg32(1), Greedy).GetInput(world, 0);
+        Assert.Equal(expected, input.Horizontal);
+    }
+
     [Fact]
     public void ZonerNeverBacksOffALedge()
     {

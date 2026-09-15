@@ -47,8 +47,9 @@ public sealed partial class UtilityAgent : IInputSource
     // losses despite higher damage). The close-range gate stays the hard rule.
     private const float ProjectileInRange = 4.0f;       // == AttackInRange
     private const float ProjectileDamagePreference = 0.05f; // == AttackDamagePreference
-    private const float MinProjectileRange = 2.5f;      // the close-range gate
-    private const float ProjectileCorridorSlack = 0.6f; // vertical looseness of the aim test
+    private const float MinProjectileRange = 2.5f;      // the close-range gate (true distance)
+    private const float ProjectileCorridorSlack = 0.6f; // looseness of the sampled aim test
+    private const int ProjectileAimSampleStep = 3;      // path-sample stride (ticks)
     // Zoning stance (2026-09-04, designer-directed — CHANGE_LOG #35): a projectile
     // carrier plays RANGE. Retreat must beat Approach (1.5) but stay below Flank
     // (2.5) so platform routing still wins; the hold keeps the agent planted in the
@@ -795,15 +796,19 @@ public sealed partial class UtilityAgent : IInputSource
             // shot is a warm-up commitment, so AIM AT THE RELEASE MOMENT — the
             // target's position led by its current velocity over the warm-up. A
             // closing target's led position falls inside the close-range gate and
-            // the shot is refused (the probe's point-blank releases at median dx
-            // 1.3-2.2); a retreating target must still be in range at release.
-            // Loose by design like the rest of the corridor: horizontal lead only.
+            // the shot is refused; a retreating target must still be in range at
+            // release. Loose by design: horizontal lead only. The gate is TRUE
+            // distance since directional launch (2026-09-14, CHANGE_LOG #39) so a
+            // vertical bolt can fire at a target overhead at small dx.
             float warmUpSeconds = ranged.WarmUpTicks * world.Config.Dt;
             var led = new Determinism.Vec2(
                 opponent.Position.X + opponent.Velocity.X * warmUpSeconds,
                 opponent.Position.Y);
+            Determinism.Vec2 gap = led - self.Position;
             canHit[m] = !opponentImmune
-                && ProjectileCorridorHit(ranged, self, led, opponent.BodyHalf, world.Config);
+                && gap.X * gap.X + gap.Y * gap.Y >= MinProjectileRange * MinProjectileRange
+                && ProjectilePathThreatens(
+                    ranged, self, led, opponent.BodyHalf, world.Config, out _);
             anyCanHit |= canHit[m];
         }
     }
@@ -845,14 +850,13 @@ public sealed partial class UtilityAgent : IInputSource
                 }
             }
             else if (enemy.ProjectileMoves[enemy.CurrentMoveIndex] is SimProjectileMove windingShot
-                && ProjectileCorridorHit(windingShot, enemy, self, world.Config))
+                && ProjectilePathThreatens(windingShot, enemy, self.Position, self.BodyHalf,
+                    world.Config, out float shotBottom))
             {
                 telegraphThreat = true;
                 rangedTelegraph = true;
-                float corridorBottom = ProjectileCorridorCenterY(
-                    windingShot, enemy, self, world.Config) - windingShot.HalfExtent;
                 crouchClearsAllTelegraphs &= canDuck
-                    && corridorBottom > crouchedTop + CrouchClearanceEpsilon;
+                    && shotBottom > crouchedTop + CrouchClearanceEpsilon;
             }
         }
         return (telegraphThreat, rangedTelegraph, telegraphThreat && crouchClearsAllTelegraphs);
@@ -967,69 +971,38 @@ public sealed partial class UtilityAgent : IInputSource
     }
 
     /// <summary>
-    /// The spec's "loose range of hits based on projectile shape": facing-toward
-    /// reach out to the closed-form range (accounting for deceleration peaking early),
-    /// vertical tolerance = the path's lateral envelope + the sine amplitude + slack +
-    /// the target's half height, gated closed inside MinProjectileRange. Deliberately
-    /// coarse — precision comes from the sim, misses are the humanizing noise.
+    /// The spec's "loose range of hits" test, generalized for DIRECTIONAL launch
+    /// (2026-09-14, CHANGE_LOG #39; previously a horizontal corridor: dx within the
+    /// closed-form range, vertical offset within the lateral envelope). Samples the
+    /// bolt's ACTUAL closed-form path — from its real perimeter spawn, with the
+    /// shooter's real facing — every few ticks of its TTL; a sample inside the
+    /// target box (inflated by the bolt half extent + slack) is a plausible hit.
+    /// Deliberately coarse — precision comes from the sim, misses are the
+    /// humanizing noise. Shared by the shooter's aim test and the defender's
+    /// wind-up telegraph (the same geometry seen from the receiving end).
+    /// <paramref name="lowestThreatY"/> is the bottom edge of the lowest
+    /// threatening sample (crouch clearance), MaxValue when none.
     /// </summary>
-    private static bool ProjectileCorridorHit(
-        SimProjectileMove ranged, SimPlayer shooter, SimPlayer target, MatchConfig config) =>
-        ProjectileCorridorHit(ranged, shooter, target.Position, target.BodyHalf, config);
-
-    /// <summary>Position-based core (2026-09-04): the shooter aims at the LED target
-    /// position (release-moment prediction); the telegraph scan keeps the plain
-    /// current-position overload above — a committed shot threatens where you ARE.</summary>
-    private static bool ProjectileCorridorHit(SimProjectileMove ranged, SimPlayer shooter,
-        Determinism.Vec2 targetPos, Determinism.Vec2 targetHalf, MatchConfig config)
+    private static bool ProjectilePathThreatens(SimProjectileMove ranged, SimPlayer shooter,
+        Determinism.Vec2 targetPos, Determinism.Vec2 targetHalf, MatchConfig config,
+        out float lowestThreatY)
     {
-        float dx = MathF.Abs(targetPos.X - shooter.Position.X);
-        if (dx < MinProjectileRange)
+        lowestThreatY = float.MaxValue;
+        Determinism.Vec2 origin = ranged.SpawnOrigin(shooter.Position, shooter.BodyHalf, shooter.Facing);
+        float toleranceX = targetHalf.X + ranged.HalfExtent + ProjectileCorridorSlack;
+        float toleranceY = targetHalf.Y + ranged.HalfExtent + ProjectileCorridorSlack;
+        bool threatens = false;
+        for (int k = ProjectileAimSampleStep; k <= ranged.TtlTicks; k += ProjectileAimSampleStep)
         {
-            return false;
-        }
-        float ttl = ranged.TtlTicks * config.Dt;
-        float maxRange = ranged.LaunchSpeed * ttl + 0.5f * ranged.Acceleration * ttl * ttl;
-        if (ranged.Acceleration < 0f)
-        {
-            float tPeak = -ranged.LaunchSpeed / ranged.Acceleration; // decelerating: s peaks here
-            if (tPeak < ttl)
+            Determinism.Vec2 predicted = ranged.PositionAt(origin, shooter.Facing, k, config);
+            if (MathF.Abs(predicted.X - targetPos.X) <= toleranceX
+                && MathF.Abs(predicted.Y - targetPos.Y) <= toleranceY)
             {
-                maxRange = ranged.LaunchSpeed * tPeak + 0.5f * ranged.Acceleration * tPeak * tPeak;
+                threatens = true;
+                lowestThreatY = MathF.Min(lowestThreatY, predicted.Y - ranged.HalfExtent);
             }
         }
-        if (maxRange <= 0f || dx > maxRange + 1f)
-        {
-            return false;
-        }
-        float centerY = ProjectileCorridorCenterY(ranged, shooter, targetPos, config);
-        float tolerance = ProjectileCorridorSlack + targetHalf.Y
-            + (ranged.Path == ProjectilePath.Sine ? ranged.SineAmplitude : 0f);
-        return MathF.Abs(targetPos.Y - centerY) <= tolerance;
-    }
-
-    /// <summary>Where the shot's path sits vertically when it reaches the target's
-    /// column (loose: time from launch speed alone). Shared by the shooter's aim test
-    /// and the defender's wind-up telegraph (2026-07-20).</summary>
-    private static float ProjectileCorridorCenterY(
-        SimProjectileMove ranged, SimPlayer shooter, SimPlayer target, MatchConfig config) =>
-        ProjectileCorridorCenterY(ranged, shooter, target.Position, config);
-
-    private static float ProjectileCorridorCenterY(
-        SimProjectileMove ranged, SimPlayer shooter, Determinism.Vec2 targetPos, MatchConfig config)
-    {
-        float dx = MathF.Abs(targetPos.X - shooter.Position.X);
-        float t = dx / MathF.Max(ranged.LaunchSpeed, 0.5f);
-        float centerY = shooter.Position.Y + ranged.LaunchFraction.Y * shooter.BodyHalf.Y;
-        if (ranged.Path == ProjectilePath.Quadratic)
-        {
-            centerY -= ranged.PathScalar * ranged.QuadraticScale * dx * dx;
-        }
-        if (ranged.Gravity)
-        {
-            centerY -= 0.5f * config.Gravity * t * t;
-        }
-        return centerY;
+        return threatens;
     }
 
     /// <summary>Retreat direction: away from the opponent, flipped toward stage

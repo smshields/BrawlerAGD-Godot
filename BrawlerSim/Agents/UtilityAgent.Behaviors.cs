@@ -248,20 +248,42 @@ public sealed partial class UtilityAgent
             {
                 return;
             }
-            bool armed = false;
+            // Spacing is measured in the ARMED BOLT'S OWN FRAME (2026-09-15,
+            // designer: account for vertical distance, for angle diversity). The
+            // firing pocket of a directional kit is not a ring around the zoner —
+            // it lies ALONG the launch axis, so the bands read the component of the
+            // offset projected onto that axis (which folds in the vertical gap for
+            // any angled bolt, and reduces to the old horizontal reading for a level
+            // one). Best-lined-up bolt wins: smallest perpendicular offset among the
+            // axes that actually point at the target. O(moves), no allocation.
+            float spacing = float.MaxValue;
+            float bestOffAxis = float.MaxValue;
             for (int m = 0; m < ctx.Self.Moves.Count; m++)
             {
-                if (ctx.Self.ButtonForMove(m) >= 0 && ctx.Self.ProjectileMoves[m] is not null)
+                if (ctx.Self.ButtonForMove(m) < 0
+                    || ctx.Self.ProjectileMoves[m] is not SimProjectileMove ranged)
                 {
-                    armed = true;
-                    break;
+                    continue;
+                }
+                Vec2 axis = new(ranged.LaunchDirection.X * ctx.Self.Facing, ranged.LaunchDirection.Y);
+                Vec2 offset = ctx.Opponent.Position - ctx.Self.Position;
+                float along = Vec2.Dot(offset, axis);
+                if (along <= 0f)
+                {
+                    continue; // this bolt flies away from the target — no stance from it
+                }
+                float offAxis = MathF.Abs(offset.X * axis.Y - offset.Y * axis.X);
+                if (offAxis < bestOffAxis)
+                {
+                    bestOffAxis = offAxis;
+                    spacing = along;
                 }
             }
-            if (!armed || ctx.Distance > ZonerMaxRange)
+            if (spacing > ZonerMaxRange)
             {
-                return;
+                return; // nothing armed points at them, or the pocket is far off
             }
-            if (ctx.Distance < ZonerRetreatRange)
+            if (spacing < ZonerRetreatRange)
             {
                 scores.Horizontal[UtilityScores.Toward(
                     SafeRetreatDirection(ctx, requireGrounded: true))] += ZonerRetreat;

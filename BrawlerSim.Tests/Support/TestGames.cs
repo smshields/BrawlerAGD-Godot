@@ -96,8 +96,9 @@ public static class TestGames
             [ProjectileParams.DecayRate] = 0.5f,
             [ProjectileParams.HitstunDuration] = 0.5f,
             [ProjectileParams.HitsSelf] = 0f,
-            [ProjectileParams.LaunchX] = 0.3f,
-            [ProjectileParams.LaunchY] = 0f,
+            [ProjectileParams.LaunchX] = 0.3f,   // dead gene (2026-09-14)
+            [ProjectileParams.LaunchY] = 0f,     // dead gene (2026-09-14)
+            [ProjectileParams.LaunchAngle] = 0f, // straight ahead
         };
         foreach ((string key, float value) in overrides)
         {

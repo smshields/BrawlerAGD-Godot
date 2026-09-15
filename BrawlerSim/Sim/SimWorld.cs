@@ -504,12 +504,10 @@ public sealed class SimWorld
             }
             player.ProjectileSpawnPending = false;
             SimProjectileMove move = player.ProjectileMoves[player.CurrentMoveIndex]!;
-            // The sketch's EXIT point: launch fractions × body half extents, the X
-            // side mirrored by facing. Age 0 at the origin this tick; motion begins
-            // next tick.
-            Vec2 origin = player.Position + new Vec2(
-                move.LaunchFraction.X * player.BodyHalf.X * player.Facing,
-                move.LaunchFraction.Y * player.BodyHalf.Y);
+            // Perimeter exit (2026-09-14, replacing the sketch's interior launch
+            // fractions): the body-edge point along the facing-mirrored launch
+            // direction. Age 0 at the origin this tick; motion begins next tick.
+            Vec2 origin = move.SpawnOrigin(player.Position, player.BodyHalf, player.Facing);
             _projectiles.Add(new SimProjectile(move, player.Index, player.CurrentMoveIndex, origin, player.Facing));
             player.ProjectilesFired++;
         }
@@ -545,6 +543,20 @@ public sealed class SimWorld
                         proj.ClearedOwner = true;
                     }
                     continue; // still leaving the barrel — never a self-hit yet
+                }
+                // "A projectile never points back at the player's hitbox"
+                // (2026-09-15, designer): a bolt whose own motion is carrying it
+                // INTO its shooter is spent on arrival instead of passing through
+                // or hitting — the residual self-hit geometry the perimeter spawn
+                // could not reach (a decelerating bolt reversing, a gravity lob
+                // falling home, a path shape curling back). hitsSelf survives for
+                // the case the designer kept it for: the shooter MOVING into their
+                // own bolt, where the bolt is not the one closing.
+                if (overlaps && ClosingOnOwner(proj, victim))
+                {
+                    proj.Alive = false;
+                    victim.ProjectilesReturned++;
+                    return;
                 }
                 if (!proj.Move.HitsSelf)
                 {
@@ -601,9 +613,30 @@ public sealed class SimWorld
             ApplyCleanHit(victim, scaledDamage, proj.Position, proj.Move.KnockbackDirection,
                 proj.Facing, proj.Move.KnockbackScalar * proj.DamageScale,
                 proj.Move.HitstunDuration, proj.Owner);
-            _players[proj.Owner].ProjectileHits++;
+            // A self-hit is not a landed hit (2026-09-14, designer): the split keeps
+            // the research data honest about zoning accuracy.
+            if (proj.Owner != victim.Index)
+            {
+                _players[proj.Owner].ProjectileHits++;
+            }
+            else
+            {
+                victim.ProjectileSelfHits++;
+            }
             proj.Alive = false;
         }
+    }
+
+    /// <summary>Is the bolt's OWN motion carrying it into its owner (2026-09-15)?
+    /// Compares this tick's position and the next one on the closed-form path
+    /// against where the owner is NOW, so the owner's own movement never counts:
+    /// a bolt flying away that its shooter ran into is not closing, a bolt
+    /// arcing/reversing home is. Pure function of the path — replay-safe.</summary>
+    private bool ClosingOnOwner(SimProjectile proj, SimPlayer owner)
+    {
+        Vec2 next = proj.Move.PositionAt(
+            proj.Origin, proj.Facing, proj.PathAgeTicks + 1, Config);
+        return (next - owner.Position).Length() < (proj.Position - owner.Position).Length();
     }
 
     /// <summary>Shared victim gate for melee and projectile hits (2026-07-22,
@@ -656,6 +689,10 @@ public sealed class SimWorld
         {
             victim.MarkInfluence(attackerIndex); // blocked knockback still shoves (2026-08-12)
         }
+        else
+        {
+            victim.SelfBlockedHits++; // blocking your own bolt is not rewarded interaction (2026-09-14)
+        }
         victim.InvincibleTicksLeft = Config.InvincibilityTicks;
         DegradeShield(victim, shield, damage);
     }
@@ -691,6 +728,14 @@ public sealed class SimWorld
         {
             victim.MarkInfluence(attackerIndex);
             _players[attackerIndex].DamageDealt += damage;
+        }
+        else
+        {
+            // Self-inflicted (hitsSelf bolt): stats-class split so fitness v7+ can
+            // count opponent interaction only (2026-09-14).
+            victim.SelfDamageTaken += damage;
+            victim.SelfStockDamage += damage;
+            victim.SelfHitsReceived++;
         }
         victim.InvincibleTicksLeft = Config.InvincibilityTicks;
     }
@@ -1112,7 +1157,13 @@ public sealed class SimWorld
                 KOs: p.KOs,
                 DamageDealt: p.DamageDealt,
                 SelfDestructs: p.SelfDestructs,
-                DropThroughs: p.DropThroughs)).ToArray(),
+                DropThroughs: p.DropThroughs,
+                SelfDamageTaken: p.SelfDamageTaken,
+                SelfHitsReceived: p.SelfHitsReceived,
+                SelfBlockedHits: p.SelfBlockedHits,
+                ProjectileSelfHits: p.ProjectileSelfHits,
+                ProjectilesReturned: p.ProjectilesReturned,
+                SelfDamagePerStock: p.CompletedStockSelfDamage.Append(p.SelfStockDamage).ToArray())).ToArray(),
             LoserIndex,
             TickCount,
             TickCount / (float)Config.TicksPerSecond,
