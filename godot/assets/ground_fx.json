@@ -1,0 +1,40 @@
+{
+  // Ground FX tuning (particle prototype 2026-09-14; visibility pass 2026-09-15).
+  // Hot-editable: footstep and landing dust magnitudes, the stride cadence, the
+  // grow/fade shape, the emission fans, and the readability budget. Pairs are
+  // [min, max] lerped by the normalized driver (impact energy for landings,
+  // ground speed for footsteps). Budget caps clamp at load against hard code
+  // ceilings (opacity 0.45, lifetime 1.2 s, 64/burst, 16 events/frame).
+  //
+  // Particles are born at scaleBirthFraction of their FINAL size and grow into
+  // it over the lifetime while alpha holds then fades from fadeStartFraction —
+  // so both final size and fade-out duration scale with force / velocity.
+  "landingMinImpactSpeed": 3.0,   // world units/s; below = silent touchdown
+  "landingEnergy": [9.0, 250.0],  // mass x impactSpeed^2 normalization window
+  "landingCount": [14, 40],       // split across the two counter-platform fans
+  "landingScale": [1.3, 3.2],     // FINAL size (grown into)
+  "landingSpreadSpeed": [70, 220], // screen px/s at the reference framing
+  "landingOpacity": [0.24, 0.38],
+  "landingLife": [0.35, 0.8],     // grow-and-fade window; hard hits hang longer
+  "footstepSpeedMin": 1.5,        // world units/s; below = no locomotion dust
+  "footstepCount": [3, 7],
+  "footstepScale": [0.8, 1.6],
+  "footstepSpreadSpeed": [35, 90],
+  "footstepOpacity": [0.16, 0.30],
+  "footstepLife": [0.28, 0.5],
+  "strideFactor": 0.85,           // stride = bodyWidth x this (puffs overlap)
+  "scaleBirthFraction": 0.22,     // born this fraction of final size
+  "fadeStartFraction": 0.4,       // alpha holds to here, then fades out
+  "landingFanTiltDeg": 22,        // two fans this far above the platform surface
+  "landingFanSpreadDeg": 55,      // each fan's cone width
+  "footstepBackTiltDeg": 28,      // backward kick angle above the ground
+  "footstepSpreadDeg": 45,        // scatter of the backward kick
+  "refBodyHalfX": 0.4,            // body half extents where width/size factors = 1
+  "refBodyHalfY": 0.6,
+  "massFactorRange": [0.7, 1.3],  // footstep count x clamp(mass / 1.5, lo, hi)
+  "opacityCap": 0.4,
+  "lifetimeCap": 0.9,
+  "maxBurstCount": 48,
+  "maxEventsPerFrame": 10,
+  "weatherBlendMax": 0.7          // max color blend toward the active weather
+}

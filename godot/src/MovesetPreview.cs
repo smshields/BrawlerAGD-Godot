@@ -27,6 +27,8 @@ public partial class MovesetPreview : SubViewportContainer
     private ScriptedCycle? _script;
     private Node2D _root = null!;
     private PlayerView _performer = null!;
+    private GroundFxView? _groundFx;
+    private GroundFxDetector? _groundFxDetector;
     private ProjectileLayer? _projectiles;
     private SubViewport _viewport = null!;
     private Label[] _legend = System.Array.Empty<Label>();
@@ -69,6 +71,12 @@ public partial class MovesetPreview : SubViewportContainer
         var stageView = new StageView();
         _root.AddChild(stageView);
         stageView.Setup(_world, Ppu);
+        // Ground FX (2026-09-14, designer: previews included): the synthetic stage
+        // has no theme, so the pane's dust is neutral grey; sizes follow Ppu = 16.
+        _groundFx = new GroundFxView();
+        _root.AddChild(_groundFx);
+        _groundFx.Setup(Ppu, stage, weatherPlan: null);
+        _groundFxDetector = new GroundFxDetector(_world);
         _performer = new PlayerView();
         _root.AddChild(_performer);
         _performer.Setup(_world.Players[0], character, Ppu);
@@ -126,9 +134,15 @@ public partial class MovesetPreview : SubViewportContainer
             _script.GetInput(_world, 0),
             InputFrame.Neutral,
         };
+        _groundFxDetector?.BeforeTick();
         _world.Tick(inputs);
+        _groundFxDetector?.AfterTick();
         _performer.Sync();
         _projectiles?.Sync();
+        if (_groundFx is not null)
+        {
+            _groundFxDetector?.Drain(_groundFx, weatherGate: 0f);
+        }
 
         // Crop centered on the PERFORMER's body (2026-08-17, designer: the fighter
         // must sit centered in the pane), holding a fixed height above the floor.
