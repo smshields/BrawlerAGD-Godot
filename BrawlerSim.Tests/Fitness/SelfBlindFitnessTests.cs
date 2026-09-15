@@ -171,38 +171,20 @@ public class SelfBlindFitnessTests
 
     // ---- End to end against the sim ------------------------------------------
 
-    /// <summary>The live exploit shape: a decelerating hitsSelf bolt comes back and
-    /// clips its shooter. Under v6 the damage and collisions terms pay for it;
-    /// under v7 both read zero.</summary>
+    /// <summary>The live exploit shape, as it survives the 2026-09-15 never-point-back
+    /// rule: a hitsSelf bolt its own shooter runs onto. Under v6 the damage and
+    /// collisions terms pay for it; under v7 both read zero.</summary>
     [Fact]
     public void SimSelfHitMatchEarnsNoInteractionTermsUnderV7()
     {
-        CharacterGenome Make(string name) => new(name, 3, 0, TestGames.Character(),
-            new[]
-            {
-                new MoveGenome(TestGames.Projectile(
-                    (ProjectileParams.Velocity, 4f),
-                    (ProjectileParams.DoesAccelerate, 1f),
-                    (ProjectileParams.Acceleration, -8f),
-                    (ProjectileParams.TimeToDecay, 3f),
-                    (ProjectileParams.HitsSelf, 1f)), 0, MoveType.Projectile),
-            },
-            new[] { 0, 0, 0, 0, 0 });
-        var genome = new GameGenome(new[] { Make("P1"), Make("P2") },
-            new StageGenome(new[] { new PlatformGene(-8, -3, 16, 1) }));
-        var world = new SimWorld(genome);
-        world.Players[0].Position = new Vec2(-4f, -1.4f);
-        world.Players[1].Position = new Vec2(7f, -1.4f);
+        var world = new SimWorld(BrawlerSim.Tests.Sim.ProjectileTests.ChaseArena(1f));
+        world.Players[0].Position = new Vec2(-6f, -1.4f);
+        world.Players[1].Position = new Vec2(7.5f, -1.4f);
         for (int i = 0; i < 120 && !(world.Players[0].IsGrounded && world.Players[1].IsGrounded); i++)
         {
             world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
         }
-        world.Tick(stackalloc[]
-            { new InputFrame(0f, 0f, false, InputFrame.ActionBit(0)), InputFrame.Neutral });
-        for (int t = 0; t < 300 && world.Players[0].SelfHitsReceived == 0; t++)
-        {
-            world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
-        }
+        BrawlerSim.Tests.Sim.ProjectileTests.RunChase(world);
         Assert.Equal(1, world.Players[0].SelfHitsReceived);
         MatchResult result = world.BuildResult();
 

@@ -45,7 +45,10 @@ public sealed record PlayerStats(
     int SelfHitsReceived = 0,
     int SelfBlockedHits = 0,
     int ProjectileSelfHits = 0,
-    IReadOnlyList<float>? SelfDamagePerStock = null);
+    IReadOnlyList<float>? SelfDamagePerStock = null,
+    // 2026-09-15 never-point-back rule: own bolts spent on arrival because their
+    // own motion was carrying them back into the shooter. Fitness-blind.
+    int ProjectilesReturned = 0);
 
 /// <summary>Stage facts a fitness function may condition on (2026-09-09, scaled-time
 /// fitness): the genome's visible-map half extents, copied from SimWorld.VisibleHalf.

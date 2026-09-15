@@ -210,7 +210,7 @@ internal static class Commands
                 $"ff-crouch-di {Per(p => $"{p.FastFallTicks}-{p.CrouchTicks}-{p.DIInfluencedHits}")}  " +
                 $"drops {Per(p => p.DropThroughs.ToString())}  " +
                 $"proj(fired-hit-refl) {Per(p => $"{p.ProjectilesFired}-{p.ProjectileHits}-{p.ProjectilesReflected}")}  " +
-                $"self(dmg-hits) {Per(p => $"{p.SelfDamageTaken:F0}-{p.SelfHitsReceived}")}");
+                $"self(dmg-hits-ret) {Per(p => $"{p.SelfDamageTaken:F0}-{p.SelfHitsReceived}-{p.ProjectilesReturned}")}");
             if (breakdown && fitness is IFitnessBreakdown itemized)
             {
                 Console.WriteLine("           " + string.Join("  ",

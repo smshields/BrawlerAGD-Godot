@@ -544,6 +544,20 @@ public sealed class SimWorld
                     }
                     continue; // still leaving the barrel — never a self-hit yet
                 }
+                // "A projectile never points back at the player's hitbox"
+                // (2026-09-15, designer): a bolt whose own motion is carrying it
+                // INTO its shooter is spent on arrival instead of passing through
+                // or hitting — the residual self-hit geometry the perimeter spawn
+                // could not reach (a decelerating bolt reversing, a gravity lob
+                // falling home, a path shape curling back). hitsSelf survives for
+                // the case the designer kept it for: the shooter MOVING into their
+                // own bolt, where the bolt is not the one closing.
+                if (overlaps && ClosingOnOwner(proj, victim))
+                {
+                    proj.Alive = false;
+                    victim.ProjectilesReturned++;
+                    return;
+                }
                 if (!proj.Move.HitsSelf)
                 {
                     continue;
@@ -611,6 +625,18 @@ public sealed class SimWorld
             }
             proj.Alive = false;
         }
+    }
+
+    /// <summary>Is the bolt's OWN motion carrying it into its owner (2026-09-15)?
+    /// Compares this tick's position and the next one on the closed-form path
+    /// against where the owner is NOW, so the owner's own movement never counts:
+    /// a bolt flying away that its shooter ran into is not closing, a bolt
+    /// arcing/reversing home is. Pure function of the path — replay-safe.</summary>
+    private bool ClosingOnOwner(SimProjectile proj, SimPlayer owner)
+    {
+        Vec2 next = proj.Move.PositionAt(
+            proj.Origin, proj.Facing, proj.PathAgeTicks + 1, Config);
+        return (next - owner.Position).Length() < (proj.Position - owner.Position).Length();
     }
 
     /// <summary>Shared victim gate for melee and projectile hits (2026-07-22,
@@ -1136,6 +1162,7 @@ public sealed class SimWorld
                 SelfHitsReceived: p.SelfHitsReceived,
                 SelfBlockedHits: p.SelfBlockedHits,
                 ProjectileSelfHits: p.ProjectileSelfHits,
+                ProjectilesReturned: p.ProjectilesReturned,
                 SelfDamagePerStock: p.CompletedStockSelfDamage.Append(p.SelfStockDamage).ToArray())).ToArray(),
             LoserIndex,
             TickCount,

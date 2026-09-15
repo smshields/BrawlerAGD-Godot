@@ -191,6 +191,69 @@ public class DirectionalProjectileTests
             "the agent never fired the mortar at a reachable target");
     }
 
+    // ── Never point back at the shooter (2026-09-15) ───────────────────────────
+
+    /// <summary>The designer rule: a projectile never points back at the player's
+    /// hitbox. A bolt whose OWN motion carries it home is spent on arrival — with
+    /// hitsSelf ON, so the rule is proven to beat the gene. Two ways a path can
+    /// come back: deceleration reversing it, and a gravity lob falling on its
+    /// shooter.</summary>
+    [Theory]
+    [InlineData("reversal")]
+    [InlineData("lob")]
+    public void ABoltCurvingBackIntoItsShooterIsSpentInsteadOfHitting(string shape)
+    {
+        (string, float)[] overrides = shape == "reversal"
+            ? new[]
+            {
+                (ProjectileParams.Velocity, 4f),
+                (ProjectileParams.DoesAccelerate, 1f),
+                (ProjectileParams.Acceleration, -8f), // reverses at t = 0.5 s
+                (ProjectileParams.TimeToDecay, 3f),
+                (ProjectileParams.HitsSelf, 1f),
+            }
+            : new[]
+            {
+                (ProjectileParams.LaunchAngle, Up),
+                (ProjectileParams.AffectedByGravity, 1f),
+                (ProjectileParams.Velocity, 4f),      // up 4 u/s, falls back home
+                (ProjectileParams.TimeToDecay, 3f),
+                (ProjectileParams.HitsSelf, 1f),
+            };
+        SimWorld world = Grounded(Arena(overrides), -4f, 7f);
+        SimPlayer shooter = world.Players[0];
+        world.Tick(stackalloc[]
+            { new InputFrame(0f, 0f, false, InputFrame.ActionBit(0)), InputFrame.Neutral });
+        for (int t = 0; world.Projectiles.Count == 0 && t < 30; t++)
+        {
+            world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral }); // warm-up
+        }
+        Assert.Single(world.Projectiles);
+        for (int t = 0; t < 240 && world.Projectiles.Count > 0; t++)
+        {
+            world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
+        }
+        Assert.Empty(world.Projectiles);
+        Assert.Equal(1, shooter.ProjectilesReturned); // spent coming home
+        Assert.Equal(0, shooter.TotalHitsReceived);   // never reached the hitbox
+        Assert.Equal(0f, shooter.SelfDamageTaken);
+        Assert.Equal(0, shooter.ProjectileSelfHits);
+    }
+
+    /// <summary>The rule reads the BOLT'S motion, not the gap: a shooter that runs
+    /// onto its own outbound bolt is still governed by hitsSelf (designer kept the
+    /// gene). Pinned here so the never-point-back rule can never quietly widen into
+    /// "the owner is immune to their own projectiles".</summary>
+    [Fact]
+    public void AnOutboundBoltTheShooterRunsOntoIsStillAHit()
+    {
+        SimWorld world = ProjectileTests.RunChase(
+            ProjectileTests.GroundedChase(ProjectileTests.ChaseArena(1f)));
+        SimPlayer shooter = world.Players[0];
+        Assert.Equal(1, shooter.ProjectileSelfHits);
+        Assert.Equal(0, shooter.ProjectilesReturned); // the bolt never turned around
+    }
+
     // ── Knockback parity with melee ────────────────────────────────────────────
 
     [Fact]

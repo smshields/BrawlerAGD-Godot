@@ -256,6 +256,11 @@ public sealed class SimPlayer
     /// <summary>Bolts that hit their own shooter via the hitsSelf gene (2026-09-14).</summary>
     public int ProjectileSelfHits;
 
+    /// <summary>Own bolts spent because their path was carrying them back into this
+    /// player's body (2026-09-15, the never-point-back rule). Research-only — a
+    /// direct read on how often evolution still aims a bolt home.</summary>
+    public int ProjectilesReturned;
+
     /// <summary>Bolts re-fired by this player's reflect shield/dash (2026-07-20).</summary>
     public int ProjectilesReflected;
 

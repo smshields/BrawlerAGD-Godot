@@ -268,38 +268,57 @@ public class ProjectileTests
         Assert.InRange(victim.Damage, 0.01f, 7.4f);
     }
 
-    [Fact]
-    public void OwnerIsImmuneOnLaunchAndHitsSelfGeneGovernsAfter()
+    /// <summary>A fast character and a slow bolt: the ONE way a shooter can still
+    /// reach its own projectile since the never-point-back rule (2026-09-15) — by
+    /// closing the gap itself. The bolt is always travelling AWAY from it, so the
+    /// rule stays out and the hitsSelf gene decides.</summary>
+    internal static GameGenome ChaseArena(float hitsSelf)
     {
-        // A decelerating projectile that reverses back through the shooter.
-        (string, float)[] Overrides(float hitsSelf) => new[]
-        {
-            (ProjectileParams.Velocity, 4f),
-            (ProjectileParams.DoesAccelerate, 1f),
-            (ProjectileParams.Acceleration, -8f),   // reverses at t = 0.5 s
-            (ProjectileParams.TimeToDecay, 3f),
-            (ProjectileParams.HitsSelf, hitsSelf),
-        };
+        CharacterGenome Make(string name) => new(name, 3, 0,
+            TestGames.Character((CharacterParams.MaxGroundSpeed, 10f)),
+            new[]
+            {
+                new MoveGenome(TestGames.Projectile(
+                    (ProjectileParams.Velocity, 3f),        // slower than the runner
+                    (ProjectileParams.TimeToDecay, 4f),
+                    (ProjectileParams.HitsSelf, hitsSelf)), 0, MoveType.Projectile),
+            },
+            new[] { 0, 0, 0, 0, 0 });
+        var stage = new StageGenome(new[] { new PlatformGene(-8, -3, 16, 1) });
+        return new GameGenome(new[] { Make("P1"), Make("P2") }, stage);
+    }
 
+    /// <summary>The chase arena settled on the floor, shooter left of its target.</summary>
+    internal static SimWorld GroundedChase(GameGenome genome) => Grounded(genome, -6f, 7.5f);
+
+    /// <summary>Fire, then hold RIGHT until the shooter catches its own bolt (or the
+    /// bolt is gone). Returns the world for assertions.</summary>
+    internal static SimWorld RunChase(SimWorld world)
+    {
+        FireAndWait(world);
+        SimPlayer shooter = world.Players[0];
+        var right = new InputFrame(1f, 0f, false, 0);
+        for (int t = 0; t < 240 && shooter.TotalHitsReceived == 0 && world.Projectiles.Count > 0; t++)
+        {
+            world.Tick(stackalloc[] { right, InputFrame.Neutral });
+        }
+        return world;
+    }
+
+    [Fact]
+    public void OwnerIsImmuneOnLaunchAndHitsSelfGeneGovernsWhenTheyRunIntoIt()
+    {
         foreach (float gene in new[] { 0f, 1f })
         {
-            var genome = ProjectileArena(Overrides(gene));
-            SimWorld world = Grounded(genome, -4f, 7f);
+            SimWorld world = RunChase(Grounded(ChaseArena(gene), -6f, 7.5f));
             SimPlayer shooter = world.Players[0];
-            FireAndWait(world);
-            int ticks = 0;
-            while (world.Projectiles.Count > 0 && shooter.TotalHitsReceived == 0 && ticks < 240)
-            {
-                world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
-                ticks++;
-            }
             if (gene >= 0.5f)
             {
-                Assert.Equal(1, shooter.TotalHitsReceived); // the comeback clips them
+                Assert.Equal(1, shooter.TotalHitsReceived); // ran onto their own bolt
             }
             else
             {
-                Assert.Equal(0, shooter.TotalHitsReceived); // immune without the gene
+                Assert.Equal(0, shooter.TotalHitsReceived); // passes through without it
             }
         }
     }
@@ -312,23 +331,8 @@ public class ProjectileTests
     [Fact]
     public void SelfHitIsSplitIntoSelfStatsAndNotCountedAsALandedHit()
     {
-        // The reversal fixture from OwnerIsImmuneOnLaunchAndHitsSelfGeneGovernsAfter:
-        // a decelerating bolt comes back through the shooter with hitsSelf on.
-        var genome = ProjectileArena(
-            (ProjectileParams.Velocity, 4f),
-            (ProjectileParams.DoesAccelerate, 1f),
-            (ProjectileParams.Acceleration, -8f),
-            (ProjectileParams.TimeToDecay, 3f),
-            (ProjectileParams.HitsSelf, 1f));
-        SimWorld world = Grounded(genome, -4f, 7f);
+        SimWorld world = RunChase(Grounded(ChaseArena(1f), -6f, 7.5f));
         SimPlayer shooter = world.Players[0];
-        FireAndWait(world);
-        int ticks = 0;
-        while (world.Projectiles.Count > 0 && shooter.TotalHitsReceived == 0 && ticks < 240)
-        {
-            world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
-            ticks++;
-        }
 
         // The victim-side totals still see the hit (frozen fitness reads unchanged)…
         Assert.Equal(1, shooter.TotalHitsReceived);
