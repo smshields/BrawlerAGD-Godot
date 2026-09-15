@@ -39,11 +39,19 @@ public class GroundFxTests
         Assert.Equal(defaults.FootstepCountMax, shipped.FootstepCountMax);
         Assert.Equal(defaults.FootstepScaleMin, shipped.FootstepScaleMin);
         Assert.Equal(defaults.FootstepScaleMax, shipped.FootstepScaleMax);
+        Assert.Equal(defaults.FootstepSpreadSpeedMin, shipped.FootstepSpreadSpeedMin);
+        Assert.Equal(defaults.FootstepSpreadSpeedMax, shipped.FootstepSpreadSpeedMax);
         Assert.Equal(defaults.FootstepOpacityMin, shipped.FootstepOpacityMin);
         Assert.Equal(defaults.FootstepOpacityMax, shipped.FootstepOpacityMax);
         Assert.Equal(defaults.FootstepLifeMin, shipped.FootstepLifeMin);
         Assert.Equal(defaults.FootstepLifeMax, shipped.FootstepLifeMax);
         Assert.Equal(defaults.StrideFactor, shipped.StrideFactor);
+        Assert.Equal(defaults.ScaleBirthFraction, shipped.ScaleBirthFraction);
+        Assert.Equal(defaults.FadeStartFraction, shipped.FadeStartFraction);
+        Assert.Equal(defaults.LandingFanTiltDeg, shipped.LandingFanTiltDeg);
+        Assert.Equal(defaults.LandingFanSpreadDeg, shipped.LandingFanSpreadDeg);
+        Assert.Equal(defaults.FootstepBackTiltDeg, shipped.FootstepBackTiltDeg);
+        Assert.Equal(defaults.FootstepSpreadDeg, shipped.FootstepSpreadDeg);
         Assert.Equal(defaults.RefBodyHalfX, shipped.RefBodyHalfX);
         Assert.Equal(defaults.RefBodyHalfY, shipped.RefBodyHalfY);
         Assert.Equal(defaults.MassFactorLo, shipped.MassFactorLo);
@@ -74,11 +82,11 @@ public class GroundFxTests
         float e01 = 91f / 241f;
         LandingBurst burst = Config.ComputeLanding(
             mass: 1f, impactSpeed: 10f, bodyHalfX: 0.4f, bodyHalfY: 0.6f);
-        Assert.Equal(9, burst.Count); // round(4 + 14 x e01) = round(9.286)
-        Assert.Equal(1.1f + 1.3f * e01, burst.Scale, 0.0001f);
-        Assert.Equal(40f + 100f * e01, burst.SpreadSpeed, 0.0001f);
-        Assert.Equal(0.22f + 0.13f * e01, burst.Opacity, 0.0001f);
-        Assert.Equal(0.25f + 0.25f * e01, burst.Lifetime, 0.0001f);
+        Assert.Equal(24, burst.Count); // round(14 + 26 x e01) = round(23.817)
+        Assert.Equal(1.3f + 1.9f * e01, burst.Scale, 0.0001f);
+        Assert.Equal(70f + 150f * e01, burst.SpreadSpeed, 0.0001f);
+        Assert.Equal(0.24f + 0.14f * e01, burst.Opacity, 0.0001f);
+        Assert.Equal(0.35f + 0.45f * e01, burst.Lifetime, 0.0001f);
     }
 
     [Fact]
@@ -139,28 +147,29 @@ public class GroundFxTests
         // speed01 = (3.5 - 1.5) / (5.5 - 1.5) = 0.5; mass 1.5 => massFactor 1.
         FootstepPuff puff = Config.ComputeFootstep(
             mass: 1.5f, absVelX: 3.5f, maxGroundSpeed: 5.5f, bodyHalfY: 0.6f);
-        Assert.Equal(2, puff.Count); // round(lerp(1, 3, 0.5)) = 2
-        Assert.Equal(0.95f, puff.Scale, 0.0001f);      // lerp(0.7, 1.2, 0.5)
-        Assert.Equal(0.20f, puff.Opacity, 0.0001f);    // lerp(0.14, 0.26, 0.5)
-        Assert.Equal(0.275f, puff.Lifetime, 0.0001f);  // lerp(0.2, 0.35, 0.5)
+        Assert.Equal(5, puff.Count); // round(lerp(3, 7, 0.5)) = 5
+        Assert.Equal(1.2f, puff.Scale, 0.0001f);        // lerp(0.8, 1.6, 0.5)
+        Assert.Equal(62.5f, puff.SpreadSpeed, 0.0001f); // lerp(35, 90, 0.5)
+        Assert.Equal(0.23f, puff.Opacity, 0.0001f);     // lerp(0.16, 0.30, 0.5)
+        Assert.Equal(0.39f, puff.Lifetime, 0.0001f);    // lerp(0.28, 0.5, 0.5)
     }
 
     [Fact]
     public void FootstepMassFactorClampsAtBothEnds()
     {
-        // At full speed the unclamped count is 3; the lightest genome (0.5) hits
-        // the 0.7 floor => round(2.1) = 2; the heaviest (2.5) hits the 1.3
-        // ceiling => round(3.9) = 4.
+        // At full speed the unclamped count is 7; the lightest genome (0.5) hits
+        // the 0.7 floor => round(4.9) = 5; the heaviest (2.5) hits the 1.3
+        // ceiling => round(9.1) = 9.
         FootstepPuff light = Config.ComputeFootstep(0.5f, 5.5f, 5.5f, 0.6f);
         FootstepPuff heavy = Config.ComputeFootstep(2.5f, 5.5f, 5.5f, 0.6f);
-        Assert.Equal(2, light.Count);
-        Assert.Equal(4, heavy.Count);
+        Assert.Equal(5, light.Count);
+        Assert.Equal(9, heavy.Count);
     }
 
     [Fact]
     public void StrideLengthScalesWithBody()
     {
-        Assert.Equal(1.28f, Config.StrideLength(0.4f), 0.0001f); // 0.4 x 2 x 1.6
+        Assert.Equal(0.68f, Config.StrideLength(0.4f), 0.0001f); // 0.4 x 2 x 0.85
         Assert.Equal(2f * Config.StrideLength(0.4f), Config.StrideLength(0.8f), 0.0001f);
     }
 
@@ -176,6 +185,18 @@ public class GroundFxTests
         Assert.Equal(GroundFxConfig.BurstCountCeiling, config.MaxBurstCount);
         Assert.Equal(GroundFxConfig.EventsPerFrameCeiling, config.MaxEventsPerFrame);
         Assert.Equal(1f, config.WeatherBlendMax);
+    }
+
+    [Fact]
+    public void GrowAndFadeFractionsStayInRange()
+    {
+        // The shape knobs must survive a bad hot-edit: a particle born at zero
+        // size or fading from the last instant would read as a pop, not a puff.
+        GroundFxConfig config = GroundFxConfig.Parse(
+            """{ "scaleBirthFraction": 0.0, "fadeStartFraction": 1.5 }""");
+        Assert.Equal(0.02f, config.ScaleBirthFraction, 0.0001f);
+        Assert.Equal(0.95f, config.FadeStartFraction, 0.0001f);
+        Assert.True(config.ScaleBirthFraction < 1f); // born smaller than final
     }
 
     private static string FindRepoFile(string relative)

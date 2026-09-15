@@ -16,8 +16,16 @@ public static class GroundFxBank
     public static GroundFxConfig Config => _config ??= GroundFxConfig.Parse(
         FileAccess.GetFileAsString("res://assets/ground_fx.json"));
 
-    /// <summary>An 8x8 soft dust mote — white, tinted per emit.</summary>
-    public static ImageTexture PuffTexture => _puff ??= ImageTexture.CreateFromImage(Puff(8));
+    /// <summary>Source resolution of the puff texture. Big enough that a dust
+    /// cloud scaled up over the arena stays SOFT — an 8 px source under the
+    /// project's nearest filtering read as chunky octagons, not dust
+    /// (2026-09-15). GroundFxView normalizes size against this, so the tuning
+    /// file's scale numbers keep their meaning.</summary>
+    public const int PuffTexturePx = 32;
+
+    /// <summary>A soft round dust mote — white, tinted per emit.</summary>
+    public static ImageTexture PuffTexture =>
+        _puff ??= ImageTexture.CreateFromImage(Puff(PuffTexturePx));
 
     private static Image Puff(int size)
     {
@@ -28,7 +36,9 @@ public static class GroundFxBank
             for (int x = 0; x < size; x++)
             {
                 float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c)) / Mathf.Max(0.5f, c);
-                float a = Mathf.Clamp(1.15f - d, 0f, 1f);
+                // Smootherstep falloff to a feathered edge: no hard rim to alias.
+                float t = Mathf.Clamp(1f - d, 0f, 1f);
+                float a = t * t * (3f - 2f * t);
                 image.SetPixel(x, y, new Color(1f, 1f, 1f, a * a));
             }
         }

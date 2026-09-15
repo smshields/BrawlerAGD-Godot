@@ -21,9 +21,10 @@ public sealed class GroundFxDetector
     private readonly float[] _stride;
     private readonly System.Collections.Generic.List<Event> _events = new();
 
+    /// <summary>VelX is SIGNED — footstep dust kicks back against the movement.</summary>
     private readonly record struct Event(
         bool Landing, Vector2 FeetWorld, float Mass, float ImpactSpeed,
-        float AbsVelX, float MaxGroundSpeed, float BodyHalfX, float BodyHalfY);
+        float VelX, float MaxGroundSpeed, float BodyHalfX, float BodyHalfY);
 
     public GroundFxDetector(SimWorld world)
     {
@@ -74,7 +75,7 @@ public sealed class GroundFxDetector
                     _events.Add(new Event(
                         Landing: true, Feet(p), p.Mass,
                         ImpactSpeed: Mathf.Max(0f, -_preVelY[i]),
-                        AbsVelX: 0f, p.MaxGroundSpeed, p.BodyHalf.X, p.BodyHalf.Y));
+                        VelX: 0f, p.MaxGroundSpeed, p.BodyHalf.X, p.BodyHalf.Y));
                 }
             }
             else if (grounded && Mathf.Abs(p.Velocity.X) >= config.FootstepSpeedMin)
@@ -88,7 +89,7 @@ public sealed class GroundFxDetector
                     {
                         _events.Add(new Event(
                             Landing: false, Feet(p), p.Mass, ImpactSpeed: 0f,
-                            Mathf.Abs(p.Velocity.X), p.MaxGroundSpeed,
+                            p.Velocity.X, p.MaxGroundSpeed,
                             p.BodyHalf.X, p.BodyHalf.Y));
                     }
                 }
@@ -110,8 +111,8 @@ public sealed class GroundFxDetector
             }
             else
             {
-                view.TriggerFootstep(e.FeetWorld, e.Mass, e.AbsVelX,
-                    e.MaxGroundSpeed, e.BodyHalfY, weatherGate);
+                view.TriggerFootstep(e.FeetWorld, e.Mass, e.VelX,
+                    e.MaxGroundSpeed, e.BodyHalfX, e.BodyHalfY, weatherGate);
             }
         }
         _events.Clear();
