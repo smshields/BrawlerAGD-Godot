@@ -9,15 +9,16 @@ namespace BrawlerSim.Fitness;
 /// </summary>
 public static class FitnessRegistry
 {
-    /// <summary>The default for NEW two-player runs — standard-v5 since 2026-09-01
-    /// (v4 + the thin-platform drop-through tiebreaker, designer-directed). Old
-    /// checkpoints resume under their recorded name.</summary>
-    public const string DefaultName = "standard-v5";
+    /// <summary>The default for NEW two-player runs — standard-v7 since 2026-09-14
+    /// (designer-directed: opponent-only interaction inputs after the projectile
+    /// self-hit reward exploit, plus the v6 map-scaled time target graduated to
+    /// default). Old checkpoints resume under their recorded name.</summary>
+    public const string DefaultName = "standard-v7";
 
-    /// <summary>3/4-player runs default to the N-player generalization — ffa-v2
-    /// since 2026-09-01 (ffa-v1 + the drop-through tiebreaker).</summary>
+    /// <summary>3/4-player runs default to the N-player generalization — ffa-v3
+    /// since 2026-09-14 (the standard-v7 formula under its N-player name).</summary>
     public static string DefaultNameFor(int playerCount) =>
-        playerCount > 2 ? "ffa-v2" : DefaultName;
+        playerCount > 2 ? "ffa-v3" : DefaultName;
 
     /// <summary>Every shipped version. SupportsNPlayers: the 2P-only versions' terms
     /// read exactly two players, so scoring an N-player match with them would
@@ -34,8 +35,13 @@ public static class FitnessRegistry
         // with the time target re-anchored to map size. Opt-in, NOT the default,
         // pending the designer gate.
         ("standard-v6", false, (target, max, cs) => new StandardFitnessV6(target, max, collisionScalar: cs)),
+        // standard-v7 / ffa-v3 (2026-09-14): opponent-only interaction (self-hit
+        // reward fix) + the scaled time target — the new defaults; identical
+        // formula, two names (SelfBlindTerms.Build).
+        ("standard-v7", false, (target, max, cs) => new StandardFitnessV7(target, max, collisionScalar: cs)),
         ("ffa-v1", true, (target, max, cs) => new FfaFitnessV1(target, max, collisionScalar: cs)),
         ("ffa-v2", true, (target, max, cs) => new FfaFitnessV2(target, max, collisionScalar: cs)),
+        ("ffa-v3", true, (target, max, cs) => new FfaFitnessV3(target, max, collisionScalar: cs)),
     };
 
     public static IFitnessFunction Create(

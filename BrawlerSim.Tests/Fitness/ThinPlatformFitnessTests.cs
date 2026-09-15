@@ -83,11 +83,13 @@ public class ThinPlatformFitnessTests
     [Fact]
     public void RegistryDefaultsAndConstructionCoverTheNewVersions()
     {
-        Assert.Equal("standard-v5", FitnessRegistry.DefaultName);
-        Assert.Equal("standard-v5", FitnessRegistry.DefaultNameFor(2));
-        Assert.Equal("ffa-v2", FitnessRegistry.DefaultNameFor(4));
-        Assert.Equal("standard-v5", FitnessRegistry.Create(null, 45f, 60f).Name);
-        Assert.Equal("ffa-v2", FitnessRegistry.Create(null, 45f, 60f, playerCount: 3).Name);
+        // 2026-09-14: defaults graduated to the self-hit-blind scaled-time pair
+        // (standard-v7 / ffa-v3, designer-directed); v5/ffa-v2 stay constructible.
+        Assert.Equal("standard-v7", FitnessRegistry.DefaultName);
+        Assert.Equal("standard-v7", FitnessRegistry.DefaultNameFor(2));
+        Assert.Equal("ffa-v3", FitnessRegistry.DefaultNameFor(4));
+        Assert.Equal("standard-v7", FitnessRegistry.Create(null, 45f, 60f).Name);
+        Assert.Equal("ffa-v3", FitnessRegistry.Create(null, 45f, 60f, playerCount: 3).Name);
         // Frozen versions stay constructible (resume contract), and the 2P-only
         // guard admits both ffa versions for N-player runs.
         Assert.Equal("standard-v4", FitnessRegistry.Create("standard-v4", 45f, 60f).Name);

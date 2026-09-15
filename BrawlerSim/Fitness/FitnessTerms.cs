@@ -67,4 +67,62 @@ internal static class FitnessTerms
         }
         return sum;
     }
+
+    // ---- Opponent-side variants (2026-09-14, projectile self-hit reward fix) ----
+    // standard-v7/ffa-v3 count OPPONENT-inflicted interaction only: a hitsSelf bolt
+    // clipping its own shooter is neither rewarded (damage/collisions/blocks) nor
+    // punished (farmPenalty) — fitness is simply blind to it, like it always was to
+    // shield health or dodges. Legacy fixtures without the self split (null list /
+    // zero counters) reduce to the frozen totals exactly.
+
+    /// <summary>Per-stock OPPONENT damage: DamagePerStock minus the index-parallel
+    /// SelfDamagePerStock, floored at 0 per stock.</summary>
+    private static float OpponentStockDamage(PlayerStats player, int stock)
+    {
+        float damage = player.DamagePerStock![stock];
+        if (player.SelfDamagePerStock is not null && stock < player.SelfDamagePerStock.Count)
+        {
+            damage -= player.SelfDamagePerStock[stock];
+        }
+        return MathF.Max(0f, damage);
+    }
+
+    /// <summary>CountedDamage over opponent-inflicted damage only.</summary>
+    public static float OpponentCountedDamage(PlayerStats player, float cap)
+    {
+        if (player.DamagePerStock is null)
+        {
+            return MathF.Max(0f, player.TotalDamageTaken - player.SelfDamageTaken);
+        }
+        float sum = 0f;
+        for (int stock = 0; stock < player.DamagePerStock.Count; stock++)
+        {
+            sum += MathF.Min(OpponentStockDamage(player, stock), cap);
+        }
+        return sum;
+    }
+
+    /// <summary>Excess over opponent-inflicted damage only.</summary>
+    public static float OpponentExcess(PlayerStats player, float start, float cap)
+    {
+        if (player.DamagePerStock is null)
+        {
+            float opponentTotal = MathF.Max(0f, player.TotalDamageTaken - player.SelfDamageTaken);
+            return MathF.Max(0f, MathF.Min(opponentTotal, cap) - start);
+        }
+        float sum = 0f;
+        for (int stock = 0; stock < player.DamagePerStock.Count; stock++)
+        {
+            sum += MathF.Max(0f, MathF.Min(OpponentStockDamage(player, stock), cap) - start);
+        }
+        return sum;
+    }
+
+    /// <summary>Hits received from OPPONENTS (self-hits excluded).</summary>
+    public static int OpponentHitsReceived(PlayerStats player) =>
+        Math.Max(0, player.TotalHitsReceived - player.SelfHitsReceived);
+
+    /// <summary>Blocks of OPPONENT hits (blocking your own bolt earns nothing).</summary>
+    public static int OpponentBlockedHits(PlayerStats player) =>
+        Math.Max(0, player.BlockedHits - player.SelfBlockedHits);
 }

@@ -135,10 +135,10 @@ public class EvolutionEngineTests
     }
 
     [Fact]
-    public void FourPlayerRunsDefaultToFfaV2RecordPlayersAndResumeExactly()
+    public void FourPlayerRunsDefaultToFfaV3RecordPlayersAndResumeExactly()
     {
         var straight = new EvolutionEngine(FourPlayerConfig());
-        Assert.Equal("ffa-v2", straight.FitnessFunction.Name); // the 2026-09-01 N-player default
+        Assert.Equal("ffa-v3", straight.FitnessFunction.Name); // the 2026-09-14 N-player default
         var straightStats = new List<GenerationStats>();
         for (int gen = 0; gen < 3; gen++)
         {
@@ -156,7 +156,7 @@ public class EvolutionEngineTests
             (EvolutionEngine resumed, EvolutionConfig loaded, List<GenerationStats> loadedHistory) =
                 RunStore.Load(runDir);
             Assert.Equal(4, loaded.Generation.CharacterCount);
-            Assert.Equal("ffa-v2", resumed.FitnessFunction.Name);
+            Assert.Equal("ffa-v3", resumed.FitnessFunction.Name);
 
             var resumedStats = new List<GenerationStats>(loadedHistory) { resumed.Step() };
             Assert.Equal(straightStats, resumedStats);

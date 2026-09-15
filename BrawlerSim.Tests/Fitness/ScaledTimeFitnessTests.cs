@@ -95,7 +95,9 @@ public class ScaledTimeFitnessTests
     [Fact]
     public void RegistryConstructsV6AndTheDefaultIsUnchanged()
     {
-        Assert.Equal("standard-v5", FitnessRegistry.DefaultName);
+        // 2026-09-14: the default graduated to standard-v7 (self-hit-blind + the
+        // scaled time target, designer-directed) — v6 itself stays opt-in.
+        Assert.Equal("standard-v7", FitnessRegistry.DefaultName);
         Assert.Equal("standard-v6", FitnessRegistry.Create("standard-v6", 45f, 300f).Name);
         // 2P-only, like the rest of the standard family.
         Assert.Throws<ArgumentException>(
