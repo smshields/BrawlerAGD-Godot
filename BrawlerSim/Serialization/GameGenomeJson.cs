@@ -72,10 +72,18 @@ namespace BrawlerSim.Serialization;
 ///       composites still parse and repair into the three-layer stack at the next
 ///       breeding/presentation pass. Purely cosmetic — replays and match goldens
 ///       untouched.
+///  16 — 2026-09-14 directional projectiles: projectile moves gained "launchAngle"
+///       (melee moveAngle's polar convention; 0 = straight ahead) and bolts now
+///       spawn ON the body perimeter along it instead of inside the body (the
+///       hitsSelf self-hit exploit's geometry). ≤15 files load launchAngle 0 —
+///       the direction every pre-feature bolt flew — but the perimeter spawn is a
+///       designer-approved BEHAVIOR change for all projectile content: old
+///       projectile traces do NOT replay bit-identically (melee-only content is
+///       untouched). launchX/launchY became dead genes (kept for crossover order).
 /// </summary>
 public static class GameGenomeJson
 {
-    public const int CurrentFormatVersion = 15; // 2026-09-11 backgrounds v0.4 (see header)
+    public const int CurrentFormatVersion = 16; // 2026-09-14 directional projectiles (see header)
     private const int MinSupportedFormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = JsonOptions.Document;
@@ -188,7 +196,8 @@ public static class GameGenomeJson
                         WithReflectDefault(Require(m.Params, "dash params"))),
                     m.SpriteIndex, MoveType.Dash, m.SpriteId),
                 "projectile" => new MoveGenome(
-                    ParamSet.FromDictionary(config.ProjectileSchema, Require(m.Params, "projectile params")),
+                    ParamSet.FromDictionary(config.ProjectileSchema,
+                        WithProjectileDefaults(Require(m.Params, "projectile params"))),
                     m.SpriteIndex, MoveType.Projectile, m.SpriteId),
                 _ => new MoveGenome(
                     ParamSet.FromDictionary(config.MoveSchema, Require(m.Params, "move params")),
@@ -245,6 +254,16 @@ public static class GameGenomeJson
         {
             dict.TryAdd(key, value);
         }
+        return dict;
+    }
+
+    /// <summary>2026-09-14 projectile schema append: pre-directional files read
+    /// launchAngle 0 = straight ahead, the direction every pre-feature bolt flew.
+    /// (Their launchX/launchY interior exit points are dead genes — the perimeter
+    /// spawn is a designer-approved behavior change for ALL projectile content.)</summary>
+    private static Dictionary<string, float> WithProjectileDefaults(Dictionary<string, float> dict)
+    {
+        dict.TryAdd(ProjectileParams.LaunchAngle, 0f);
         return dict;
     }
 

@@ -161,9 +161,11 @@ public class ProjectileTests
         SimProjectile proj = Assert.Single(world.Projectiles);
         Assert.Equal(1, shooter.ProjectilesFired);
         Assert.Equal(0, proj.Owner);
-        // Launch offset: (0.3 × BodyHalf.X × facing, 0) from the shooter's center.
-        Assert.Equal(posAtSpawn.X + 0.3f * shooter.BodyHalf.X, proj.Origin.X, 0.01f);
+        // Perimeter exit (2026-09-14, directional launch): angle 0 exits through the
+        // right body edge, pushed out by the bolt's half extent (hitboxSize 0.5/2).
+        Assert.Equal(posAtSpawn.X + shooter.BodyHalf.X + 0.25f, proj.Origin.X, 0.01f);
         Assert.Equal(posAtSpawn.Y, proj.Origin.Y, 0.01f);
+        Assert.False(proj.OverlapsBody(shooter.Body)); // never inside the shooter
         Assert.Equal(PlayerState.Attack, shooter.State);
     }
 
@@ -406,12 +408,14 @@ public class ProjectileTests
         SimPlayer victim = world.Players[1];
         world.Tick(stackalloc[] { new InputFrame(0f, 0f, false, InputFrame.ActionBit(0)), InputFrame.Neutral });
         // ONE timed dash, LEFT held so the direction capture sends it INTO the bolt.
-        // Spawn ≈ tick 12 at x ≈ −2.89, 6 u/s rightward; the victim's body-overlap
-        // window is ticks ≈ 50–62. Dashing at t = 48 gives 3 + 24 invulnerable ticks
-        // (49–75) covering the whole crossing. (Mashing re-dash instead leaves a
-        // 1-tick Idle gap each cycle — the bolt found it; a real finding about how
-        // continuous i-frames AREN'T, kept deliberate.)
-        for (int t = 0; t < 48; t++)
+        // Spawn ≈ tick 12 at x ≈ −2.38 (2026-09-14 perimeter exit: body edge + bolt
+        // half extent — 0.51 u ahead of the old interior point, so the crossing runs
+        // ~5 ticks earlier), 6 u/s rightward; the victim's body-overlap window is
+        // ticks ≈ 45–57. Dashing at t = 43 gives 3 + 24 invulnerable ticks (44–70)
+        // covering the whole crossing. (Mashing re-dash instead leaves a 1-tick Idle
+        // gap each cycle — the bolt found it; a real finding about how continuous
+        // i-frames AREN'T, kept deliberate.)
+        for (int t = 0; t < 43; t++)
         {
             world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
         }

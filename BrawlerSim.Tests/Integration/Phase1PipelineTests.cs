@@ -152,6 +152,11 @@ public class Phase1PipelineTests
         // (fast fall/crouch/DI), 16079587979934170348 (dash slot),
         // 10607725140721060960 (shield), 5432710911100783110 (two moves),
         // 13551893661434631362, 9300943650238635838.
-        Assert.Equal(10581963340493818369UL, RunPipeline(20260707));
+        // Re-pinned 2026-09-14 (directional projectiles): the projectile schema
+        // appended launchAngle — one extra generation draw per projectile move plus
+        // the knockback-parity constraint shift every stream that rolls a
+        // projectile slot. Prior pin 10581963340493818369 (2026-09-11 backgrounds
+        // v0.4 era).
+        Assert.Equal(11151583189791139341UL, RunPipeline(20260707));
     }
 }

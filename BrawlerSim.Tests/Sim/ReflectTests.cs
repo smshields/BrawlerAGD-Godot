@@ -184,9 +184,10 @@ public class ReflectTests
         SimPlayer shooter = world.Players[0];
         SimPlayer defender = world.Players[1];
         world.Tick(stackalloc[] { new InputFrame(0f, 0f, false, InputFrame.ActionBit(0)), InputFrame.Neutral });
-        // Spawn ≈ tick 12 at x ≈ −2.89; overlap window at the defender ≈ ticks 50–62.
-        // Dash (6 warm-up + 24 travel) pressed at t=46 keeps the Dash state through it.
-        for (int t = 0; t < 46; t++)
+        // Spawn ≈ tick 12 at x ≈ −2.38 (2026-09-14 perimeter exit — the crossing runs
+        // ~5 ticks earlier); overlap window at the defender ≈ ticks 45–57. Dash
+        // (6 warm-up + 24 travel) pressed at t=41 keeps the Dash state through it.
+        for (int t = 0; t < 41; t++)
         {
             world.Tick(stackalloc[] { InputFrame.Neutral, InputFrame.Neutral });
         }

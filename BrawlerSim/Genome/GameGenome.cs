@@ -66,7 +66,10 @@ public sealed class MoveGenome
     public static MoveGenome GenerateProjectile(GenerationConfig config, Pcg32 rng)
     {
         ParamSet raw = GenomeOps.Generate(config.ProjectileSchema, rng);
-        return new MoveGenome(raw, rng.NextInt(config.MoveSpriteCount), MoveType.Projectile);
+        // Knockback parity with melee (2026-09-14): constrain toward the launch
+        // direction at generation only — RNG-free, like ConstrainKnockback.
+        return new MoveGenome(MoveRules.ConstrainProjectileKnockback(raw),
+            rng.NextInt(config.MoveSpriteCount), MoveType.Projectile);
     }
 
     public static MoveGenome GenerateOfType(MoveType type, GenerationConfig config, Pcg32 rng) => type switch

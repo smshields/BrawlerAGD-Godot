@@ -504,12 +504,10 @@ public sealed class SimWorld
             }
             player.ProjectileSpawnPending = false;
             SimProjectileMove move = player.ProjectileMoves[player.CurrentMoveIndex]!;
-            // The sketch's EXIT point: launch fractions × body half extents, the X
-            // side mirrored by facing. Age 0 at the origin this tick; motion begins
-            // next tick.
-            Vec2 origin = player.Position + new Vec2(
-                move.LaunchFraction.X * player.BodyHalf.X * player.Facing,
-                move.LaunchFraction.Y * player.BodyHalf.Y);
+            // Perimeter exit (2026-09-14, replacing the sketch's interior launch
+            // fractions): the body-edge point along the facing-mirrored launch
+            // direction. Age 0 at the origin this tick; motion begins next tick.
+            Vec2 origin = move.SpawnOrigin(player.Position, player.BodyHalf, player.Facing);
             _projectiles.Add(new SimProjectile(move, player.Index, player.CurrentMoveIndex, origin, player.Facing));
             player.ProjectilesFired++;
         }

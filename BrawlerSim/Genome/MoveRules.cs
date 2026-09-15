@@ -50,6 +50,33 @@ public static class MoveRules
     /// in 5% steps. Applied once when a move genome is first generated — crossover and
     /// mutation do NOT re-apply it, exactly as in the original.
     /// </summary>
+    /// <summary>Unit launch direction of a projectile move (2026-09-14 directional
+    /// launch): cos/sin of the launchAngle gene, X mirrored by facing at sim time.
+    /// 0 = straight ahead, π/2 = straight up — moveAngle's polar convention.</summary>
+    public static Vec2 LaunchDirection(ParamSet projectile) =>
+        new(
+            DetMath.Cos(projectile.Get(ProjectileParams.LaunchAngle)),
+            DetMath.Sin(projectile.Get(ProjectileParams.LaunchAngle)));
+
+    /// <summary>The melee generation-time knockback constraint applied to projectiles
+    /// (2026-09-14, knockback parity): identical lerp, with the unit LAUNCH DIRECTION
+    /// standing in for the hitbox location. Generation-only, exactly like melee —
+    /// crossover and mutation never re-apply it.</summary>
+    public static ParamSet ConstrainProjectileKnockback(ParamSet projectile)
+    {
+        Vec2 launch = LaunchDirection(projectile);
+        var knockback = new Vec2(
+            projectile.Get(ProjectileParams.KnockbackModX),
+            projectile.Get(ProjectileParams.KnockbackModY));
+        for (int i = 0; i < 10_000 && Vec2.AngleDeg(launch, knockback) >= 135f; i++)
+        {
+            knockback = Vec2.Lerp(knockback, launch, 0.05f);
+        }
+        return projectile.With(
+            (ProjectileParams.KnockbackModX, knockback.X),
+            (ProjectileParams.KnockbackModY, knockback.Y));
+    }
+
     public static ParamSet ConstrainKnockback(ParamSet move)
     {
         Vec2 moveLoc = MoveLocation(move);

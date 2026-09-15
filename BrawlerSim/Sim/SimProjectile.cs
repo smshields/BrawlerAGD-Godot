@@ -23,8 +23,9 @@ public enum ProjectileShape
 /// (2026-07-14, FEATURES.md §Projectiles; docs/features/projectiles.md).
 /// DamageGiven mirrors the melee formula (base + total commitment time × factor);
 /// HalfExtent enforces "never larger than the shooting character" against the
-/// owner's ACTUAL scaled body; LaunchFraction is the sketch's EXIT point, clamped
-/// by the schema to overlap the player.
+/// owner's ACTUAL scaled body; LaunchDirection (2026-09-14) is melee moveAngle's
+/// polar convention — the bolt exits on the body PERIMETER along it (SpawnOrigin),
+/// replacing the sketch's interior launchX/launchY exit point (dead genes).
 /// </summary>
 public sealed class SimProjectileMove
 {
@@ -49,7 +50,11 @@ public sealed class SimProjectileMove
     public readonly bool DamageDecay;
     public readonly float DecayRate;      // damage-scale units per second
     public readonly bool HitsSelf;
-    public readonly Vec2 LaunchFraction;  // × owner body half extents (X mirrors with facing)
+
+    /// <summary>Unit launch direction from the launchAngle gene (2026-09-14
+    /// directional launch), UNMIRRORED — the X component mirrors with facing at
+    /// spawn/path time. Replaces the dead launchX/launchY interior exit point.</summary>
+    public readonly Vec2 LaunchDirection;
 
     public SimProjectileMove(MoveGenome genome, MatchConfig config, Vec2 ownerBodyHalf)
     {
@@ -87,15 +92,46 @@ public sealed class SimProjectileMove
         DamageDecay = p.Get(ProjectileParams.DamageDecay) >= 0.5f;
         DecayRate = p.Get(ProjectileParams.DecayRate);
         HitsSelf = p.Get(ProjectileParams.HitsSelf) >= 0.5f;
-        LaunchFraction = new Vec2(p.Get(ProjectileParams.LaunchX), p.Get(ProjectileParams.LaunchY));
+        LaunchDirection = MoveRules.LaunchDirection(p);
+    }
+
+    /// <summary>
+    /// Perimeter spawn point (2026-09-14, designer: bolts exit AROUND the body like
+    /// melee hitboxes, never inside it): the body-edge intersection along the
+    /// facing-mirrored launch direction, pushed out by the bolt's half extent so the
+    /// spawn hitbox starts clear of the shooter. (A rotated square/triangle can still
+    /// graze — its reach along the axis exceeds HalfExtent — which the ClearedOwner
+    /// latch already absorbs.) Shared verbatim by SimWorld's spawn and the agent's
+    /// aim prediction, so the instrument predicts exactly what the sim does.
+    /// </summary>
+    public Vec2 SpawnOrigin(Vec2 ownerCenter, Vec2 ownerBodyHalf, int facing)
+    {
+        var dir = new Vec2(LaunchDirection.X * facing, LaunchDirection.Y);
+        // Minkowski exit: the ray leaves the body box INFLATED by the bolt half
+        // extent, so the bolt's bounding box (hence a circle bolt exactly) clears
+        // the body on every angle — a plain push-out along the ray left diagonal
+        // exits within a radius of the face. The 0.001 skin breaks exact tangency.
+        float exit = float.MaxValue;
+        if (MathF.Abs(dir.X) > 1e-6f)
+        {
+            exit = (ownerBodyHalf.X + HalfExtent) / MathF.Abs(dir.X);
+        }
+        if (MathF.Abs(dir.Y) > 1e-6f)
+        {
+            exit = MathF.Min(exit, (ownerBodyHalf.Y + HalfExtent) / MathF.Abs(dir.Y));
+        }
+        return ownerCenter + dir * (exit + 0.001f);
     }
 
     /// <summary>
     /// The CLOSED-FORM trajectory — position is a pure function of age, never
     /// integrated, so replay == live by construction and the agent's dodge/aim
-    /// prediction is exact. s runs along the spawn facing; the lateral offset is the
-    /// path shape (sine over TIME, quadratic over DISTANCE like the sketch's arc,
-    /// always curving downward) plus the optional gravity term.
+    /// prediction is exact. s runs along the LAUNCH DIRECTION (2026-09-14: rotated by
+    /// the launchAngle gene, X mirrored by facing; angle 0 reproduces the old
+    /// horizontal math term for term); the lateral offset is the path shape (sine
+    /// over TIME, quadratic over DISTANCE like the sketch's arc) bending around the
+    /// launch axis. Gravity stays WORLD-DOWN — a rising bolt arcs over, like a thrown
+    /// object, rather than sliding sideways in its own frame.
     /// </summary>
     public Vec2 PositionAt(Vec2 origin, int facing, int ageTicks, MatchConfig config)
     {
@@ -107,11 +143,13 @@ public sealed class SimProjectileMove
             ProjectilePath.Quadratic => -PathScalar * QuadraticScale * s * s,
             _ => 0f,
         };
+        float along = s * LaunchDirection.X - lateral * LaunchDirection.Y;
+        float rise = s * LaunchDirection.Y + lateral * LaunchDirection.X;
         if (Gravity)
         {
-            lateral -= 0.5f * config.Gravity * t * t;
+            rise -= 0.5f * config.Gravity * t * t;
         }
-        return origin + new Vec2(facing * s, lateral);
+        return origin + new Vec2(facing * along, rise);
     }
 
     public float DamageScaleAt(int ageTicks, MatchConfig config) =>
