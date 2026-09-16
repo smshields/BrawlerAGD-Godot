@@ -1,3 +1,4 @@
+using BrawlerSim.Fitness.Terms;
 using BrawlerSim.Sim;
 
 namespace BrawlerSim.Fitness;
@@ -13,14 +14,12 @@ namespace BrawlerSim.Fitness;
 ///
 /// v4 remains frozen and selectable; v5 is the default for NEW two-player runs.
 /// </summary>
-public sealed class StandardFitnessV5 : IFitnessFunction, IFitnessBreakdown
+public sealed class StandardFitnessV5 : IFitnessFunction, IFitnessBreakdown, IFitnessTermList
 {
     public const float DefaultDropThroughReward = 0.25f;
     public const float DefaultDropThroughCap = 1f;
 
-    private readonly StandardFitnessV4 _v4;
-    private readonly float _dropReward;
-    private readonly float _dropCap;
+    private readonly FitnessComposer _composed;
 
     public StandardFitnessV5(
         float targetLengthSeconds = 45f,
@@ -30,35 +29,17 @@ public sealed class StandardFitnessV5 : IFitnessFunction, IFitnessBreakdown
         float dropThroughReward = DefaultDropThroughReward,
         float dropThroughCap = DefaultDropThroughCap)
     {
-        _v4 = new StandardFitnessV4(
-            targetLengthSeconds, maxLengthSeconds, damageScalar, collisionScalar);
-        _dropReward = dropThroughReward;
-        _dropCap = dropThroughCap;
+        _composed = new FitnessComposer("standard-v5", ShippedTermLists.V5(
+            targetLengthSeconds, maxLengthSeconds, damageScalar, collisionScalar,
+            dropThroughReward, dropThroughCap));
     }
 
-    public string Name => "standard-v5";
+    public string Name => _composed.Name;
 
-    public float Evaluate(MatchResult result) =>
-        _v4.Evaluate(result) + DropThroughTerm(result, _dropReward, _dropCap);
+    public float Evaluate(MatchResult result) => _composed.Evaluate(result);
 
-    public IReadOnlyList<(string Name, float Value)> Breakdown(MatchResult result)
-    {
-        var terms = new List<(string, float)>(_v4.Breakdown(result))
-        {
-            ("dropThroughs", DropThroughTerm(result, _dropReward, _dropCap)),
-        };
-        return terms;
-    }
+    public IReadOnlyList<(string Name, float Value)> Breakdown(MatchResult result) =>
+        _composed.Breakdown(result);
 
-    /// <summary>+reward × ΣDropThroughs over all players, capped, never negative.
-    /// Shared with ffa-v2 (identical designer spec for both).</summary>
-    internal static float DropThroughTerm(MatchResult result, float reward, float cap)
-    {
-        int total = 0;
-        foreach (PlayerStats player in result.Players)
-        {
-            total += player.DropThroughs;
-        }
-        return MathF.Min(reward * total, cap);
-    }
+    public IReadOnlyList<IFitnessTerm> Terms => _composed.Terms;
 }

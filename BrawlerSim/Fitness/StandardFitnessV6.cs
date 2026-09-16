@@ -1,4 +1,4 @@
-using BrawlerSim.Genome;
+using BrawlerSim.Fitness.Terms;
 using BrawlerSim.Sim;
 
 namespace BrawlerSim.Fitness;
@@ -24,15 +24,14 @@ namespace BrawlerSim.Fitness;
 /// NOT the default: v5 remains the default for new runs until the designer gates this
 /// experiment. Selectable via --fitness standard-v6; run.json records it as usual.
 /// </summary>
-public sealed class StandardFitnessV6 : IFitnessFunction, IFitnessBreakdown
+public sealed class StandardFitnessV6 : IFitnessFunction, IFitnessBreakdown, IFitnessTermList
 {
     /// <summary>Clamp bounds for the time scale — the stage schema's generation
     /// envelope (visible half extents generate at 0.5×–5× legacy per axis).</summary>
     public const float MinTimeScale = 0.5f;
     public const float MaxTimeScale = 5f;
 
-    private readonly StandardFitnessV5 _v5;
-    private readonly float _target;
+    private readonly FitnessComposer _composed;
 
     public StandardFitnessV6(
         float targetLengthSeconds = 45f,
@@ -40,44 +39,22 @@ public sealed class StandardFitnessV6 : IFitnessFunction, IFitnessBreakdown
         float damageScalar = 10f,
         float collisionScalar = StandardFitnessV3.DefaultCollisionScalar)
     {
-        _v5 = new StandardFitnessV5(
-            targetLengthSeconds, maxLengthSeconds, damageScalar, collisionScalar);
-        _target = targetLengthSeconds;
+        _composed = new FitnessComposer("standard-v6", ShippedTermLists.V6(
+            targetLengthSeconds, maxLengthSeconds, damageScalar, collisionScalar));
     }
 
-    public string Name => "standard-v6";
+    public string Name => _composed.Name;
 
-    public float Evaluate(MatchResult result) =>
-        _v5.Evaluate(result) + TimeRescaleTerm(result, _target);
+    public float Evaluate(MatchResult result) => _composed.Evaluate(result);
 
-    public IReadOnlyList<(string Name, float Value)> Breakdown(MatchResult result)
-    {
-        var terms = new List<(string, float)>(_v5.Breakdown(result))
-        {
-            ("timeRescale", TimeRescaleTerm(result, _target)),
-        };
-        return terms;
-    }
+    public IReadOnlyList<(string Name, float Value)> Breakdown(MatchResult result) =>
+        _composed.Breakdown(result);
 
-    /// <summary>sqrt(area ratio) vs the legacy map, clamped; 1 for null metrics.</summary>
-    public static float TimeScale(StageMetrics? stage)
-    {
-        if (stage is null)
-        {
-            return 1f;
-        }
-        float ratio = (stage.VisibleHalfWidth * stage.VisibleHalfHeight)
-            / (StageRules.LegacyVisibleHalfWidth * StageRules.LegacyVisibleHalfHeight);
-        return Math.Clamp(MathF.Sqrt(ratio), MinTimeScale, MaxTimeScale);
-    }
+    public IReadOnlyList<IFitnessTerm> Terms => _composed.Terms;
 
-    /// <summary>Swaps the v3 time reward's anchor: +|target − len| backs out the flat
-    /// term, −|s·target − len| replaces it. Exactly 0 at s = 1 (v5 verbatim); the
-    /// overtime cliff is untouched by construction.</summary>
-    internal static float TimeRescaleTerm(MatchResult result, float target)
-    {
-        float s = TimeScale(result.Stage);
-        return MathF.Abs(target - result.LengthSeconds)
-            - MathF.Abs(s * target - result.LengthSeconds);
-    }
+    /// <summary>sqrt(area ratio) vs the legacy map, clamped; 1 for null metrics.
+    /// The body lives on TimeTerm since 2026-09-16; this stays as the name the
+    /// scaled-time work and its tests already call.</summary>
+    public static float TimeScale(StageMetrics? stage) =>
+        TimeTerm.MapScale(stage, MinTimeScale, MaxTimeScale);
 }

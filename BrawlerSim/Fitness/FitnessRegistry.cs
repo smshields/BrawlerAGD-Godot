@@ -44,6 +44,11 @@ public static class FitnessRegistry
         ("ffa-v3", true, (target, max, cs) => new FfaFitnessV3(target, max, collisionScalar: cs)),
     };
 
+    /// <summary>Every shipped version name. A custom assembly may not take one of
+    /// these (FitnessRecipe.Validate) — a run scored by a designer-built instrument
+    /// must never be mistakable for a shipped version in a manifest or a chart.</summary>
+    public static IReadOnlyList<string> Names { get; } = Registry.Select(entry => entry.Name).ToArray();
+
     public static IFitnessFunction Create(
         string? name, float targetLengthSeconds, float maxLengthSeconds,
         float? collisionScalar = null, int playerCount = 2)

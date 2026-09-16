@@ -1,9 +1,7 @@
-using BrawlerSim.Determinism;
+using BrawlerSim.Fitness.Terms;
 using BrawlerSim.Sim;
 
 namespace BrawlerSim.Fitness;
-
-using static FitnessTerms;
 
 /// <summary>
 /// ffa-v1 (2026-08-12, designer-specified; docs/features/four-player.md): standard-v3's
@@ -20,9 +18,9 @@ using static FitnessTerms;
 /// identically to standard-v4 (regression-tested) — but N-player scores are NOT
 /// comparable to any 2P run (different game, different instrument dynamics).
 /// </summary>
-public sealed class FfaFitnessV1 : IFitnessFunction, IFitnessBreakdown
+public sealed class FfaFitnessV1 : IFitnessFunction, IFitnessBreakdown, IFitnessTermList
 {
-    private readonly ComposedFitness _composed;
+    private readonly FitnessComposer _composed;
 
     public FfaFitnessV1(
         float targetLengthSeconds = 45f,
@@ -39,30 +37,13 @@ public sealed class FfaFitnessV1 : IFitnessFunction, IFitnessBreakdown
         float selfDestructPenalty = StandardFitnessV4.DefaultSelfDestructPenalty,
         float selfDestructCap = StandardFitnessV4.DefaultSelfDestructCap)
     {
-        _composed = new ComposedFitness("ffa-v1", new ComposedFitness.Term[]
-        {
-            new("time", r =>
-                -DetMath.Abs(targetLengthSeconds - r.LengthSeconds)
-                + (r.LengthSeconds >= maxLengthSeconds ? StandardFitnessV3.OvertimePenalty : 0f)),
-            new("damage", r => SumOverPlayers(r, p => CountedDamage(p, stockDamageCap)) / damageScalar),
-            new("farmPenalty", r =>
-                -punishSlope * SumOverPlayers(r, p => Excess(p, punishStartDamage, stockDamageCap))),
-            new("collisions", r => collisionScalar * SumOverPlayers(r, p => p.TotalHitsReceived)),
-            new("damageFairness", r =>
-                -Spread(r, p => CountedDamage(p, stockDamageCap)) / damageScalar),
-            new("stockFairness", r => 3f - Spread(r, p => p.RemainingStocks)),
-            new("moveMix", r => moveMixWeight * SumOverPlayers(r, MoveEvenness)),
-            new("stunLock", r =>
-                -stunLockWeight * 100f * SumOverPlayers(r, p => StunExcess(p, r.Ticks))),
-            new("jumps", r =>
-            {
-                float saturation = StandardFitnessV3.DefaultJumpSaturation * r.Players.Count / 2f;
-                return jumpWeight * MathF.Min(SumOverPlayers(r, p => p.Jumps), saturation) / saturation;
-            }),
-            new("blocks", r => blockReward * SumOverPlayers(r, p => p.BlockedHits)),
-            new("selfDestructs", r =>
-                StandardFitnessV4.SelfDestructTerm(r, selfDestructPenalty, selfDestructCap)),
-        });
+        // Literally standard-v4's list: every generalization below is exact at N = 2,
+        // which is why the two names share one term list (ShippedTermLists.V4).
+        _composed = new FitnessComposer("ffa-v1", ShippedTermLists.V4(
+            targetLengthSeconds, maxLengthSeconds, damageScalar, collisionScalar,
+            selfDestructPenalty, selfDestructCap,
+            punishStartDamage, stockDamageCap, punishSlope,
+            moveMixWeight, stunLockWeight, jumpWeight, blockReward));
     }
 
     public string Name => _composed.Name;
@@ -72,30 +53,5 @@ public sealed class FfaFitnessV1 : IFitnessFunction, IFitnessBreakdown
     public IReadOnlyList<(string Name, float Value)> Breakdown(MatchResult result) =>
         _composed.Breakdown(result);
 
-    private static float SumOverPlayers(MatchResult result, Func<PlayerStats, float> value)
-    {
-        float sum = 0f;
-        foreach (PlayerStats player in result.Players)
-        {
-            sum += value(player);
-        }
-        return sum;
-    }
-
-    /// <summary>max − min over players — the N-player fairness generalization
-    /// (identical to |a − b| for two players).</summary>
-    private static float Spread(MatchResult result, Func<PlayerStats, float> value)
-    {
-        float min = float.MaxValue, max = float.MinValue;
-        foreach (PlayerStats player in result.Players)
-        {
-            float v = value(player);
-            min = MathF.Min(min, v);
-            max = MathF.Max(max, v);
-        }
-        return max - min;
-    }
-
-    // The per-player term pieces (CountedDamage/MoveEvenness/StunExcess/Excess)
-    // are shared with StandardFitnessV3 via FitnessTerms (2026-09-01 dedupe).
+    public IReadOnlyList<IFitnessTerm> Terms => _composed.Terms;
 }

@@ -1,3 +1,4 @@
+using BrawlerSim.Fitness.Terms;
 using BrawlerSim.Sim;
 
 namespace BrawlerSim.Fitness;
@@ -13,14 +14,12 @@ namespace BrawlerSim.Fitness;
 /// v3 remains frozen and selectable; v4 is the default for NEW two-player runs.
 /// Scores differ from v3 only on matches containing self-destructs.
 /// </summary>
-public sealed class StandardFitnessV4 : IFitnessFunction, IFitnessBreakdown
+public sealed class StandardFitnessV4 : IFitnessFunction, IFitnessBreakdown, IFitnessTermList
 {
     public const float DefaultSelfDestructPenalty = 1f;
     public const float DefaultSelfDestructCap = 4f;
 
-    private readonly StandardFitnessV3 _v3;
-    private readonly float _sdPenalty;
-    private readonly float _sdCap;
+    private readonly FitnessComposer _composed;
 
     public StandardFitnessV4(
         float targetLengthSeconds = 45f,
@@ -30,35 +29,24 @@ public sealed class StandardFitnessV4 : IFitnessFunction, IFitnessBreakdown
         float selfDestructPenalty = DefaultSelfDestructPenalty,
         float selfDestructCap = DefaultSelfDestructCap)
     {
-        _v3 = new StandardFitnessV3(
-            targetLengthSeconds, maxLengthSeconds, damageScalar, collisionScalar: collisionScalar);
-        _sdPenalty = selfDestructPenalty;
-        _sdCap = selfDestructCap;
+        _composed = new FitnessComposer("standard-v4", ShippedTermLists.V4(
+            targetLengthSeconds, maxLengthSeconds, damageScalar, collisionScalar,
+            selfDestructPenalty, selfDestructCap,
+            StandardFitnessV3.DefaultPunishStartDamage,
+            StandardFitnessV3.DefaultStockDamageCap,
+            StandardFitnessV3.DefaultPunishSlope,
+            StandardFitnessV3.DefaultMoveMixWeight,
+            StandardFitnessV3.DefaultStunLockWeight,
+            StandardFitnessV3.DefaultJumpWeight,
+            StandardFitnessV3.DefaultBlockReward));
     }
 
-    public string Name => "standard-v4";
+    public string Name => _composed.Name;
 
-    public float Evaluate(MatchResult result) =>
-        _v3.Evaluate(result) + SelfDestructTerm(result, _sdPenalty, _sdCap);
+    public float Evaluate(MatchResult result) => _composed.Evaluate(result);
 
-    public IReadOnlyList<(string Name, float Value)> Breakdown(MatchResult result)
-    {
-        var terms = new List<(string, float)>(_v3.Breakdown(result))
-        {
-            ("selfDestructs", SelfDestructTerm(result, _sdPenalty, _sdCap)),
-        };
-        return terms;
-    }
+    public IReadOnlyList<(string Name, float Value)> Breakdown(MatchResult result) =>
+        _composed.Breakdown(result);
 
-    /// <summary>−penalty × ΣSelfDestructs over all players, floored at −(cap).
-    /// Shared with ffa-v1 (identical designer spec for both).</summary>
-    internal static float SelfDestructTerm(MatchResult result, float penalty, float cap)
-    {
-        int total = 0;
-        foreach (PlayerStats player in result.Players)
-        {
-            total += player.SelfDestructs;
-        }
-        return -MathF.Min(penalty * total, cap);
-    }
+    public IReadOnlyList<IFitnessTerm> Terms => _composed.Terms;
 }
