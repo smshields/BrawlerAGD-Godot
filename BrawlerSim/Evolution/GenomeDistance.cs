@@ -16,6 +16,12 @@ namespace BrawlerSim.Evolution;
 /// </summary>
 public static class GenomeDistance
 {
+    /// <summary>Config-free overload (2026-09-16, the galaxy view's cell reservoir):
+    /// the GenerationConfig parameter has never been read — normalization widths come
+    /// from each ParamSet's own schema — and the reservoir runs on screens that hold
+    /// no config. Kept as an overload so every existing call site is untouched.</summary>
+    public static float Normalized(GameGenome a, GameGenome b) => Normalized(a, b, GenerationConfig.Default);
+
     public static float Normalized(GameGenome a, GameGenome b, GenerationConfig config)
     {
         if (a.Characters.Count != b.Characters.Count)
