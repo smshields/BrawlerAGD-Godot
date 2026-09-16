@@ -1,3 +1,4 @@
+using BrawlerSim.Fitness.Terms;
 using BrawlerSim.Sim;
 
 namespace BrawlerSim.Fitness;
@@ -10,11 +11,9 @@ namespace BrawlerSim.Fitness;
 /// ffa-v2 at N = 2 scores identically to standard-v5 (regression-tested). The default
 /// fitness for NEW 3/4-player runs; ffa-v1 remains frozen and selectable.
 /// </summary>
-public sealed class FfaFitnessV2 : IFitnessFunction, IFitnessBreakdown
+public sealed class FfaFitnessV2 : IFitnessFunction, IFitnessBreakdown, IFitnessTermList
 {
-    private readonly FfaFitnessV1 _v1;
-    private readonly float _dropReward;
-    private readonly float _dropCap;
+    private readonly FitnessComposer _composed;
 
     public FfaFitnessV2(
         float targetLengthSeconds = 45f,
@@ -24,23 +23,18 @@ public sealed class FfaFitnessV2 : IFitnessFunction, IFitnessBreakdown
         float dropThroughReward = StandardFitnessV5.DefaultDropThroughReward,
         float dropThroughCap = StandardFitnessV5.DefaultDropThroughCap)
     {
-        _v1 = new FfaFitnessV1(
-            targetLengthSeconds, maxLengthSeconds, damageScalar, collisionScalar: collisionScalar);
-        _dropReward = dropThroughReward;
-        _dropCap = dropThroughCap;
+        // Literally standard-v5's list — see FfaFitnessV1 on why the two names share one.
+        _composed = new FitnessComposer("ffa-v2", ShippedTermLists.V5(
+            targetLengthSeconds, maxLengthSeconds, damageScalar, collisionScalar,
+            dropThroughReward, dropThroughCap));
     }
 
-    public string Name => "ffa-v2";
+    public string Name => _composed.Name;
 
-    public float Evaluate(MatchResult result) =>
-        _v1.Evaluate(result) + StandardFitnessV5.DropThroughTerm(result, _dropReward, _dropCap);
+    public float Evaluate(MatchResult result) => _composed.Evaluate(result);
 
-    public IReadOnlyList<(string Name, float Value)> Breakdown(MatchResult result)
-    {
-        var terms = new List<(string, float)>(_v1.Breakdown(result))
-        {
-            ("dropThroughs", StandardFitnessV5.DropThroughTerm(result, _dropReward, _dropCap)),
-        };
-        return terms;
-    }
+    public IReadOnlyList<(string Name, float Value)> Breakdown(MatchResult result) =>
+        _composed.Breakdown(result);
+
+    public IReadOnlyList<IFitnessTerm> Terms => _composed.Terms;
 }

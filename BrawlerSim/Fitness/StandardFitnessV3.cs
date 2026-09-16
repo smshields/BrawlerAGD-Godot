@@ -1,9 +1,7 @@
-using BrawlerSim.Determinism;
+using BrawlerSim.Fitness.Terms;
 using BrawlerSim.Sim;
 
 namespace BrawlerSim.Fitness;
-
-using static FitnessTerms;
 
 /// <summary>
 /// standard-v3 (2026-07-10, designer-specified): replaces v2's match-level damage cap
@@ -24,7 +22,7 @@ using static FitnessTerms;
 ///
 /// v2 remains frozen and selectable; run manifests record which version scored a run.
 /// </summary>
-public sealed class StandardFitnessV3 : IFitnessFunction, IFitnessBreakdown
+public sealed class StandardFitnessV3 : IFitnessFunction, IFitnessBreakdown, IFitnessTermList
 {
     public const float OvertimePenalty = -35f;
     public const float DefaultPunishStartDamage = 300f;
@@ -79,7 +77,7 @@ public sealed class StandardFitnessV3 : IFitnessFunction, IFitnessBreakdown
     /// </summary>
     public const float DefaultBlockReward = 2f;
 
-    private readonly ComposedFitness _composed;
+    private readonly FitnessComposer _composed;
 
     public StandardFitnessV3(
         float targetLengthSeconds = 45f,
@@ -94,35 +92,10 @@ public sealed class StandardFitnessV3 : IFitnessFunction, IFitnessBreakdown
         float jumpWeight = DefaultJumpWeight,
         float blockReward = DefaultBlockReward)
     {
-        _composed = new ComposedFitness("standard-v3", new ComposedFitness.Term[]
-        {
-            new("time", r =>
-                -DetMath.Abs(targetLengthSeconds - r.LengthSeconds)
-                + (r.LengthSeconds >= maxLengthSeconds ? OvertimePenalty : 0f)),
-            new("damage", r =>
-                (CountedDamage(r.Players[0], stockDamageCap) + CountedDamage(r.Players[1], stockDamageCap))
-                / damageScalar),
-            new("farmPenalty", r =>
-                -punishSlope * (Excess(r.Players[0], punishStartDamage, stockDamageCap)
-                              + Excess(r.Players[1], punishStartDamage, stockDamageCap))),
-            new("collisions", r =>
-                collisionScalar * (r.Players[0].TotalHitsReceived + r.Players[1].TotalHitsReceived)),
-            new("damageFairness", r =>
-                -DetMath.Abs(CountedDamage(r.Players[0], stockDamageCap)
-                           - CountedDamage(r.Players[1], stockDamageCap)) / damageScalar),
-            new("stockFairness", r =>
-                3f - DetMath.Abs(r.Players[0].RemainingStocks - r.Players[1].RemainingStocks)),
-            new("moveMix", r =>
-                moveMixWeight * (MoveEvenness(r.Players[0]) + MoveEvenness(r.Players[1]))),
-            new("stunLock", r =>
-                -stunLockWeight * 100f * (StunExcess(r.Players[0], r.Ticks)
-                                        + StunExcess(r.Players[1], r.Ticks))),
-            new("jumps", r =>
-                jumpWeight * MathF.Min(r.Players[0].Jumps + r.Players[1].Jumps, DefaultJumpSaturation)
-                    / DefaultJumpSaturation),
-            new("blocks", r =>
-                blockReward * (r.Players[0].BlockedHits + r.Players[1].BlockedHits)),
-        });
+        _composed = new FitnessComposer("standard-v3", ShippedTermLists.V3(
+            targetLengthSeconds, maxLengthSeconds, damageScalar, collisionScalar,
+            punishStartDamage, stockDamageCap, punishSlope,
+            moveMixWeight, stunLockWeight, jumpWeight, blockReward));
     }
 
     public string Name => _composed.Name;
@@ -132,6 +105,7 @@ public sealed class StandardFitnessV3 : IFitnessFunction, IFitnessBreakdown
     public IReadOnlyList<(string Name, float Value)> Breakdown(MatchResult result) =>
         _composed.Breakdown(result);
 
-    // CountedDamage / MoveEvenness / StunExcess / Excess live in FitnessTerms
-    // (2026-09-01 dedupe with FfaFitnessV1 — bodies moved verbatim, formulas frozen).
+    /// <summary>The assembled terms, for a builder UI or a diagnostic. 2026-09-16: the
+    /// formula moved to ShippedTermLists.V3 as term objects — same floats, pinned.</summary>
+    public IReadOnlyList<IFitnessTerm> Terms => _composed.Terms;
 }
