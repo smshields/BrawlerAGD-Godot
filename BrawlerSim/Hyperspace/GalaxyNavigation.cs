@@ -39,8 +39,18 @@ public static class GalaxyNavigation
     /// journey takes the time it always did.</summary>
     public const float WarpSecondsPerUnit = 0.0008f;
 
-    /// <summary>How far short of the target a warp stops.</summary>
-    public const float WarpStandoff = 6f;
+    /// <summary>
+    /// How far short of a STAR a warp stops. The spec's flat 6 units was sized for
+    /// the un-doubled world and for the PoC's smaller glow sprite; at our scale it
+    /// parks the camera inside the star's corona with the system filling the screen.
+    /// Standing off past the system envelope frames what you actually came to see —
+    /// the star AND its planets.
+    /// </summary>
+    public static float StarStandoff => GalaxyLayout.MaxSystemRadius * 1.8f;
+
+    /// <summary>A planet is a small body: close enough to fill a reasonable part of
+    /// the view, far enough that its orbit ring still reads.</summary>
+    public const float PlanetStandoff = 9f;
 
     /// <summary>A galaxy warp arrives at its edge, not its centre.</summary>
     public const float GalaxyArrivalRadius = GalaxyLayout.Half + 40f;

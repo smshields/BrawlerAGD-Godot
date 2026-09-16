@@ -13,4 +13,6 @@ public static class GalaxyVec
     public static GalaxyPoint To(Vector3 v) => new(v.X, v.Y, v.Z);
 
     public static Color From(GalaxyColor c) => new(c.R, c.G, c.B);
+
+    public static GalaxyColor To(Color c) => new(c.R, c.G, c.B);
 }

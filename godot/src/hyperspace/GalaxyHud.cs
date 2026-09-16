@@ -24,6 +24,17 @@ public partial class GalaxyHud : Control
     /// not steering (off the viewport, over the dashboard, locked, warping).</summary>
     public Vector2? SteerCursor { get; set; }
 
+    /// <summary>Lock reticle: projected centre, apparent radius, and the target's
+    /// name. Null when nothing is locked.</summary>
+    public (Vector2 Center, float Radius, string Name)? Reticle { get; set; }
+
+    /// <summary>Hover ring — suppressed on the locked object, which has the reticle.</summary>
+    public (Vector2 Center, float Radius)? HoverRing { get; set; }
+
+    /// <summary>Bracket rotation, advanced by the view's clock so the reticle reads
+    /// as active rather than painted on.</summary>
+    private float _bracketAngle;
+
     public override void _Ready()
     {
         MouseFilter = MouseFilterEnum.Ignore;
@@ -50,6 +61,7 @@ public partial class GalaxyHud : Control
 
     public override void _Process(double delta)
     {
+        _bracketAngle += (float)delta * 1.6f;
         if (_toastRemaining > 0.0)
         {
             _toastRemaining -= delta;
@@ -57,6 +69,38 @@ public partial class GalaxyHud : Control
             _toast.Modulate = new Color(1f, 1f, 1f, alpha);
         }
         QueueRedraw();
+    }
+
+    private void DrawHoverRing()
+    {
+        if (HoverRing is not { } ring)
+        {
+            return;
+        }
+        DrawArc(ring.Center, ring.Radius + 6f, 0f, Mathf.Tau, 32,
+            new Color(0.72f, 0.82f, 1f, 0.35f), 1.2f);
+    }
+
+    /// <summary>Four rotating arc brackets at the target's apparent radius, name
+    /// above. Rotation is what separates "locked" from "hovered" at a glance.</summary>
+    private void DrawReticle()
+    {
+        if (Reticle is not { } reticle)
+        {
+            return;
+        }
+        var gold = new Color(1f, 0.82f, 0.35f, 0.9f);
+        float radius = reticle.Radius + 10f;
+        const float sweep = Mathf.Pi / 7f;
+        for (int quadrant = 0; quadrant < 4; quadrant++)
+        {
+            float start = _bracketAngle + quadrant * Mathf.Pi / 2f;
+            DrawArc(reticle.Center, radius, start - sweep, start + sweep, 12, gold, 2f);
+        }
+        Font font = ThemeDB.FallbackFont;
+        Vector2 size = font.GetStringSize(reticle.Name, fontSize: 13);
+        DrawString(font, reticle.Center + new Vector2(-size.X / 2f, -radius - 12f),
+            reticle.Name, HorizontalAlignment.Left, -1, 13, gold);
     }
 
     public override void _Draw()
@@ -70,6 +114,9 @@ public partial class GalaxyHud : Control
         DrawLine(center - new Vector2(outer, 0f), center - new Vector2(inner, 0f), accent);
         DrawLine(center + new Vector2(0f, inner), center + new Vector2(0f, outer), accent);
         DrawLine(center - new Vector2(0f, outer), center - new Vector2(0f, inner), accent);
+
+        DrawHoverRing();
+        DrawReticle();
 
         if (SteerCursor is not { } cursor)
         {

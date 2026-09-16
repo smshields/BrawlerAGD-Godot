@@ -42,6 +42,16 @@ public partial class GalaxyView : Control
     private Node3D _pitch = null!;
     private Camera3D _camera = null!;
     private GalaxyStarField _stars = null!;
+    private GalaxyPlanets _planets = null!;
+    private GalaxyTargeting _targeting = null!;
+    private MeshInstance3D _cellHighlight = null!;
+    private StandardMaterial3D _cellHighlightMaterial = null!;
+    private GalaxyTarget? _hover;
+    private GalaxyTarget? _lock;
+    private bool _warping;
+    private GalaxyTarget? _warpTarget;
+    private Vector3 _warpFrom, _warpTo;
+    private float _warpElapsed, _warpDuration;
     private MultiMeshInstance3D _ambientSky = null!;
     private Label _statusLine = null!;
 
@@ -53,6 +63,11 @@ public partial class GalaxyView : Control
 
     private HyperspaceSnapshot? _snapshot;
     private int _nearestGalaxy;
+    /// <summary>Orbit clock. Seconds since the view opened — planets are a pure
+    /// function of it, so two clients at the same clock draw the same sky.</summary>
+    private float _clock;
+    /// <summary>BRAWLER_GALAXY_LOCK: lock on the first frame that has a hover.</summary>
+    private bool _pendingAutoLock;
     private GalaxyHud _hud = null!;
     private readonly ShipState _ship = new();
 
@@ -61,10 +76,19 @@ public partial class GalaxyView : Control
 
     public int NearestGalaxy => _nearestGalaxy;
 
-    /// <summary>Steering is suspended — not zeroed — while the cursor is off the
-    /// viewport, over the dashboard, or while a lock or warp owns the rotation
-    /// (§4). Later phases add their own reasons; this is the single gate.</summary>
-    public bool SteeringSuspended { get; set; }
+    /// <summary>Raised when a star or planet is locked — the Evolve screen routes it
+    /// into the same preview / ADD TO GAMES plumbing a cube pick uses.</summary>
+    public System.Action<HyperspaceEntry>? EntrySelected;
+
+    /// <summary>Captures freeze the ship so the cursor's resting position does not
+    /// steer it while a run finishes.</summary>
+    private bool _automationFreeze;
+
+    /// <summary>Steering is suspended — not zeroed — while a lock or a warp owns the
+    /// rotation, or while a capture has frozen the ship (§4). Tracked as separate
+    /// REASONS: releasing a lock must not hand steering back to a warp that is still
+    /// running, or to a frozen capture.</summary>
+    public bool SteeringSuspended => _automationFreeze || _lock is not null || _warping;
 
     public override void _Ready()
     {
@@ -88,9 +112,37 @@ public partial class GalaxyView : Control
         {
             // Frozen for the capture: otherwise the cursor's resting position keeps
             // steering the ship for the length of the run before the shot.
-            SteeringSuspended = true;
+            _automationFreeze = true;
         }
-        if (cam.Length > 0)
+        if (cam == "densest")
+        {
+            // Park just outside the most populated system — the only way to aim a
+            // headless capture at planets, which exist wherever the search converged.
+            GalaxyStar? best = null;
+            for (int g = 0; g < GalaxyLayout.Bins; g++)
+            {
+                foreach (GalaxyStar star in _stars.StarsIn(g))
+                {
+                    if (best is null || star.Entry.Occupants.Count > best.Entry.Occupants.Count)
+                    {
+                        best = star;
+                    }
+                }
+            }
+            if (best is not null)
+            {
+                float standoff = GalaxyLayout.MaxSystemRadius * 2.6f;
+                Vector3 eye = best.Position + new Vector3(0f, standoff * 0.35f, standoff);
+                _ship.Position = GalaxyVec.To(eye);
+                // Aim AT the system, so the crosshair is on it and a lock capture has
+                // something to lock.
+                Vector3 toStar = best.Position - eye;
+                _ship.Yaw = Mathf.Atan2(-toStar.X, -toStar.Z);
+                _ship.Pitch = Mathf.Atan2(toStar.Y, new Vector2(toStar.X, toStar.Z).Length());
+                ApplyShipToRig();
+            }
+        }
+        else if (cam.Length > 0)
         {
             string[] parts = cam.Split(',');
             if (parts.Length >= 3)
@@ -136,6 +188,17 @@ public partial class GalaxyView : Control
             }
         }
         _stars.SetSnapshot(snapshot, new FitnessScale(pool));
+        _planets.Rebuild(_stars);
+        // A capture aimed at "the densest system" can only resolve once there IS an
+        // archive — at _Ready the sky is empty.
+        if (AutomationEnv.GalaxyCam == "densest")
+        {
+            ApplyAutomation();
+        }
+        if (AutomationEnv.GalaxyLock == "hover")
+        {
+            _pendingAutoLock = true;
+        }
         ApplyStatus();
     }
 
@@ -143,23 +206,299 @@ public partial class GalaxyView : Control
     {
         _snapshot = null;
         _stars.SetSnapshot(null, new FitnessScale(System.Array.Empty<float>()));
+        _planets.Rebuild(_stars);
         ApplyStatus();
     }
 
     public override void _Process(double delta)
     {
         Fly((float)delta);
+        UpdateWarp((float)delta);
+        _clock += (float)delta;
         _nearestGalaxy = GalaxyNavigation.NearestGalaxy(ShipPosition.X, _nearestGalaxy);
+        _planets.Update(ShipPosition, _clock);
+        UpdateTargeting((float)delta);
+        if (_pendingAutoLock && _hover is not null)
+        {
+            _pendingAutoLock = false;
+            SetLock(_hover);
+            if (AutomationEnv.GalaxyWarp == "1")
+            {
+                // Run the warp to completion in one frame: a capture needs the
+                // ARRIVAL, and the easing itself is pinned by GalaxyNavigation tests.
+                TryWarp();
+                for (int guard = 0; _warping && guard < 600; guard++)
+                {
+                    UpdateWarp(1f / 60f);
+                }
+            }
+        }
+        if (Input.IsActionJustPressed("hs_planets"))
+        {
+            _planets.Enabled = !_planets.Enabled;
+            _hud.Toast(_planets.Enabled ? "planets on" : "planets off");
+        }
+        if (_lock is not null && Input.IsActionJustPressed("hs_release"))
+        {
+            SetLock(null);
+        }
+        if (Input.IsActionJustPressed("hs_warp"))
+        {
+            TryWarp();
+        }
+        // Hyperdrive steps are ignored mid-warp (§9), not queued.
+        if (Input.IsActionJustPressed("hs_galaxy_prev"))
+        {
+            StepGalaxy(-1);
+        }
+        if (Input.IsActionJustPressed("hs_galaxy_next"))
+        {
+            StepGalaxy(1);
+        }
         // The sky follows the ship's POSITION but not its rotation — parallax-free
         // backdrop, decorative only.
         _ambientSky.Position = ShipPosition;
         UpdateGalaxyMarkers();
     }
 
+    /// <summary>
+    /// Hover, lock tracking, the reticle and the cell highlight (§5). Tracking owns
+    /// rotation while locked — the ship turns to keep its target, and a planet is
+    /// followed live along its orbit rather than to where it was when you clicked.
+    /// </summary>
+    private void UpdateTargeting(float delta)
+    {
+        Vector2 crosshair = _viewportContainer.Size / 2f;
+        _hover = _targeting.Hover(crosshair, ShipPosition);
+
+        if (_lock is { } locked)
+        {
+            Vector3 target = _targeting.PositionOf(locked, _clock);
+            TrackToward(target, delta);
+            float radius = _targeting.ScreenRadius(locked, _clock);
+            _hud.Reticle = _targeting.Project(target) is { } screen
+                ? (screen, radius, GalaxyTargeting.Describe(locked))
+                : null;
+        }
+        else
+        {
+            _hud.Reticle = null;
+        }
+
+        // The locked object wears the reticle, so it never also wears a hover ring.
+        bool hoverIsLocked = _hover is not null && _hover.SameAs(_lock);
+        _hud.HoverRing = _hover is { } hovered && !hoverIsLocked
+            && _targeting.Project(_targeting.PositionOf(hovered, _clock)) is { } hoverScreen
+                ? (hoverScreen, _targeting.ScreenRadius(hovered, _clock))
+                : null;
+
+        GalaxyTarget? focus = _lock ?? _hover;
+        _planets.HighlightStar = focus?.Star;
+        _planets.HighlightPlanet = focus?.Planet;
+        UpdateCellHighlight(focus);
+    }
+
+    /// <summary>Shortest-angle turn toward a world point. Steering is suspended while
+    /// this runs: tracking owns the rotation (§5).</summary>
+    private void TrackToward(Vector3 target, float delta)
+    {
+        Vector3 delta3 = target - ShipPosition;
+        if (delta3.LengthSquared() < 1e-4f)
+        {
+            return;
+        }
+        float wantedYaw = Mathf.Atan2(-delta3.X, -delta3.Z);
+        float wantedPitch = Mathf.Atan2(delta3.Y, new Vector2(delta3.X, delta3.Z).Length());
+        float gain = Mathf.Min(1f, GalaxyNavigation.TrackingGain * delta);
+        _ship.Yaw += Mathf.AngleDifference(_ship.Yaw, wantedYaw) * gain;
+        _ship.Pitch += Mathf.AngleDifference(_ship.Pitch, wantedPitch) * gain;
+        _ship.Pitch = Mathf.Clamp(_ship.Pitch, -GalaxyNavigation.MaxPitch, GalaxyNavigation.MaxPitch);
+        ApplyShipToRig();
+    }
+
+    /// <summary>
+    /// Wireframe the hovered/locked object's OWN archive cell. Without it a star's
+    /// bucket membership is not readable in flight, and the galaxy stops reading as
+    /// the grid it actually is. Quiets as you fly inside the cell, where its walls
+    /// would otherwise swamp the view. Independent of the G sector-grid toggle.
+    /// </summary>
+    private void UpdateCellHighlight(GalaxyTarget? focus)
+    {
+        if (focus?.Star is not { } star)
+        {
+            _cellHighlightMaterial.AlbedoColor = new Color(1f, 0.82f, 0.35f, 0f);
+            return;
+        }
+        Vector3 center = GalaxyVec.From(GalaxyLayout.GalaxyCenter(star.G))
+            + new Vector3((star.I - 3.5f) * GalaxyLayout.S, (star.J - 3.5f) * GalaxyLayout.S,
+                (star.K - 3.5f) * GalaxyLayout.S);
+        _cellHighlight.Position = center;
+        float distance = ShipPosition.DistanceTo(star.Position);
+        float alpha = 0.45f * Mathf.Clamp(distance / (1.2f * GalaxyLayout.S), 0.12f, 1f);
+        _cellHighlightMaterial.AlbedoColor = new Color(1f, 0.82f, 0.35f, alpha);
+    }
+
+    private void BuildCellHighlight()
+    {
+        _cellHighlightMaterial = new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            AlbedoColor = new Color(1f, 0.82f, 0.35f, 0f),
+            DisableReceiveShadows = true,
+        };
+        _cellHighlight = new MeshInstance3D
+        {
+            Name = "CellHighlight",
+            Mesh = BoxWireframe(Vector3.Zero, GalaxyLayout.S / 2f, _cellHighlightMaterial),
+        };
+        _world.AddChild(_cellHighlight);
+    }
+
+    /// <summary>Left click locks or releases; Esc releases. A click on empty space is
+    /// a release, not a no-op — it is how you let go without hunting for a key.
+    /// Bound to the viewport container: it has MouseFilter.Stop, so a click never
+    /// reaches this Control's own _GuiInput.</summary>
+    private void OnViewportGuiInput(InputEvent @event)
+    {
+        if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left } click)
+        {
+            SetLock(_targeting.Pick(click.Position, ShipPosition, _clock));
+            _viewportContainer.AcceptEvent();
+        }
+    }
+
+    private void SetLock(GalaxyTarget? target)
+    {
+        if (target is null)
+        {
+            if (_lock is not null)
+            {
+                _hud.Toast("lock released");
+            }
+            _lock = null;
+            return;
+        }
+        // Tracking owns rotation from here until the lock is released.
+        _lock = target;
+        _hud.Toast($"locked: {GalaxyTargeting.Describe(target)}");
+        if (target.Entry is { } entry)
+        {
+            EntrySelected?.Invoke(entry);
+        }
+    }
+
+    /// <summary>
+    /// Start a warp to the locked target, else the hovered one (§6). Objects are
+    /// approached to a standoff; a galaxy is entered at its nearest EDGE, because
+    /// arriving at its centre would put you inside the star cloud with no bearings.
+    /// </summary>
+    private void TryWarp()
+    {
+        if (_warping || (_lock ?? _hover) is not { } target)
+        {
+            return;
+        }
+        Vector3 destination = _targeting.PositionOf(target, _clock);
+        Vector3 arrival;
+        if (target.Kind == GalaxyTargetKind.Galaxy)
+        {
+            Vector3 toShip = ShipPosition - destination;
+            Vector3 direction = toShip.LengthSquared() < 1e-3f ? Vector3.Back : toShip.Normalized();
+            arrival = destination + new Vector3(
+                direction.X * GalaxyNavigation.GalaxyArrivalRadius,
+                direction.Y * GalaxyNavigation.GalaxyArrivalRadius * 0.4f,
+                direction.Z * GalaxyNavigation.GalaxyArrivalRadius);
+            _hud.Toast("hyperspace");
+        }
+        else
+        {
+            arrival = destination - Forward() * StandoffFor(target);
+            _hud.Toast($"warp: {GalaxyTargeting.Describe(target)}");
+        }
+
+        _warpFrom = ShipPosition;
+        _warpTo = arrival;
+        _warpTarget = target;
+        _warpElapsed = 0f;
+        _warpDuration = GalaxyNavigation.WarpDuration(ShipPosition.DistanceTo(arrival));
+        _warping = true;
+        _ship.Halt();
+    }
+
+    /// <summary>
+    /// Advance a running warp. Position is eased; a planet destination is re-aimed
+    /// every frame so the ship lands on the moving body, not where it used to be.
+    /// Detail at the destination is already fading in during the approach — the fade
+    /// bands do that on their own, since they key off camera distance every frame.
+    /// </summary>
+    private void UpdateWarp(float delta)
+    {
+        if (!_warping)
+        {
+            return;
+        }
+        _warpElapsed += delta;
+        float t = _warpDuration <= 0f ? 1f : Mathf.Clamp(_warpElapsed / _warpDuration, 0f, 1f);
+
+        if (_warpTarget is { Kind: GalaxyTargetKind.Planet } moving)
+        {
+            _warpTo = _targeting.PositionOf(moving, _clock) - Forward() * StandoffFor(moving);
+        }
+        _ship.Position = GalaxyVec.To(_warpFrom.Lerp(_warpTo, GalaxyNavigation.WarpEase(t)));
+        ApplyShipToRig();
+
+        if (t < 1f)
+        {
+            return;
+        }
+        _warping = false;
+        // Arriving at a galaxy releases the lock so steering returns immediately;
+        // arriving at a star or planet keeps it, because you came to look at it.
+        if (_warpTarget is { Kind: GalaxyTargetKind.Galaxy })
+        {
+            SetLock(null);
+        }
+        _warpTarget = null;
+    }
+
+    /// <summary>Hyperdrive step: lock the adjacent galaxy and warp. A no-op with a
+    /// toast when you are already at the end of the lane.</summary>
+    private void StepGalaxy(int direction)
+    {
+        if (_warping)
+        {
+            return;
+        }
+        int next = _nearestGalaxy + direction;
+        if (next < 0 || next >= GalaxyLayout.Bins)
+        {
+            _hud.Toast("edge of the universe");
+            return;
+        }
+        SetLock(GalaxyTarget.OfGalaxy(next));
+        TryWarp();
+    }
+
+    private Vector3 Forward() => GalaxyVec.From(_ship.Forward);
+
+    private static float StandoffFor(GalaxyTarget target) =>
+        target.Kind == GalaxyTargetKind.Planet
+            ? GalaxyNavigation.PlanetStandoff
+            : GalaxyNavigation.StarStandoff;
+
     /// <summary>Gather pilot intent and advance the flight model (§4). Mouse steers
     /// from the cursor's offset to the viewport centre; keys translate.</summary>
     private void Fly(float delta)
     {
+        if (_warping)
+        {
+            // A warp owns the ship outright: no thrust, no steering, no tether —
+            // otherwise velocity accumulates under the ease and the ship shoots off
+            // the moment it arrives.
+            _hud.SteerCursor = null;
+            return;
+        }
         Vector2 size = _viewportContainer.Size;
         Vector2 cursor = _viewportContainer.GetLocalMousePosition();
         bool pointerInside = size.X > 0f && size.Y > 0f
@@ -233,7 +572,9 @@ public partial class GalaxyView : Control
             _statusLine.Text = "NO ARCHIVE — START A RUN";
             return;
         }
-        _statusLine.Text = $"{_snapshot.StatusLine} · {_stars.Count} STARS";
+        _statusLine.Text = _planets.Count > 0
+            ? $"{_snapshot.StatusLine} · {_stars.Count} STARS · {_planets.Count} PLANETS"
+            : $"{_snapshot.StatusLine} · {_stars.Count} STARS";
     }
 
     private void BuildUi()
@@ -249,6 +590,7 @@ public partial class GalaxyView : Control
             SizeFlagsVertical = SizeFlags.ExpandFill,
             MouseFilter = MouseFilterEnum.Stop,
         };
+        _viewportContainer.GuiInput += OnViewportGuiInput;
         column.AddChild(_viewportContainer);
         _viewport = new SubViewport
         {
@@ -296,6 +638,10 @@ public partial class GalaxyView : Control
 
         _stars = new GalaxyStarField { Name = "Stars" };
         _world.AddChild(_stars);
+        _planets = new GalaxyPlanets { Name = "Planets" };
+        _world.AddChild(_planets);
+        _targeting = new GalaxyTargeting(_camera, _stars, _planets);
+        BuildCellHighlight();
 
         BuildAmbientSky();
         BuildGalaxyMarkers();

@@ -734,6 +734,7 @@ public partial class EvolveView : Control
         // GALAXY (2026-09-16): additive by designer decision — the cube above keeps
         // its tab and its behavior; this is the archive as a place you fly through.
         _galaxy = new BrawlerGodot.Hyperspace.GalaxyView { Name = "GALAXY" };
+        _galaxy.EntrySelected += OnHyperspaceEntrySelected;
         _tabs.AddChild(_galaxy);
         _chart = new FitnessChart { SizeFlagsVertical = SizeFlags.ExpandFill };
         _chart.PointSelected += OnPointSelected;

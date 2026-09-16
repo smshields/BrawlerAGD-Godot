@@ -112,6 +112,17 @@ public class GalaxyNavigationTests
     }
 
     [Fact]
+    public void WarpStandsOffPastTheSystemItArrivesAt()
+    {
+        // Arriving inside the envelope puts the camera in the star's corona with the
+        // system filling the screen — you came to look at the system, not its surface.
+        Assert.True(GalaxyNavigation.StarStandoff > GalaxyLayout.MaxSystemRadius);
+        Assert.True(GalaxyNavigation.PlanetStandoff > GalaxyLayout.MaxPlanetRadius * 4f);
+        // ...but still well inside the cell, so the neighbours are not what you frame.
+        Assert.True(GalaxyNavigation.StarStandoff < GalaxyLayout.S / 2f);
+    }
+
+    [Fact]
     public void TargetingRangeExceedsTheVisibleGalaxy()
     {
         // Picking must reach across a galaxy; it has no visual edge of its own.
