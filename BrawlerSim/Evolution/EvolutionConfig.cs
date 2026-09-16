@@ -1,4 +1,5 @@
 using BrawlerSim.Agents;
+using BrawlerSim.Fitness;
 using BrawlerSim.Genome;
 using BrawlerSim.Sim;
 
@@ -32,8 +33,18 @@ public sealed record EvolutionConfig
     public string? FitnessName { get; init; }
 
     /// <summary>Per-hit reward weight for standard-v3 (recorded in run.json). Null =
-    /// the version's default.</summary>
+    /// the version's default. Superseded by FitnessRecipe's collisions term for custom
+    /// instruments; still read for every manifest written before 2026-09-16.</summary>
     public float? FitnessCollisionScalar { get; init; }
+
+    /// <summary>
+    /// A designer-built fitness (2026-09-16, fitness builder phase 3). When set it
+    /// WINS over FitnessName, and run.json records the whole document BY VALUE plus
+    /// its content hash — so resuming reconstructs the exact instrument that produced
+    /// the history, even if the recipe file on disk was edited or deleted afterwards.
+    /// Null (default) = a shipped version by name, exactly as before.
+    /// </summary>
+    public FitnessRecipe? FitnessRecipe { get; init; }
 
     /// <summary>Evaluation threads; 0 = one per processor. Results are identical at any value.</summary>
     public int Parallelism { get; init; }

@@ -68,10 +68,17 @@ public sealed class EvolutionEngine
         GenerationsCompleted = generationsCompleted;
     }
 
-    /// <summary>The one fitness-resolution rule shared by both constructors: an
-    /// injected instance wins, otherwise the config names the registry version.</summary>
+    /// <summary>The one fitness-resolution rule shared by both constructors, in
+    /// precedence order: an injected instance wins (tests and tools), then a
+    /// designer-built recipe, then the config names a shipped registry version.
+    ///
+    /// NOTE for anyone injecting an instance: run.json records only its NAME, so a
+    /// hand-built IFitnessFunction is NOT reproducible on resume. Build a
+    /// FitnessRecipe instead — that is recorded by value.</summary>
     private static IFitnessFunction ResolveFitness(EvolutionConfig config, IFitnessFunction? fitness) =>
-        fitness ?? FitnessRegistry.Create(
+        fitness
+        ?? config.FitnessRecipe?.ToFitness()
+        ?? FitnessRegistry.Create(
             config.FitnessName, config.TargetGameLengthSeconds, config.Match.MaxMatchSeconds,
             config.FitnessCollisionScalar, config.Generation.CharacterCount);
 

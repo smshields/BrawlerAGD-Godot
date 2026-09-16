@@ -61,6 +61,13 @@ public static class RunStore
                 ? null : config.Match.MaxStunSeconds,
             DiversityWeight = config.DiversityWeight,
             FitnessCollisionScalar = config.FitnessCollisionScalar,
+            // A designer-built fitness is recorded BY VALUE, not by reference
+            // (2026-09-16): resume must reconstruct the instrument that produced this
+            // history even if the recipe file was edited or deleted since. The hash
+            // beside it is the provenance stamp — see FitnessRecipe.ContentHash.
+            FitnessRecipe = config.FitnessRecipe is null
+                ? null : FitnessRecipeJson.ToDoc(config.FitnessRecipe),
+            FitnessRecipeHash = config.FitnessRecipe?.ContentHash,
             // Player count (2026-08-12, four-player.md): absent = 2 (every pre-feature
             // run), so old manifests stay byte-compatible and resume as they were.
             Players = config.Generation.CharacterCount == 2 ? null : config.Generation.CharacterCount,
@@ -88,6 +95,26 @@ public static class RunStore
             }).ToList(),
         };
         File.WriteAllText(Path.Combine(runDir, ManifestFileName), JsonSerializer.Serialize(manifest, Options));
+    }
+
+    /// <summary>The embedded recipe, checked against its recorded hash. A mismatch
+    /// means the manifest was hand-edited after the fact — the scores in its history
+    /// were produced by something else, so refuse rather than resume under a different
+    /// instrument.</summary>
+    private static Fitness.FitnessRecipe? LoadRecipe(RunManifest manifest, string manifestPath)
+    {
+        if (manifest.FitnessRecipe is null)
+        {
+            return null;
+        }
+        Fitness.FitnessRecipe recipe = FitnessRecipeJson.FromDoc(manifest.FitnessRecipe);
+        if (manifest.FitnessRecipeHash is { } recorded && recorded != recipe.ContentHash)
+        {
+            throw new InvalidDataException(
+                $"{manifestPath}: the embedded fitness recipe does not match its recorded hash " +
+                $"({recipe.ContentHash} vs {recorded}) — this run's history was scored by a different instrument.");
+        }
+        return recipe;
     }
 
     private static GenerationConfig WithSelectors(GenerationConfig generation,
@@ -156,6 +183,10 @@ public static class RunStore
             // resumed runs keep the fitness that produced their history.
             FitnessName = manifest.FitnessName ?? "standard-v2",
             FitnessCollisionScalar = manifest.FitnessCollisionScalar,
+            // Custom instruments resume from the EMBEDDED document, never from a file
+            // on disk (2026-09-16) — so a recipe edited after the run cannot silently
+            // rescore it. Absent on every manifest written before that date.
+            FitnessRecipe = LoadRecipe(manifest, manifestPath),
             Seed = manifest.Seed,
             PopulationSize = manifest.PopulationSize,
             DropoutRate = manifest.DropoutRate,
@@ -255,6 +286,8 @@ public static class RunStore
         public int FormatVersion { get; set; }
         public string? Kind { get; set; } // absent (every GA manifest) = evolution; "map-elites" = the other store
         public string? FitnessName { get; set; }
+        public FitnessRecipeDoc? FitnessRecipe { get; set; } // 2026-09-16; absent = a shipped version by name
+        public ulong? FitnessRecipeHash { get; set; }
         public ulong Seed { get; set; }
         public int PopulationSize { get; set; }
         public float DropoutRate { get; set; }

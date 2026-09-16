@@ -25,8 +25,10 @@ internal static class Commands
         Console.WriteLine("           [--composition pinned|random|<attack,shield,dash,random x4>] [--type-reroll 0.2]");
         Console.WriteLine("           [--range \"schema.key=min:max;...\"]  (schemas: character|move|shield|dash|projectile|stage)");
         Console.WriteLine("           [--fitness standard-v7|ffa-v3|standard-v6|standard-v5|ffa-v2|standard-v4|ffa-v1|standard-v3|standard-v2]  (default: v7 at 2P, ffa-v3 at 3/4P — self-hit-blind + scaled time)");
+        Console.WriteLine("           [--fitness-recipe <recipe.json>]  (a built fitness; wins over --fitness, recorded in run.json by value)");
         Console.WriteLine("           [--max-seconds 300]");
         Console.WriteLine("  evaluate --game <game.json> [--seed 7] [--rounds 5] [--fitness standard-v7|ffa-v3|standard-v6|standard-v5|ffa-v2|standard-v4|ffa-v1|standard-v3|standard-v2]");
+        Console.WriteLine("           [--fitness-recipe <recipe.json>]");
         Console.WriteLine("           [--breakdown] [--max-seconds 300] [--target-seconds 45]");
         Console.WriteLine("           [--agent utility|dtree] [--agent-randomness 0.15] [--agent-interval 8]");
         Console.WriteLine("  replay   --game <game.json> --trace <trace.json>");
@@ -35,6 +37,10 @@ internal static class Commands
         Console.WriteLine("  noise    --games <g1.json,g2.json,...> [--reps 20] [--rounds 5] [--aggregate median|mean]");
         Console.WriteLine("           [--max-seconds 300] [--target-seconds 45] [--seed 1] [--agent ...] — fitness noise per genome (CSV)");
         Console.WriteLine("  popdiv   --run <run dir> — mean pairwise normalized genome distance of the population");
+        Console.WriteLine("  fitness  terms — the term catalog: every term, its constants, defaults and ranges");
+        Console.WriteLine("           show [--fitness <version>] [--fitness-recipe <f.json>] — print it as a recipe");
+        Console.WriteLine("           new --out <recipe.json> [--name custom/x] [--fitness <version>] [--players 2]");
+        Console.WriteLine("           — scaffold an editable recipe from a shipped version (default: the current default)");
         Console.WriteLine("  prep-game --game <built-game.json> --out <embedded.json> — packaging gate:");
         Console.WriteLine("           requires a COMPLETE built game (8 chars + 4 stages) and applies the");
         Console.WriteLine("           namegen naming pass so packaged games never ship default names");
@@ -137,6 +143,9 @@ internal static class Commands
                 // Absent --fitness = auto: standard-v7 at 2 players, ffa-v3 at 3/4 (2026-09-14).
                 FitnessName = opts.GetValueOrDefault("fitness"),
                 FitnessCollisionScalar = CollisionScalar(opts),
+                // --fitness-recipe wins, and is recorded in run.json BY VALUE so the
+                // run stays reproducible if the file changes (2026-09-16).
+                FitnessRecipe = ParseRecipe(opts),
                 Generation = ParseGenerationWithSelectors(opts),
             };
             engine = new EvolutionEngine(config);
@@ -456,15 +465,26 @@ internal static class Commands
     private static float? CollisionScalar(Dictionary<string, string> opts) =>
         opts.ContainsKey("collision-scalar") ? GetFloat(opts, "collision-scalar", 0f) : null;
 
-    /// <summary>The fitness resolution shared by evaluate/noise: --fitness (absent =
-    /// auto by player count), --target-seconds/--max-seconds, --collision-scalar.</summary>
+    /// <summary>The fitness resolution shared by evaluate/noise: --fitness-recipe (a
+    /// designer-built instrument) wins, else --fitness (absent = auto by player count),
+    /// with --target-seconds/--max-seconds/--collision-scalar.
+    ///
+    /// A recipe carries its OWN target/max/scalar inside its terms, so those flags do
+    /// not apply to it — pass them when you build the recipe, not when you use it.</summary>
     private static IFitnessFunction ResolveFitness(Dictionary<string, string> opts, int players) =>
-        FitnessRegistry.Create(
+        ParseRecipe(opts)?.ToFitness()
+        ?? FitnessRegistry.Create(
             opts.GetValueOrDefault("fitness"),
             GetFloat(opts, "target-seconds", 45f),
             GetFloat(opts, "max-seconds", MatchConfig.Default.MaxMatchSeconds),
             CollisionScalar(opts),
             players);
+
+    /// <summary>--fitness-recipe &lt;path&gt;, or null when absent.</summary>
+    private static FitnessRecipe? ParseRecipe(Dictionary<string, string> opts) =>
+        opts.TryGetValue("fitness-recipe", out string? path)
+            ? FitnessRecipeJson.Load(path)
+            : null;
 
     private static AgentConfig ParseAgent(Dictionary<string, string> opts) => new()
     {
@@ -527,7 +547,7 @@ internal static class Commands
         return generation;
     }
 
-    private static Dictionary<string, string> ParseOptions(string[] args)
+    internal static Dictionary<string, string> ParseOptions(string[] args)
     {
         var opts = new Dictionary<string, string>(StringComparer.Ordinal);
         for (int i = 1; i < args.Length; i++)
@@ -543,14 +563,14 @@ internal static class Commands
         return opts;
     }
 
-    private static string Require(Dictionary<string, string> opts, string key) =>
+    internal static string Require(Dictionary<string, string> opts, string key) =>
         opts.TryGetValue(key, out string? value) && value.Length > 0
             ? value
             : throw new ArgumentException($"Missing required option --{key}");
 
-    private static int GetInt(Dictionary<string, string> opts, string key, int fallback) =>
+    internal static int GetInt(Dictionary<string, string> opts, string key, int fallback) =>
         opts.TryGetValue(key, out string? value) ? int.Parse(value, CultureInfo.InvariantCulture) : fallback;
 
-    private static float GetFloat(Dictionary<string, string> opts, string key, float fallback) =>
+    internal static float GetFloat(Dictionary<string, string> opts, string key, float fallback) =>
         opts.TryGetValue(key, out string? value) ? float.Parse(value, CultureInfo.InvariantCulture) : fallback;
 }
