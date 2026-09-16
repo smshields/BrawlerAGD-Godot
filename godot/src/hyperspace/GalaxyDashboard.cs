@@ -176,6 +176,17 @@ public sealed partial class GalaxyDashboard : PanelContainer
         return pod;
     }
 
+    /// <summary>Stop the preview's mini-sim — the view calls this when its tab is
+    /// no longer in front.</summary>
+    public void StopPreview()
+    {
+        if (_previewKey.Length > 0)
+        {
+            _preview.Stop();
+            _previewKey = "";
+        }
+    }
+
     /// <summary>Per-frame readouts. `nearest` is a DERIVED value (§8.1.6) — it drives
     /// these pods and nothing about what the world draws.</summary>
     public void Refresh(GalaxyStarField stars, Vector3 ship, float yaw, float speed, bool boosting,

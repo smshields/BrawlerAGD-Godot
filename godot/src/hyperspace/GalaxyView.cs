@@ -216,6 +216,12 @@ public partial class GalaxyView : Control
 
     public override void _Process(double delta)
     {
+        // A hidden tab does no work: a run is normally watched from RUN, and the
+        // planet pass walks every system in the archive.
+        if (!IsVisibleInTree())
+        {
+            return;
+        }
         Fly((float)delta);
         UpdateWarp((float)delta);
         _clock += (float)delta;
@@ -688,6 +694,14 @@ public partial class GalaxyView : Control
         column.AddChild(_statusLine);
 
         Resized += UpdateProjectionUniforms;
+        // The dashboard's preview is a live mini-sim; leaving the tab stops it.
+        VisibilityChanged += () =>
+        {
+            if (!IsVisibleInTree())
+            {
+                _dashboard.StopPreview();
+            }
+        };
     }
 
     private void BuildWorld()

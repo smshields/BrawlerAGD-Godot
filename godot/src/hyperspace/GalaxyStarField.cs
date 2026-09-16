@@ -143,6 +143,10 @@ public sealed partial class GalaxyStarField : Node3D
     /// are touched — a snapshot arriving mid-flight must not rewrite the buffers.</summary>
     public override void _Process(double delta)
     {
+        if (_igniting.Count == 0)
+        {
+            return;
+        }
         for (int i = _igniting.Count - 1; i >= 0; i--)
         {
             (int galaxy, int instance, float elapsed) = _igniting[i];
