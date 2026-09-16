@@ -1,4 +1,5 @@
 using Godot;
+using System.Collections.Generic;
 using System.Linq;
 using BrawlerSim.Evolution;
 using BrawlerSim.Genome;
@@ -7,9 +8,15 @@ using BrawlerSim.Serialization;
 namespace BrawlerGodot;
 
 /// <summary>One plottable archive point: raw descriptor 4-vector + fitness + genome.
-/// Name doubles as the save-to-favorites base name; PreviewSeed feeds the mini arena.</summary>
+/// Name doubles as the save-to-favorites base name; PreviewSeed feeds the mini arena.
+/// Members (2026-09-16) are the cell's other occupants — the galaxy view orbits them
+/// around this entry as planets; the cube view ignores them.</summary>
 public sealed record HyperspaceEntry(
-    float[] Descriptor, float Fitness, GameGenome Genome, string Name, string Origin, ulong PreviewSeed);
+    float[] Descriptor, float Fitness, GameGenome Genome, string Name, string Origin, ulong PreviewSeed,
+    HyperspaceEntry[]? Members = null)
+{
+    public IReadOnlyList<HyperspaceEntry> Occupants => Members ?? System.Array.Empty<HyperspaceEntry>();
+}
 
 /// <summary>Immutable per-batch/per-generation archive snapshot published to the
 /// Hyperspace tab (map-elites-descriptor-spec §8 data contract): the view copies it

@@ -24,7 +24,7 @@ namespace BrawlerGodot;
 /// archive stays as a visualization): the right column is a TabContainer — RUN =
 /// the classic dashboard (chart + progress, untouched), HYPERSPACE = the run's
 /// accumulated best-per-cell descriptor cube, fed by a view-only shadow archive
-/// that consumes no engine RNG. Automation tokens: tab=hyperspace, pilot=N
+/// that consumes no engine RNG. Automation tokens: tab=hyperspace|galaxy, pilot=N
 /// (pilot sample override), hslice=N.
 /// </summary>
 public partial class EvolveView : Control
@@ -71,6 +71,7 @@ public partial class EvolveView : Control
     // Hyperspace tab (2026-09-10): the run's descriptor-archive cube.
     private TabContainer _tabs = null!;
     private HyperspaceView _hyperspace = null!;
+    private BrawlerGodot.Hyperspace.GalaxyView _galaxy = null!;
     private int _pilotSamples = BrawlerSim.Evolution.DescriptorBins.DefaultPilotSamples;
     private readonly System.Collections.Concurrent.ConcurrentQueue<HyperspaceSnapshot> _pendingSnapshots = new();
 
@@ -112,6 +113,7 @@ public partial class EvolveView : Control
         _runDir = System.IO.Path.Combine(AppPaths.RunsRoot(), RunName());
         _chart.Clear();
         _hyperspace.Clear();
+        _galaxy.Clear();
         ClearSelection();
         SetRunning(true);
         _progress.MaxValue = generations;
@@ -157,8 +159,12 @@ public partial class EvolveView : Control
         // of everything it produces — ACCUMULATED best-per-cell over the whole run.
         // View-only: it consumes no engine RNG and alters nothing in the run.
         CallDeferred(nameof(SetStatus), "MEASURING DESCRIPTOR SPACE (PILOT)…");
+        // Member capacity (2026-09-16): the GALAXY tab orbits a cell's other
+        // occupants around its elite as planets. The cube tab reads elites only and
+        // is unaffected; the archive-wide budget bounds the memory this costs.
         var shadow = new MapElitesArchive(
-            LoadOrCreateBins(config.Generation, config.Seed, runDir, pilotSamples));
+            LoadOrCreateBins(config.Generation, config.Seed, runDir, pilotSamples),
+            MapElitesArchive.DefaultMemberCapacity);
         CallDeferred(nameof(SetStatus), $"RUNNING → {runDir}");
         var engine = new EvolutionEngine(config);
         var history = new System.Collections.Generic.List<GenerationStats>();
@@ -229,15 +235,31 @@ public partial class EvolveView : Control
         int i = 0;
         foreach (var kv in shadow.Cells)
         {
-            int gen = kv.Value.Candidate / populationSize;
-            int index = kv.Value.Candidate % populationSize;
-            entries[i++] = new HyperspaceEntry(
-                kv.Value.Descriptor, kv.Value.Fitness, kv.Value.Genome,
-                $"{runName}-g{gen}-game{index}",
-                $"evolve-explorer:{runName} gen {gen} game {index} fitness {kv.Value.Fitness:F1}",
-                PreviewSeed: (ulong)(gen * 1000 + index + 1));
+            System.Collections.Generic.IReadOnlyList<BrawlerSim.Evolution.ArchiveEntry> members =
+                shadow.MembersOf(kv.Key);
+            var planets = new HyperspaceEntry[members.Count];
+            for (int m = 0; m < members.Count; m++)
+            {
+                planets[m] = ShadowEntry(members[m], runName, populationSize);
+            }
+            entries[i++] = ShadowEntry(kv.Value, runName, populationSize) with { Members = planets };
         }
         return new HyperspaceSnapshot(shadow.Bins, players, entries, ArchiveStatusLine(shadow, "SHADOW OF GA RUN"));
+    }
+
+    /// <summary>One archive occupant as a plottable entry — elites and the members
+    /// orbiting them are described identically, so a planet is as watchable and as
+    /// savable as its star.</summary>
+    private static HyperspaceEntry ShadowEntry(
+        BrawlerSim.Evolution.ArchiveEntry entry, string runName, int populationSize)
+    {
+        int gen = entry.Candidate / populationSize;
+        int index = entry.Candidate % populationSize;
+        return new HyperspaceEntry(
+            entry.Descriptor, entry.Fitness, entry.Genome,
+            $"{runName}-g{gen}-game{index}",
+            $"evolve-explorer:{runName} gen {gen} game {index} fitness {entry.Fitness:F1}",
+            PreviewSeed: (ulong)(gen * 1000 + index + 1));
     }
 
     private static string ArchiveStatusLine(MapElitesArchive archive, string kind) =>
@@ -265,6 +287,7 @@ public partial class EvolveView : Control
         if (latest is not null)
         {
             _hyperspace.SetSnapshot(latest);
+            _galaxy.SetSnapshot(latest);
         }
     }
 
@@ -310,6 +333,7 @@ public partial class EvolveView : Control
     {
         _chart.Clear();
         _hyperspace.Clear();
+        _galaxy.Clear();
         ClearSelection();
         _runName.Text = NextEvolutionName(_runName.Text);
         _seed.Value = RandomSeed();
@@ -496,10 +520,14 @@ public partial class EvolveView : Control
                 case "favorite": // =1: save the auto-selected best to favorites (automation)
                     _autoFavorite = kv[1] == "1";
                     break;
-                case "tab": // =hyperspace: open the archive cube (screenshots)
+                case "tab": // =hyperspace: the archive cube; =galaxy: the flythrough
                     if (kv[1] == "hyperspace")
                     {
                         _tabs.CurrentTab = 1;
+                    }
+                    else if (kv[1] == "galaxy")
+                    {
+                        _tabs.CurrentTab = 2;
                     }
                     break;
                 case "pilot": // pilot sample override so automation runs stay fast
@@ -703,6 +731,10 @@ public partial class EvolveView : Control
         _hyperspace = new HyperspaceView { Name = "HYPERSPACE" };
         _hyperspace.EntrySelected += OnHyperspaceEntrySelected;
         _tabs.AddChild(_hyperspace);
+        // GALAXY (2026-09-16): additive by designer decision — the cube above keeps
+        // its tab and its behavior; this is the archive as a place you fly through.
+        _galaxy = new BrawlerGodot.Hyperspace.GalaxyView { Name = "GALAXY" };
+        _tabs.AddChild(_galaxy);
         _chart = new FitnessChart { SizeFlagsVertical = SizeFlags.ExpandFill };
         _chart.PointSelected += OnPointSelected;
         right.AddChild(_chart);

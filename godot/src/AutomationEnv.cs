@@ -30,6 +30,11 @@ namespace BrawlerGodot;
 ///                      (parsed by CharacterSelectView.ApplyAutoSelect).
 ///   BRAWLER_AUTOEVOLVE = "name=x;pop=24;..." — start an evolve run on load
 ///                      (parsed by EvolveView.ApplyAutoConfig).
+///   BRAWLER_GALAXY_CAM = "x,y,z[,yaw,pitch]" — park the GALAXY tab's ship for a
+///                      capture (the view has no other headless way to be looked
+///                      at from a chosen spot).
+///   BRAWLER_GALAXY_FLY = "seconds[,boost]" — fly the ship straight ahead for that
+///                      long before capturing: the §8.1 pop-in acceptance pass.
 /// </summary>
 public static class AutomationEnv
 {
@@ -53,4 +58,6 @@ public static class AutomationEnv
     public static bool AutoBuild => OS.GetEnvironment("BRAWLER_AUTOBUILD") == "1";
     public static string AutoSelect => OS.GetEnvironment("BRAWLER_AUTOSELECT");
     public static string AutoEvolve => OS.GetEnvironment("BRAWLER_AUTOEVOLVE");
+    public static string GalaxyCam => OS.GetEnvironment("BRAWLER_GALAXY_CAM");
+    public static string GalaxyFly => OS.GetEnvironment("BRAWLER_GALAXY_FLY");
 }
