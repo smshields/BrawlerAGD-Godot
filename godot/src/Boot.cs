@@ -65,7 +65,14 @@ public partial class Boot : Node
         // quality_exploration, whose scan finishes on its own clock — which handle
         // their own captures) saves whatever scene is up after a second, then quits.
         string shot = AutomationEnv.Shot;
-        if (shot.Length > 0
+        // BRAWLER_SHOT_AT wins outright: it exists to catch a scene MID-flight, so it
+        // must fire even for flows that would otherwise capture at their own end.
+        if (shot.Length > 0 && AutomationEnv.ShotAt.Length > 0)
+        {
+            GetTree().CreateTimer(double.Parse(AutomationEnv.ShotAt)).Timeout +=
+                () => _ = Screenshot.CaptureAsync(this, shot, quitWhenDone: true);
+        }
+        else if (shot.Length > 0
             && AutomationEnv.Autoplay.Length == 0
             && AutomationEnv.AutoEvolve.Length == 0
             && scene != "quality_exploration")

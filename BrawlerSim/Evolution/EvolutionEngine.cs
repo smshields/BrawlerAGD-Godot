@@ -85,6 +85,20 @@ public sealed class EvolutionEngine
     public (ulong State, ulong Inc) RngSnapshot => _rng.Snapshot();
 
     /// <summary>
+    /// Fired as each individual finishes evaluating, with its population index and
+    /// aggregated fitness (2026-09-16, the live evolve chart). VIEW-ONLY: it reports
+    /// progress and must never touch engine state, or the run stops being a pure
+    /// function of (genome, seed).
+    ///
+    /// Called from the parallel evaluation workers, so a handler must be thread-safe
+    /// and cheap — the intended shape is "enqueue and return". It observes work that
+    /// has already happened, so it cannot affect evaluation order, RNG streams, or
+    /// results; EvolutionEngineTests pins that a run with a handler attached scores
+    /// identically to one without.
+    /// </summary>
+    public Action<int, float>? CandidateEvaluated;
+
+    /// <summary>
     /// Runs one generation: evaluate all → stats → replace the bottom dropout fraction
     /// with children of random survivors. After Step, Population holds the NEXT
     /// generation (children not yet evaluated) — exactly what a checkpoint stores.
@@ -191,6 +205,7 @@ public sealed class EvolutionEngine
                 rounds[round] = _fitness.Evaluate(result);
             }
             fitness[i] = Aggregate(rounds);
+            CandidateEvaluated?.Invoke(i, fitness[i]);
         });
     }
 

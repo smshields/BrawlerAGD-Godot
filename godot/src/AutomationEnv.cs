@@ -15,6 +15,8 @@ namespace BrawlerGodot;
 ///   BRAWLER_SHOT     = single screenshot path: with autoplay/autoevolve those flows
 ///                      capture it themselves; otherwise Boot saves whatever scene is
 ///                      up after a second and quits.
+///   BRAWLER_SHOT_AT  = seconds; capture BRAWLER_SHOT mid-flight instead, whatever
+///                      the scene is doing (animated screens).
 ///   BRAWLER_SHOT_DIR + BRAWLER_SHOT_TICKS = "60,300,..." — ArenaView saves
 ///                      screenshots at those sim ticks and quits after the last.
 ///   BRAWLER_TICKS_PER_FRAME = sim fast-forward for captures.
@@ -43,6 +45,11 @@ public static class AutomationEnv
     public static string Trace => OS.GetEnvironment("BRAWLER_TRACE");
     public static string Rules => OS.GetEnvironment("BRAWLER_RULES");
     public static string Shot => OS.GetEnvironment("BRAWLER_SHOT");
+    /// <summary>BRAWLER_SHOT_AT=&lt;seconds&gt;: capture BRAWLER_SHOT that many seconds
+    /// after the scene loads and quit, whatever the scene is doing. The only way to
+    /// see a mid-flight animated screen (a live evolve chart, a fly-through) headlessly
+    /// — the ordinary shot paths fire at a flow's end.</summary>
+    public static string ShotAt => OS.GetEnvironment("BRAWLER_SHOT_AT");
     public static string ShotDir => OS.GetEnvironment("BRAWLER_SHOT_DIR");
     public static string ShotTicks => OS.GetEnvironment("BRAWLER_SHOT_TICKS");
     public static string TicksPerFrame => OS.GetEnvironment("BRAWLER_TICKS_PER_FRAME");

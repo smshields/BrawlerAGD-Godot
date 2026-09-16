@@ -75,13 +75,20 @@ public partial class EvolveView : Control
     private int _pilotSamples = BrawlerSim.Evolution.DescriptorBins.DefaultPilotSamples;
     private readonly System.Collections.Concurrent.ConcurrentQueue<HyperspaceSnapshot> _pendingSnapshots = new();
 
+    /// <summary>Games finished evaluating, streamed from the evaluation workers so the
+    /// chart plots them AS THEY LAND (2026-09-16) instead of a block per generation.
+    /// Timed off a Stopwatch rather than the engine: BrawlerSim stays clock-free, and
+    /// completion time is wall-clock by nature — a view quantity, never a result.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(int Generation, int Index, float Score, float Time, GameGenome Genome)> _pendingCandidates = new();
+
+    private readonly System.Diagnostics.Stopwatch _runClock = new();
+
     // Evolution Explorer (2026-07-27, designer): per-game chart points feed a live
     // match preview + the save-to-favorites button. Generations cross from the
-    // engine thread through a queue (GameGenome is not a Variant, so no CallDeferred
-    // args); genomes are immutable and survivors are shared refs across generations,
-    // so retaining them is cheap.
-    private readonly System.Collections.Concurrent.ConcurrentQueue<
-        (GenerationStats Stats, float[] Scores, GameGenome[] Genomes)> _pendingGenerations = new();
+    // engine thread through a queue. Since 2026-09-16 the per-game scores and genomes
+    // reach the chart through _pendingCandidates as they finish, so this queue carries
+    // only what closes a generation: its stats.
+    private readonly System.Collections.Concurrent.ConcurrentQueue<GenerationStats> _pendingGenerations = new();
     private int _lastBestIndex;
     private bool _autoFavorite;
     private Label _previewInfo = null!;
@@ -120,6 +127,7 @@ public partial class EvolveView : Control
         _progress.Value = 0;
         _status.Text = $"RUNNING → {_runDir}";
         _startTimeMs = Time.GetTicksMsec();
+        _runClock.Restart();
         _cancel = new CancellationTokenSource();
         StartGaRun(generations, _cancel.Token);
     }
@@ -171,13 +179,20 @@ public partial class EvolveView : Control
         float bestSoFar = float.MinValue;
         while (engine.GenerationsCompleted < generations && !token.IsCancellationRequested)
         {
+            // The genomes this generation evaluates, indexed the way the progress
+            // callback reports them. Captured before Step for the same reason the
+            // scores are: Step replaces the bottom slots in place afterwards.
+            int liveGeneration = engine.GenerationsCompleted;
             // Snapshot the population BEFORE Step: Step evaluates exactly these
             // genomes, then replaces the bottom-dropout slots in place with fresh
             // UNEVALUATED children — pairing post-Step Population with LastFitness
             // would credit child genomes with scores they never earned (found in
             // the 2026-09-10 review; the chart had the same latent mismatch).
             GameGenome[] evaluated = engine.Population.ToArray();
+            engine.CandidateEvaluated = (index, score) => _pendingCandidates.Enqueue((
+                liveGeneration, index, score, (float)_runClock.Elapsed.TotalSeconds, evaluated[index]));
             GenerationStats stats = engine.Step();
+            engine.CandidateEvaluated = null;
             float[] scores = engine.LastFitness.ToArray(); // the scores of `evaluated`
             history.Add(stats);
             if (stats.TopFitness > bestSoFar)
@@ -187,7 +202,7 @@ public partial class EvolveView : Control
                 RunStore.SaveBest(runDir, evaluated[stats.BestIndex], stats, trace);
             }
             RunStore.SaveCheckpoint(runDir, engine, config, history);
-            _pendingGenerations.Enqueue((stats, scores, evaluated));
+            _pendingGenerations.Enqueue(stats);
             for (int i = 0; i < evaluated.Length; i++)
             {
                 shadow.Offer(new BrawlerSim.Evolution.ArchiveEntry(
@@ -267,15 +282,41 @@ public partial class EvolveView : Control
         $"({archive.Coverage:P1}) · QD {archive.QdScore:F0} · BEST {archive.Best?.Fitness ?? 0f:F1}" +
         (archive.OutOfPilotRangeCount > 0 ? $" · OUT-OF-PILOT {archive.OutOfPilotRangeCount}" : "");
 
+    /// <summary>
+    /// Games land on the chart as they finish, every frame — not in a block when the
+    /// generation closes. This is what keeps the chart moving through a long
+    /// generation instead of sitting blank and then jumping.
+    /// </summary>
+    public override void _Process(double delta)
+    {
+        if (_runClock.IsRunning)
+        {
+            _chart.SetElapsed((float)_runClock.Elapsed.TotalSeconds);
+        }
+        DrainCandidates();
+    }
+
+    private void DrainCandidates()
+    {
+        while (_pendingCandidates.TryDequeue(out var candidate))
+        {
+            _chart.AddCandidate(candidate.Generation, candidate.Index, candidate.Score,
+                candidate.Time, candidate.Genome);
+        }
+    }
+
     private void DrainGenerations()
     {
-        while (_pendingGenerations.TryDequeue(out var gen))
+        // Any games still in flight belong BEFORE the generation's divider.
+        DrainCandidates();
+        while (_pendingGenerations.TryDequeue(out GenerationStats stats))
         {
-            _chart.AddGeneration(gen.Stats.TopFitness, gen.Stats.AverageFitness, gen.Scores, gen.Genomes);
-            _lastBestIndex = gen.Stats.BestIndex;
-            _progress.Value = gen.Stats.Generation;
+            _chart.AddGeneration(stats.Generation, stats.TopFitness, stats.AverageFitness,
+                (float)_runClock.Elapsed.TotalSeconds);
+            _lastBestIndex = stats.BestIndex;
+            _progress.Value = stats.Generation;
             float elapsed = (Time.GetTicksMsec() - _startTimeMs) / 1000f;
-            _status.Text = $"TOP {gen.Stats.TopFitness:F1} · AVG {gen.Stats.AverageFitness:F1} · {elapsed:F1}S";
+            _status.Text = $"TOP {stats.TopFitness:F1} · AVG {stats.AverageFitness:F1} · {elapsed:F1}S";
         }
         // The Hyperspace tab re-renders per snapshot, never per insertion — only the
         // newest queued archive state matters.
@@ -294,6 +335,7 @@ public partial class EvolveView : Control
     private void OnRunFinished(int generations, bool cancelled)
     {
         DrainGenerations(); // anything still queued when the loop ended
+        _runClock.Stop();
         float elapsed = (Time.GetTicksMsec() - _startTimeMs) / 1000f;
         _status.Text = (cancelled
             ? $"PAUSED AFTER {generations} GENERATIONS (CHECKPOINT KEPT)"
