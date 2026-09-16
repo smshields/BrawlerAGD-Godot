@@ -46,6 +46,9 @@ public partial class GalaxyView : Control
     private GalaxyTargeting _targeting = null!;
     private MeshInstance3D _cellHighlight = null!;
     private StandardMaterial3D _cellHighlightMaterial = null!;
+    private MeshInstance3D _sectorGrid = null!;
+    private StandardMaterial3D _sectorGridMaterial = null!;
+    private bool _sectorGridOn;
     private GalaxyTarget? _hover;
     private GalaxyTarget? _lock;
     private bool _warping;
@@ -69,6 +72,7 @@ public partial class GalaxyView : Control
     /// <summary>BRAWLER_GALAXY_LOCK: lock on the first frame that has a hover.</summary>
     private bool _pendingAutoLock;
     private GalaxyHud _hud = null!;
+    private GalaxyDashboard _dashboard = null!;
     private readonly ShipState _ship = new();
 
     /// <summary>Ship position in world space.</summary>
@@ -218,6 +222,9 @@ public partial class GalaxyView : Control
         _nearestGalaxy = GalaxyNavigation.NearestGalaxy(ShipPosition.X, _nearestGalaxy);
         _planets.Update(ShipPosition, _clock);
         UpdateTargeting((float)delta);
+        _dashboard.Refresh(_stars, ShipPosition, _ship.Yaw, _ship.Speed,
+            Input.IsActionPressed("hs_boost"), _nearestGalaxy, _lock ?? _hover,
+            locked: _lock is not null, _snapshot?.Bins);
         if (_pendingAutoLock && _hover is not null)
         {
             _pendingAutoLock = false;
@@ -232,6 +239,12 @@ public partial class GalaxyView : Control
                     UpdateWarp(1f / 60f);
                 }
             }
+        }
+        UpdateSectorGrid();
+        if (Input.IsActionJustPressed("hs_grid"))
+        {
+            _sectorGridOn = !_sectorGridOn;
+            _hud.Toast(_sectorGridOn ? "sector grid on" : "sector grid off");
         }
         if (Input.IsActionJustPressed("hs_planets"))
         {
@@ -338,6 +351,34 @@ public partial class GalaxyView : Control
         _cellHighlightMaterial.AlbedoColor = new Color(1f, 0.82f, 0.35f, alpha);
     }
 
+    /// <summary>
+    /// G: the sector grid — a box around the cell the SHIP is in, so you can read
+    /// your own bucket while flying. Distinct from the hover/lock cell highlight,
+    /// which wireframes the cell of whatever you are pointing at.
+    /// </summary>
+    private void UpdateSectorGrid()
+    {
+        if (!_sectorGridOn)
+        {
+            _sectorGridMaterial.AlbedoColor = new Color(0.42f, 0.72f, 0.62f, 0f);
+            return;
+        }
+        Vector3 local = ShipPosition - GalaxyVec.From(GalaxyLayout.GalaxyCenter(_nearestGalaxy));
+        int i = GalaxyNavigation.SectorOf(local.X);
+        int j = GalaxyNavigation.SectorOf(local.Y);
+        int k = GalaxyNavigation.SectorOf(local.Z);
+        if (i < 0 || j < 0 || k < 0)
+        {
+            // Outside the galaxy there is no sector to draw — fade, never cut.
+            _sectorGridMaterial.AlbedoColor = new Color(0.42f, 0.72f, 0.62f, 0f);
+            return;
+        }
+        _sectorGrid.Position = GalaxyVec.From(GalaxyLayout.GalaxyCenter(_nearestGalaxy))
+            + new Vector3((i - 3.5f) * GalaxyLayout.S, (j - 3.5f) * GalaxyLayout.S,
+                (k - 3.5f) * GalaxyLayout.S);
+        _sectorGridMaterial.AlbedoColor = new Color(0.42f, 0.72f, 0.62f, 0.22f);
+    }
+
     private void BuildCellHighlight()
     {
         _cellHighlightMaterial = new StandardMaterial3D
@@ -353,6 +394,20 @@ public partial class GalaxyView : Control
             Mesh = BoxWireframe(Vector3.Zero, GalaxyLayout.S / 2f, _cellHighlightMaterial),
         };
         _world.AddChild(_cellHighlight);
+
+        _sectorGridMaterial = new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            AlbedoColor = new Color(0.42f, 0.72f, 0.62f, 0f),
+            DisableReceiveShadows = true,
+        };
+        _sectorGrid = new MeshInstance3D
+        {
+            Name = "SectorGrid",
+            Mesh = BoxWireframe(Vector3.Zero, GalaxyLayout.S / 2f, _sectorGridMaterial),
+        };
+        _world.AddChild(_sectorGrid);
     }
 
     /// <summary>Left click locks or releases; Esc releases. A click on empty space is
@@ -462,6 +517,23 @@ public partial class GalaxyView : Control
         _warpTarget = null;
     }
 
+    /// <summary>Hyperdrive segment: lock that galaxy and warp, or say so when you
+    /// are already the nearest thing to it.</summary>
+    private void WarpToGalaxy(int galaxy)
+    {
+        if (_warping)
+        {
+            return;
+        }
+        if (galaxy == _nearestGalaxy)
+        {
+            _hud.Toast($"already nearest galaxy {galaxy}");
+            return;
+        }
+        SetLock(GalaxyTarget.OfGalaxy(galaxy));
+        TryWarp();
+    }
+
     /// <summary>Hyperdrive step: lock the adjacent galaxy and warp. A no-op with a
     /// toast when you are already at the end of the lane.</summary>
     private void StepGalaxy(int direction)
@@ -554,8 +626,11 @@ public partial class GalaxyView : Control
                 fullAt: 1.5f * GalaxyLayout.Gap, zeroAt: 2.4f * GalaxyLayout.Gap);
 
             // Additive: keep the peak low so a galaxy seen from inside its own
-            // neighbour does not blow out the stars in front of it.
-            float haloAlpha = presence * Mathf.Max(reach, 0.12f) * 0.55f;
+            // neighbour does not blow out the stars in front of it. NOT faded by
+            // distance — only the LABEL culls at range (§8.1). A halo that dims with
+            // distance makes the far end of the lane empty, which §8.1.1 explicitly
+            // tests against; the sprite shrinking on screen is the distance cue.
+            float haloAlpha = presence * 0.55f;
             _haloMaterials[g].AlbedoColor = new Color(0.62f, 0.70f, 0.95f, haloAlpha);
             _names[g].Modulate = new Color(1f, 1f, 1f, presence * reach);
 
@@ -603,6 +678,11 @@ public partial class GalaxyView : Control
 
         _hud = new GalaxyHud { Name = "Hud" };
         _viewportContainer.AddChild(_hud);
+
+        _dashboard = new GalaxyDashboard { Name = "Dashboard" };
+        _dashboard.GalaxyRequested += WarpToGalaxy;
+        _dashboard.GalaxyStepRequested += StepGalaxy;
+        column.AddChild(_dashboard);
 
         _statusLine = UiWidgets.MakeLabel("", 12);
         column.AddChild(_statusLine);
