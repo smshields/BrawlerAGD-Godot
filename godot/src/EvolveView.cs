@@ -142,6 +142,13 @@ public partial class EvolveView : Control
             MutationRate = (float)_mutation.Value,
             DropoutRate = (float)_dropout.Value,
             Generation = BuildGenerationConfig(),
+            // UX before throughput on the INTERACTIVE screen (designer 2026-09-17):
+            // leave one core for the render thread and the live previews instead of
+            // letting evaluation saturate the machine and starve the UI. Headless
+            // CLI runs keep every core. Parallelism is runtime-only — run.json never
+            // records it — and results are identical at any value (parallel==serial
+            // is pinned by test), so this trades wall time and nothing else.
+            Parallelism = System.Math.Max(1, System.Environment.ProcessorCount - 1),
         };
         string runDir = _runDir;
         string runName = RunName();
