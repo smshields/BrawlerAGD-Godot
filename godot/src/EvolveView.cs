@@ -19,13 +19,13 @@ namespace BrawlerGodot;
 /// with an overlaid save button, and a generation progress bar under the chart.
 /// Automation: BRAWLER_AUTOEVOLVE="name=x;pop=24;gens=20;seed=9" starts on load;
 /// with BRAWLER_SHOT set it captures the finished dashboard and quits.
-/// Hyperspace tab (2026-09-10, map-elites-descriptor-spec §8; the standalone
-/// MAP-Elites ALGORITHM option was removed 2026-09-11, designer — the descriptor
-/// archive stays as a visualization): the right column is a TabContainer — RUN =
-/// the classic dashboard (chart + progress, untouched), HYPERSPACE = the run's
-/// accumulated best-per-cell descriptor cube, fed by a view-only shadow archive
-/// that consumes no engine RNG. Automation tokens: tab=hyperspace|galaxy, pilot=N
-/// (pilot sample override), hslice=N.
+/// Archive tabs: the right column is a TabContainer — RUN = the classic dashboard
+/// (chart + progress) and GALAXY = the archive as a flyable place, fed by a
+/// view-only shadow archive that consumes no engine RNG (map-elites-descriptor-spec
+/// §8's data contract). The HYPERSPACE cube tab was removed 2026-09-17 (designer);
+/// the cube view itself lives on in QUALITY EXPLORATION, and the designer's stated
+/// direction is that it eventually returns as the galaxy dashboard's star map.
+/// Automation tokens: tab=galaxy, pilot=N (pilot sample override).
 /// </summary>
 public partial class EvolveView : Control
 {
@@ -70,7 +70,6 @@ public partial class EvolveView : Control
 
     // Hyperspace tab (2026-09-10): the run's descriptor-archive cube.
     private TabContainer _tabs = null!;
-    private HyperspaceView _hyperspace = null!;
     private BrawlerGodot.Hyperspace.GalaxyView _galaxy = null!;
     private int _pilotSamples = BrawlerSim.Evolution.DescriptorBins.DefaultPilotSamples;
     private readonly System.Collections.Concurrent.ConcurrentQueue<HyperspaceSnapshot> _pendingSnapshots = new();
@@ -119,7 +118,6 @@ public partial class EvolveView : Control
         int generations = (int)_generations.Value;
         _runDir = System.IO.Path.Combine(AppPaths.RunsRoot(), RunName());
         _chart.Clear();
-        _hyperspace.Clear();
         _galaxy.Clear();
         ClearSelection();
         SetRunning(true);
@@ -334,7 +332,6 @@ public partial class EvolveView : Control
         }
         if (latest is not null)
         {
-            _hyperspace.SetSnapshot(latest);
             _galaxy.SetSnapshot(latest);
         }
     }
@@ -381,7 +378,6 @@ public partial class EvolveView : Control
     private void ResetForNewRun()
     {
         _chart.Clear();
-        _hyperspace.Clear();
         _galaxy.Clear();
         ClearSelection();
         _runName.Text = NextEvolutionName(_runName.Text);
@@ -569,21 +565,14 @@ public partial class EvolveView : Control
                 case "favorite": // =1: save the auto-selected best to favorites (automation)
                     _autoFavorite = kv[1] == "1";
                     break;
-                case "tab": // =hyperspace: the archive cube; =galaxy: the flythrough
-                    if (kv[1] == "hyperspace")
+                case "tab": // =galaxy: open the archive flythrough (screenshots)
+                    if (kv[1] == "galaxy")
                     {
                         _tabs.CurrentTab = 1;
-                    }
-                    else if (kv[1] == "galaxy")
-                    {
-                        _tabs.CurrentTab = 2;
                     }
                     break;
                 case "pilot": // pilot sample override so automation runs stay fast
                     _pilotSamples = int.Parse(kv[1]);
-                    break;
-                case "hslice": // hidden-axis slider position, 8 = ALL (screenshots)
-                    _hyperspace.SetSliceForAutomation(int.Parse(kv[1]));
                     break;
             }
         }
@@ -765,9 +754,10 @@ public partial class EvolveView : Control
         left.AddChild(_previewInfo);
     }
 
-    /// <summary>The right column is a TabContainer (map-elites-descriptor-spec §8):
-    /// RUN = the existing dashboard column unchanged, HYPERSPACE = the archive cube.
-    /// Both algorithms feed both tabs.</summary>
+    /// <summary>The right column is a TabContainer: RUN = the existing dashboard
+    /// column unchanged, GALAXY = the archive as a place you fly through. (The
+    /// HYPERSPACE cube tab lived here 2026-09-10 to 2026-09-17; it remains the
+    /// QUALITY EXPLORATION view.)</summary>
     private void BuildChartColumn(HBoxContainer root)
     {
         _tabs = new TabContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
@@ -777,11 +767,6 @@ public partial class EvolveView : Control
         right.AddThemeConstantOverride("separation", 8);
         _tabs.AddChild(right);
 
-        _hyperspace = new HyperspaceView { Name = "HYPERSPACE" };
-        _hyperspace.EntrySelected += OnHyperspaceEntrySelected;
-        _tabs.AddChild(_hyperspace);
-        // GALAXY (2026-09-16): additive by designer decision — the cube above keeps
-        // its tab and its behavior; this is the archive as a place you fly through.
         _galaxy = new BrawlerGodot.Hyperspace.GalaxyView { Name = "GALAXY" };
         _galaxy.EntrySelected += OnHyperspaceEntrySelected;
         _tabs.AddChild(_galaxy);
