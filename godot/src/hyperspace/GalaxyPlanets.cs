@@ -54,7 +54,9 @@ public sealed partial class GalaxyPlanets : Node3D
     /// <summary>What the last frame actually drew — the pick list for targeting.</summary>
     private readonly List<(GalaxyPlanet Planet, Vector3 Position, float Alpha)> _visible = new();
 
-    public IReadOnlyList<(GalaxyPlanet Planet, Vector3 Position, float Alpha)> Visible => _visible;
+    /// <summary>Named to avoid hiding Node3D.Visible — assigning THAT property while
+    /// this one shadowed it would have been a quiet bug (CI warning, 2026-09-17).</summary>
+    public IReadOnlyList<(GalaxyPlanet Planet, Vector3 Position, float Alpha)> VisiblePlanets => _visible;
 
     public int Count => _planets.Count;
 

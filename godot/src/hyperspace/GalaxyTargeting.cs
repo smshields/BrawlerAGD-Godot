@@ -178,7 +178,7 @@ public sealed class GalaxyTargeting
         EnsureFrame();
         GalaxyPlanet? planet = null;
         float bestPlanet = PickPlanetPixels;
-        foreach ((GalaxyPlanet candidate, Vector3 position, float alpha) in _planets.Visible)
+        foreach ((GalaxyPlanet candidate, Vector3 position, float alpha) in _planets.VisiblePlanets)
         {
             // Only what is actually drawn can be clicked — the fade band owns both.
             if (alpha <= 0.02f || Project(position) is not { } screen)
