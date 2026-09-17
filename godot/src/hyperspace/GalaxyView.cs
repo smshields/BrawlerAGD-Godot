@@ -65,6 +65,8 @@ public partial class GalaxyView : Control
     private readonly StandardMaterial3D[] _boundsMaterials = new StandardMaterial3D[GalaxyLayout.Bins];
 
     private HyperspaceSnapshot? _snapshot;
+    /// <summary>Newest snapshot that arrived while the tab was hidden.</summary>
+    private HyperspaceSnapshot? _deferredSnapshot;
     private int _nearestGalaxy;
     /// <summary>Orbit clock. Seconds since the view opened — planets are a pure
     /// function of it, so two clients at the same clock draw the same sky.</summary>
@@ -178,9 +180,23 @@ public partial class GalaxyView : Control
     }
 
     /// <summary>Publish an archive snapshot (main thread). The view re-renders per
-    /// snapshot, never per insertion.</summary>
+    /// snapshot, never per insertion — and only while it can be SEEN: a hidden tab
+    /// parks the newest snapshot instead of rebuilding thousands of star instances
+    /// per generation behind the RUN tab (2026-09-17 performance round; the cost
+    /// grew with the archive and with it, the run's felt speed).</summary>
     public void SetSnapshot(HyperspaceSnapshot snapshot)
     {
+        if (!IsVisibleInTree())
+        {
+            _deferredSnapshot = snapshot;
+            return;
+        }
+        ApplySnapshot(snapshot);
+    }
+
+    private void ApplySnapshot(HyperspaceSnapshot snapshot)
+    {
+        _deferredSnapshot = null;
         _snapshot = snapshot;
         var pool = new List<float>();
         foreach (HyperspaceEntry entry in snapshot.Entries)
@@ -209,6 +225,7 @@ public partial class GalaxyView : Control
 
     public void Clear()
     {
+        _deferredSnapshot = null;
         _snapshot = null;
         var empty = new FitnessScale(System.Array.Empty<float>());
         _stars.SetSnapshot(null, empty);
@@ -223,6 +240,10 @@ public partial class GalaxyView : Control
         if (!IsVisibleInTree())
         {
             return;
+        }
+        if (_deferredSnapshot is { } parked)
+        {
+            ApplySnapshot(parked);
         }
         Fly((float)delta);
         UpdateWarp((float)delta);

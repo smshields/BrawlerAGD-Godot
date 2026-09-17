@@ -102,16 +102,30 @@ public partial class HyperspaceView : Control
     public void SetSliceForAutomation(int slice) => _hiddenSlider.Value = slice;
 
     /// <summary>Publish a new archive snapshot (main thread). The view re-renders per
-    /// snapshot, never per insertion.</summary>
+    /// snapshot, never per insertion — and only while it can be SEEN: hidden behind
+    /// another tab it parks the newest snapshot instead of rewriting the lattice,
+    /// fog and landmark instance buffers every generation (2026-09-17 performance
+    /// round; that cost grew with the archive). QUALITY EXPLORATION mounts this view
+    /// visible, so its scans keep applying immediately.</summary>
     public void SetSnapshot(HyperspaceSnapshot snapshot)
     {
+        if (!IsVisibleInTree())
+        {
+            _deferredSnapshot = snapshot;
+            return;
+        }
+        _deferredSnapshot = null;
         _snapshot = snapshot;
         Rebuild();
         ApplyStatus();
     }
 
+    /// <summary>Newest snapshot that arrived while the tab was hidden.</summary>
+    private HyperspaceSnapshot? _deferredSnapshot;
+
     public void Clear()
     {
+        _deferredSnapshot = null;
         _snapshot = null;
         _selectedCell = null;
         Rebuild();
@@ -122,6 +136,10 @@ public partial class HyperspaceView : Control
 
     public override void _Process(double delta)
     {
+        if (_deferredSnapshot is { } parked && IsVisibleInTree())
+        {
+            SetSnapshot(parked);
+        }
         if (!_play.ButtonPressed)
         {
             return;

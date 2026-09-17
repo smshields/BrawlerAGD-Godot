@@ -30,12 +30,22 @@ public partial class FitnessChart : Control
     private const float DotRadiusPx = 2.6f;
     private const float FadeSeconds = 0.45f;
 
-    /// <summary>Above this the drawn dots thin out — UNIFORMLY. An earlier version
-    /// exempted the most recent generations so the live edge stayed crisp, and the
-    /// density step where the exemption ended read as an event in the run that never
-    /// happened. In an instrument, apparent density has to mean what it looks like it
-    /// means, so the whole chart thins together or not at all.</summary>
-    private const int MaxDrawnDots = 20_000;
+    /// <summary>
+    /// Dots render through a GPU-instanced MultiMesh layer (2026-09-17 performance
+    /// round). The CPU used to tessellate a DrawCircle per dot per frame — 100 new
+    /// dots per generation at 60 Hz meant the chart's draw cost grew forever with
+    /// the run, which surfaced as "the evolution slows down after 20-30 generations"
+    /// and would only be worse on weaker machines. Now a dot is uploaded ONCE when
+    /// its game finishes; the fade-in, the time axis, the eased range and the clamp
+    /// dimming are all computed in the dot shader from a handful of per-frame
+    /// uniforms, so per-frame CPU cost is constant no matter how long the run gets.
+    /// No thinning either — instanced quads are trivial at any count this app hits,
+    /// so drawn density always means what it looks like it means.
+    /// </summary>
+    private MultiMeshInstance2D _dotLayer = null!;
+    private MultiMesh _dotMesh = null!;
+    private ShaderMaterial _dotMaterial = null!;
+    private int _dotCapacity;
 
     private readonly struct Dot
     {
@@ -91,21 +101,139 @@ public partial class FitnessChart : Control
 
     private float LineGrowth => Mathf.SmoothStep(0f, 1f, _lineGrowth);
     private float _now;              // run time the axis extends to
-    private float _redrawUntil;      // keep animating while anything is still fading
     private float _shownMin, _shownMax;
     private bool _rangeInitialized;
     private int _selected = -1;      // index into _dots
+    private float _lastDrawnSpan = 1f; // axis span at the last vector redraw
+    private bool _vectorDirty = true;  // marks/selection changed since the last draw
 
     /// <summary>(generation, index in population, fitness, genome) of a clicked point.</summary>
     public System.Action<int, int, float, GameGenome>? PointSelected;
+
+    public override void _Ready()
+    {
+        // The background is its OWN layer, not part of _Draw: the dot layer renders
+        // behind the parent's drawing, and a background painted in _Draw sits OVER
+        // the dots and hides every one of them (found the hard way). Draw order:
+        // background, dots, then the parent's lines/dividers/labels.
+        var background = new ColorRect
+        {
+            Color = new Color(0.05f, 0.05f, 0.08f),
+            ShowBehindParent = true,
+            MouseFilter = MouseFilterEnum.Ignore,
+        };
+        AddChild(background);
+        background.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+
+        _dotMaterial = new ShaderMaterial { Shader = DotShader() };
+        _dotMaterial.SetShaderParameter("dot_radius", DotRadiusPx);
+        _dotMaterial.SetShaderParameter("fade_seconds", FadeSeconds);
+        _dotMesh = new MultiMesh
+        {
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform2D,
+            UseCustomData = true,
+            Mesh = new QuadMesh { Size = Vector2.One },
+        };
+        _dotLayer = new MultiMeshInstance2D
+        {
+            Multimesh = _dotMesh,
+            Material = _dotMaterial,
+            // Dots sit UNDER the vector layer (lines, dividers, selection ring).
+            ShowBehindParent = true,
+        };
+        AddChild(_dotLayer);
+        ClipContents = true;
+    }
+
+    /// <summary>Each instance carries (time, score, appearedAt) in CUSTOM data; the
+    /// vertex shader maps run time and score to pixels with the SAME formulas the
+    /// vector layer uses (XOf / MapY — keep them in step), fades the dot in against
+    /// the clock uniform, and dims it when the score sits outside the shown range,
+    /// exactly like a historical straggler.</summary>
+    private static Shader DotShader() => new()
+    {
+        Code = """
+        shader_type canvas_item;
+
+        uniform vec2 chart_size = vec2(100.0, 100.0);
+        uniform float time_span = 1.0;
+        uniform float y_min = 0.0;
+        uniform float y_range = 1.0;
+        uniform float clock = 0.0;
+        uniform float dot_radius = 2.6;
+        uniform float fade_seconds = 0.45;
+        uniform vec4 dot_color : source_color = vec4(0.58, 0.66, 0.80, 1.0);
+
+        varying float alpha_factor;
+
+        void vertex() {
+            float t = INSTANCE_CUSTOM.x;
+            float score = INSTANCE_CUSTOM.y;
+            float appeared = INSTANCE_CUSTOM.z;
+
+            float x = t / max(time_span, 0.001) * chart_size.x;
+            float shown = clamp(score, y_min, y_min + y_range);
+            float y = chart_size.y
+                - (shown - y_min) / max(y_range, 0.001) * (chart_size.y - 16.0) - 8.0;
+
+            bool clamped = score < y_min || score > y_min + y_range;
+            float fade = clamp((clock - appeared) / fade_seconds, 0.0, 1.0);
+            alpha_factor = (clamped ? 0.14 : 0.42) * fade;
+
+            VERTEX = vec2(x, y) + (UV - 0.5) * dot_radius * 2.2;
+        }
+
+        void fragment() {
+            float d = length(UV - 0.5) * 2.0;
+            float disc = 1.0 - smoothstep(0.78, 1.0, d);
+            COLOR = vec4(dot_color.rgb, dot_color.a * alpha_factor * disc);
+        }
+        """,
+    };
+
+    /// <summary>Grow the instance buffer. Changing InstanceCount clears it, so the
+    /// custom data is re-uploaded from the dot list — rare and amortized.</summary>
+    private void EnsureDotCapacity(int needed)
+    {
+        if (needed <= _dotCapacity)
+        {
+            return;
+        }
+        _dotCapacity = Mathf.Max(2048, _dotCapacity * 2);
+        while (_dotCapacity < needed)
+        {
+            _dotCapacity *= 2;
+        }
+        _dotMesh.InstanceCount = _dotCapacity;
+        // Changing InstanceCount zeroes the buffer, and a ZERO instance transform
+        // collapses the quad after the vertex shader has run — the dots exist but
+        // occupy no pixels. Every slot gets an identity transform up front; the
+        // shader positions the quad itself from the custom data.
+        for (int i = 0; i < _dotCapacity; i++)
+        {
+            _dotMesh.SetInstanceTransform2D(i, Transform2D.Identity);
+        }
+        for (int i = 0; i < _dots.Count; i++)
+        {
+            UploadDot(i);
+        }
+    }
+
+    private void UploadDot(int index)
+    {
+        Dot dot = _dots[index];
+        _dotMesh.SetInstanceCustomData(index,
+            new Color(dot.Time, dot.Score, dot.AppearedAt, 0f));
+    }
 
     /// <summary>One game finished evaluating, `time` seconds into the run.</summary>
     public void AddCandidate(int generation, int index, float score, float time, GameGenome genome)
     {
         _dots.Add(new Dot(generation, index, score, time, _clock, genome));
         _now = Mathf.Max(_now, time);
-        _redrawUntil = _clock + FadeSeconds;
-        QueueRedraw();
+        EnsureDotCapacity(_dots.Count);
+        UploadDot(_dots.Count - 1);
+        _dotMesh.VisibleInstanceCount = _dots.Count;
     }
 
     /// <summary>A generation closed: its top/avg join the lines and a divider drops.</summary>
@@ -114,18 +242,16 @@ public partial class FitnessChart : Control
         _marks.Add(new GenerationMark(generation, top, average, endTime));
         _now = Mathf.Max(_now, endTime);
         _lineGrowth = 0f;
-        QueueRedraw();
+        _vectorDirty = true;
     }
 
     /// <summary>The run clock, so the axis keeps extending while a long generation is
-    /// still computing instead of standing still and then jumping.</summary>
+    /// still computing instead of standing still and then jumping. Never queues a
+    /// redraw itself — _Process redraws the vector layer only once the axis has
+    /// actually moved by a visible amount, and the dot layer follows the uniforms.</summary>
     public void SetElapsed(float seconds)
     {
-        if (seconds > _now)
-        {
-            _now = seconds;
-            QueueRedraw();
-        }
+        _now = Mathf.Max(_now, seconds);
     }
 
     public void Clear()
@@ -136,6 +262,11 @@ public partial class FitnessChart : Control
         _now = 0f;
         _lineGrowth = 1f;
         _rangeInitialized = false;
+        if (_dotMesh is not null)
+        {
+            _dotMesh.VisibleInstanceCount = 0;
+        }
+        _vectorDirty = true;
         QueueRedraw();
     }
 
@@ -156,6 +287,7 @@ public partial class FitnessChart : Control
     private void SelectDot(int dot)
     {
         _selected = dot;
+        _vectorDirty = true;
         QueueRedraw();
         PointSelected?.Invoke(_dots[dot].Generation, _dots[dot].Index, _dots[dot].Score, _dots[dot].Genome);
     }
@@ -167,13 +299,46 @@ public partial class FitnessChart : Control
         {
             _lineGrowth = Mathf.Min(1f, _lineGrowth + (float)delta / LineGrowthSeconds);
         }
-        // Redraw while anything is animating: dots fading in, lines growing, or the
-        // range easing.
-        if (_clock < _redrawUntil || _lineGrowth < 1f || RangeIsSettling())
+        EaseRange((float)delta);
+
+        // The dot layer animates entirely from these uniforms — no per-dot work and
+        // no CanvasItem redraw, whatever the dot count.
+        float span = TimeSpan();
+        _dotMaterial.SetShaderParameter("chart_size", Size);
+        _dotMaterial.SetShaderParameter("time_span", span);
+        _dotMaterial.SetShaderParameter("y_min", _shownMin);
+        _dotMaterial.SetShaderParameter("y_range", Mathf.Max(1e-3f, _shownMax - _shownMin));
+        _dotMaterial.SetShaderParameter("clock", _clock);
+
+        // The vector layer (lines, dividers, labels) redraws only when something of
+        // its own moved: a new mark or selection, a growing line, the range easing,
+        // or the axis having compressed far enough to shift pixels.
+        bool axisMoved = Mathf.Abs(span - _lastDrawnSpan) / span * Size.X > 0.5f;
+        if (_vectorDirty || _lineGrowth < 1f || RangeIsSettling() || axisMoved)
         {
             QueueRedraw();
         }
     }
+
+    /// <summary>Frame-rate independent ease of the shown y window toward the target
+    /// (lines only — see TargetRange): ~95% of the way in a second, so a widening
+    /// range slides instead of snapping.</summary>
+    private void EaseRange(float delta)
+    {
+        (float min, float max) = TargetRange();
+        if (!_rangeInitialized)
+        {
+            _shownMin = min;
+            _shownMax = max;
+            _rangeInitialized = true;
+            return;
+        }
+        float gain = 1f - Mathf.Pow(0.05f, Mathf.Min(0.1f, delta));
+        _shownMin = Mathf.Lerp(_shownMin, min, gain);
+        _shownMax = Mathf.Lerp(_shownMax, max, gain);
+    }
+
+    private float TimeSpan() => Mathf.Max(1f, _now * 1.02f);
 
     public override void _GuiInput(InputEvent @event)
     {
@@ -197,7 +362,7 @@ public partial class FitnessChart : Control
             return null;
         }
         Vector2 size = Size;
-        (float min, float max) = ShownRange();
+        (float min, float max) = (_shownMin, _shownMax);
         int best = -1;
         float bestDistSq = HitRadiusPx * HitRadiusPx;
         for (int i = 0; i < _dots.Count; i++)
@@ -221,7 +386,8 @@ public partial class FitnessChart : Control
     public override void _Draw()
     {
         Vector2 size = Size;
-        DrawRect(new Rect2(Vector2.Zero, size), new Color(0.05f, 0.05f, 0.08f));
+        // Background lives on its own layer behind the dots (see _Ready); only the
+        // border is drawn here.
         DrawRect(new Rect2(Vector2.Zero, size), new Color(0.35f, 0.4f, 0.5f), filled: false);
 
         Font font = ThemeDB.FallbackFont;
@@ -232,7 +398,9 @@ public partial class FitnessChart : Control
             return;
         }
 
-        (float min, float max) = ShownRange();
+        (float min, float max) = (_shownMin, _shownMax);
+        _lastDrawnSpan = TimeSpan();
+        _vectorDirty = false;
 
         if (min < 0f && max > 0f)
         {
@@ -241,7 +409,6 @@ public partial class FitnessChart : Control
         }
 
         DrawGenerationDividers(font, size);
-        DrawDots(min, max, size);
         DrawSeries(mark => mark.Average, min, max, size, new Color(0.55f, 0.65f, 0.9f));
         DrawSeries(mark => mark.Top, min, max, size, new Color(0.45f, 0.9f, 0.55f));
         DrawSelection(min, max, size);
@@ -280,36 +447,6 @@ public partial class FitnessChart : Control
         }
     }
 
-    /// <summary>
-    /// Per-game dots, under the lines. Each fades in over its first fraction of a
-    /// second, so a generation lands as a shimmer rather than a block. Only deep
-    /// history thins, and only when the total would cost too much per frame.
-    /// </summary>
-    private void DrawDots(float min, float max, Vector2 size)
-    {
-        int stride = _dots.Count > MaxDrawnDots
-            ? Mathf.CeilToInt(_dots.Count / (float)MaxDrawnDots)
-            : 1;
-        for (int i = 0; i < _dots.Count; i += stride)
-        {
-            Dot dot = _dots[i];
-            float fade = Mathf.Clamp((_clock - dot.AppearedAt) / FadeSeconds, 0f, 1f);
-            bool clamped = dot.Score < min || dot.Score > max;
-            float x = XOf(dot.Time, size);
-            float y = MapY(Mathf.Clamp(dot.Score, min, max), min, max, size.Y);
-            DrawCircle(new Vector2(x, y), DotRadiusPx,
-                new Color(0.58f, 0.66f, 0.80f, (clamped ? 0.14f : 0.42f) * fade));
-        }
-    }
-
-    /// <summary>
-    /// A trend line, drawn from the ORIGIN (designer: both lines start at zero, so
-    /// there is a line from the first moment rather than an empty chart until two
-    /// generations exist) and GROWING toward its newest vertex rather than snapping
-    /// to it. The tip is interpolated, so the line extends continuously between
-    /// generations; running a generation behind is fine and is what makes the motion
-    /// read as drawing rather than stepping (designer, 2026-09-16).
-    /// </summary>
     private void DrawSeries(System.Func<GenerationMark, float> value, float min, float max,
         Vector2 size, Color color)
     {
@@ -364,38 +501,6 @@ public partial class FitnessChart : Control
             HorizontalAlignment.Left, -1f, 14, new Color(0.5f, 0.55f, 0.65f));
     }
 
-    /// <summary>
-    /// The y window, eased toward a target that comes from the LINES ALONE — plus the
-    /// origin both lines start from.
-    ///
-    /// It deliberately ignores the dots. An earlier version included the in-flight
-    /// generation's dots so they could not plot off-screen, and the axis then chased
-    /// every incoming outlier: with games landing several times a second the window
-    /// never settled and the whole chart oscillated (designer, 2026-09-16 — "bouncing
-    /// and nauseating"). Lines move once per generation, so the window now moves once
-    /// per generation too, and a dot outside it clamps to the edge and draws fainter
-    /// exactly like a historical straggler.
-    /// </summary>
-    private (float Min, float Max) ShownRange()
-    {
-        (float min, float max) = TargetRange();
-        if (!_rangeInitialized)
-        {
-            _shownMin = min;
-            _shownMax = max;
-            _rangeInitialized = true;
-        }
-        else
-        {
-            // Frame-rate independent, and slow enough to read as a slide rather than
-            // a correction: ~95% of the way in a second.
-            float gain = 1f - Mathf.Pow(0.05f, Mathf.Min(0.1f, (float)GetProcessDeltaTime()));
-            _shownMin = Mathf.Lerp(_shownMin, min, gain);
-            _shownMax = Mathf.Lerp(_shownMax, max, gain);
-        }
-        return (_shownMin, _shownMax);
-    }
-
     private bool RangeIsSettling()
     {
         if (!_rangeInitialized)
@@ -426,11 +531,8 @@ public partial class FitnessChart : Control
 
     /// <summary>Run time to pixels. The axis always spans a little past the latest
     /// event so the live edge is not glued to the frame.</summary>
-    private float XOf(float time, Vector2 size)
-    {
-        float span = Mathf.Max(1f, _now * 1.02f);
-        return size.X * Mathf.Clamp(time / span, 0f, 1f);
-    }
+    private float XOf(float time, Vector2 size) =>
+        size.X * Mathf.Clamp(time / TimeSpan(), 0f, 1f);
 
     private static float MapY(float value, float min, float max, float height) =>
         height - (value - min) / (max - min) * (height - 16f) - 8f;
