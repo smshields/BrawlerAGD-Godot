@@ -245,6 +245,7 @@ public partial class GalaxyView : Control
         {
             ApplySnapshot(parked);
         }
+        UpdateProjectionUniforms();
         Fly((float)delta);
         UpdateWarp((float)delta);
         _clock += (float)delta;
@@ -717,7 +718,12 @@ public partial class GalaxyView : Control
         _statusLine = UiWidgets.MakeLabel("", 12);
         column.AddChild(_statusLine);
 
-        Resized += UpdateProjectionUniforms;
+        // Deliberately NOT wired to Resized: the signal last fires while the tab is
+        // hidden and the SubViewport still has a placeholder size, and it never
+        // re-fires when the tab is clicked open — the stale value then inflates the
+        // minimum-screen-size clamp by orders of magnitude and every star renders as
+        // a giant sphere (designer report, 2026-09-17; reproduced with
+        // BRAWLER_GALAXY_TAB_AT). _Process tracks the real size instead.
         // The dashboard's preview is a live mini-sim; leaving the tab stops it.
         VisibilityChanged += () =>
         {
@@ -903,12 +909,23 @@ public partial class GalaxyView : Control
         return mesh;
     }
 
-    /// <summary>The star shader's minimum-screen-size clamp is in world units, so it
-    /// needs the viewport's pixel scale — which changes with the tab's size.</summary>
+    /// <summary>The body shader's screen-size clamps are in world units, so they
+    /// need the viewport's real pixel scale. Checked every frame (one property read;
+    /// the uniforms are only written when the height actually changes) and pushed to
+    /// BOTH body materials — the planets' material previously never received it and
+    /// ran on the shader default.</summary>
     private void UpdateProjectionUniforms()
     {
-        float height = Mathf.Max(1f, _viewport.Size.Y);
-        _stars.Material.SetShaderParameter("world_per_pixel",
-            GalaxyShaders.WorldPerPixel(CameraFov, height));
+        int height = Mathf.Max(1, _viewport.Size.Y);
+        if (height == _uniformHeight)
+        {
+            return;
+        }
+        _uniformHeight = height;
+        float worldPerPixel = GalaxyShaders.WorldPerPixel(CameraFov, height);
+        _stars.Material.SetShaderParameter("world_per_pixel", worldPerPixel);
+        _planets.BodyMaterial.SetShaderParameter("world_per_pixel", worldPerPixel);
     }
+
+    private int _uniformHeight;
 }

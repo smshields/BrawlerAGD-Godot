@@ -70,6 +70,11 @@ public static class AutomationEnv
     /// <summary>BRAWLER_GALAXY_LOCK="hover": lock whatever the crosshair is on once
     /// the archive lands, so a capture can show the reticle and cell highlight.</summary>
     public static string GalaxyLock => OS.GetEnvironment("BRAWLER_GALAXY_LOCK");
+    /// <summary>BRAWLER_GALAXY_TAB_AT=&lt;seconds&gt;: switch the Evolve screen to the
+    /// GALAXY tab that long after load — the headless stand-in for a person clicking
+    /// into the tab mid-run, which is a different code path (deferred snapshot,
+    /// late layout) from opening it at boot with tab=galaxy.</summary>
+    public static string GalaxyTabAt => OS.GetEnvironment("BRAWLER_GALAXY_TAB_AT");
     /// <summary>BRAWLER_GALAXY_WARP="1": warp to the auto-locked target and run the
     /// ease to completion, so a capture shows the ARRIVAL.</summary>
     public static string GalaxyWarp => OS.GetEnvironment("BRAWLER_GALAXY_WARP");

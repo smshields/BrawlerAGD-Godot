@@ -35,6 +35,10 @@ public sealed partial class GalaxyPlanets : Node3D
     private MultiMeshInstance3D _bodies = null!;
     private MultiMeshInstance3D _rings = null!;
     private ShaderMaterial _bodyMaterial = null!;
+
+    /// <summary>The view pushes the per-frame projection uniforms here — planet
+    /// bodies share the star shader and need the same real pixel scale.</summary>
+    public ShaderMaterial BodyMaterial => _bodyMaterial;
     private StandardMaterial3D _ringMaterial = null!;
 
     /// <summary>Every planet in the archive, precomputed at snapshot time: orbits are

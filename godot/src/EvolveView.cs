@@ -770,6 +770,12 @@ public partial class EvolveView : Control
         _galaxy = new BrawlerGodot.Hyperspace.GalaxyView { Name = "GALAXY" };
         _galaxy.EntrySelected += OnHyperspaceEntrySelected;
         _tabs.AddChild(_galaxy);
+        if (AutomationEnv.GalaxyTabAt.Length > 0)
+        {
+            // The headless stand-in for clicking into the tab mid-run.
+            GetTree().CreateTimer(double.Parse(AutomationEnv.GalaxyTabAt)).Timeout +=
+                () => _tabs.CurrentTab = 1;
+        }
         _chart = new FitnessChart { SizeFlagsVertical = SizeFlags.ExpandFill };
         _chart.PointSelected += OnPointSelected;
         right.AddChild(_chart);
