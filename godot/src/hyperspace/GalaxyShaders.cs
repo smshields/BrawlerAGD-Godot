@@ -36,6 +36,7 @@ public static class GalaxyShaders
     public const float MaxStarPixels = 90f;
 
     private static Shader? _star;
+    private static Shader? _corona;
     private static Texture2D? _halo;
 
     public static Shader Star() => _star ??= new Shader
@@ -79,11 +80,14 @@ public static class GalaxyShaders
             vec3 cam_up = INV_VIEW_MATRIX[1].xyz;
             vec3 world = center + cam_right * VERTEX.x * sprite + cam_up * VERTEX.y * sprite;
 
-            // GalaxyLayout.StarFade is the tested C# twin of this line; keep them
-            // together (the LightRig.TintTile precedent). INSTANCE_CUSTOM.x is the
-            // normalized fitness, .y the 0->1 ignition ramp for a newly filled cell
-            // (fading up from black on black space needs no transparency).
-            float fade = clamp(fade_numerator / dist, 0.10, 1.0)
+            // INSTANCE_CUSTOM.x is the normalized fitness, .y the 0->1 ignition
+            // ramp for a newly filled cell (fading up from black on black space
+            // needs no transparency). The distance floor is HIGH for an opaque
+            // body: a real star gets smaller with distance, not darker, and a
+            // heavily dimmed opaque disc reads as a black speck punching a hole in
+            // its galaxy's halo (found when the radial scatter put whole galaxies
+            // at range). The screen-size clamp is what keeps far fields subtle.
+            float fade = clamp(fade_numerator / dist, 0.60, 1.0)
                 * (0.35 + 0.62 * INSTANCE_CUSTOM.x);
             brightness = fade * INSTANCE_CUSTOM.y;
             body_rgb = COLOR.rgb;
@@ -107,6 +111,62 @@ public static class GalaxyShaders
             float lit = mix(0.10, 1.0,
                 clamp(dot(n, normalize(vec3(-0.5, 0.55, 0.7))), 0.0, 1.0));
             ALBEDO = body_rgb * brightness * mix(limb, lit, shade_directional);
+        }
+        """,
+    };
+
+    /// <summary>
+    /// The star's CORONA (2026-09-17, designer: "stars just look like solid, dull
+    /// objects... some amount of luminosity"). A separate additive billboard drawn
+    /// around the opaque body — nudged toward the camera so it never z-fights its
+    /// own star — with the tight halo falloff and a modest alpha. Screen-capped like
+    /// the body, so it stays a corona at any range: black space between stars is a
+    /// designer requirement the last glow implementation died for.
+    /// </summary>
+    public static Shader Corona() => _corona ??= new Shader
+    {
+        Code = """
+        shader_type spatial;
+        render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+
+        uniform sampler2D halo : source_color, filter_linear;
+        uniform float fade_numerator = 968.0;
+        uniform float corona_scale = 7.0;
+        uniform float max_pixels = 150.0;
+        uniform float peak_alpha = 0.34;
+        uniform float world_per_pixel = 0.002;
+
+        varying vec3 glow_rgb;
+        varying float glow_alpha;
+
+        void vertex() {
+            vec3 center = MODEL_MATRIX[3].xyz;
+            float radius = length(MODEL_MATRIX[0].xyz);
+            vec3 eye = INV_VIEW_MATRIX[3].xyz;
+            float dist = max(distance(center, eye), 0.001);
+
+            // Toward the camera by the body radius, so the glow always sits in
+            // front of its own opaque sphere instead of z-fighting it.
+            vec3 toward_eye = (eye - center) / dist;
+            vec3 anchor = center + toward_eye * radius * 1.1;
+
+            float world_per_px = world_per_pixel * dist;
+            float sprite = min(radius * corona_scale, 2.0 * max_pixels * world_per_px);
+
+            vec3 cam_right = INV_VIEW_MATRIX[0].xyz;
+            vec3 cam_up = INV_VIEW_MATRIX[1].xyz;
+            vec3 world = anchor + cam_right * VERTEX.x * sprite + cam_up * VERTEX.y * sprite;
+
+            float fade = clamp(fade_numerator / dist, 0.10, 1.0)
+                * (0.35 + 0.62 * INSTANCE_CUSTOM.x);
+            glow_alpha = peak_alpha * fade * INSTANCE_CUSTOM.y;
+            glow_rgb = COLOR.rgb;
+            POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(world, 1.0);
+        }
+
+        void fragment() {
+            ALBEDO = glow_rgb;
+            ALPHA = texture(halo, UV).a * glow_alpha;
         }
         """,
     };

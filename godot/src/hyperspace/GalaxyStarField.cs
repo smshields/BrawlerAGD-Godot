@@ -30,7 +30,12 @@ public sealed partial class GalaxyStarField : Node3D
     public const float IgnitionSeconds = 0.4f;
 
     private readonly MultiMeshInstance3D[] _galaxies = new MultiMeshInstance3D[GalaxyLayout.Bins];
+    private readonly MultiMeshInstance3D[] _coronas = new MultiMeshInstance3D[GalaxyLayout.Bins];
     private readonly List<GalaxyStar>[] _stars = new List<GalaxyStar>[GalaxyLayout.Bins];
+
+    /// <summary>Which grid the stars plot against (2026-09-17 radial experiment).
+    /// Set before SetSnapshot; switching grids re-applies the snapshot.</summary>
+    public IGalaxyGeometry Geometry { get; set; } = new CubeGalaxyGeometry();
 
     /// <summary>Cell index -> (galaxy, instance) so a rebuild can find what moved.</summary>
     private readonly Dictionary<int, (int Galaxy, int Instance)> _index = new();
@@ -41,6 +46,10 @@ public sealed partial class GalaxyStarField : Node3D
     /// <summary>The star material — GalaxyView sets the projection-dependent
     /// uniforms on it (the minimum-screen-size clamp is in world units).</summary>
     public ShaderMaterial Material { get; private set; } = null!;
+
+    /// <summary>The corona material — the luminosity layer shares the projection
+    /// uniforms with the bodies.</summary>
+    public ShaderMaterial CoronaMaterial { get; private set; } = null!;
 
     public IReadOnlyList<GalaxyStar> StarsIn(int galaxy) => _stars[galaxy];
 
@@ -63,28 +72,49 @@ public sealed partial class GalaxyStarField : Node3D
         Material.SetShaderParameter("max_pixels", GalaxyShaders.MaxStarPixels);
         Material.SetShaderParameter("shade_directional", 0f); // limb darkening
 
+        CoronaMaterial = new ShaderMaterial { Shader = GalaxyShaders.Corona() };
+        CoronaMaterial.SetShaderParameter("halo", GalaxyShaders.HaloTexture());
+        CoronaMaterial.SetShaderParameter("fade_numerator", GalaxyLayout.FadeNumerator);
+
         for (int g = 0; g < GalaxyLayout.Bins; g++)
         {
             _stars[g] = new List<GalaxyStar>();
-            var instance = new MultiMeshInstance3D
+            _galaxies[g] = BuildLayer($"Galaxy{g}", Material, useCustomData: true);
+            _coronas[g] = BuildLayer($"Corona{g}", CoronaMaterial, useCustomData: true);
+        }
+        ApplyGeometryBounds();
+    }
+
+    private MultiMeshInstance3D BuildLayer(string name, ShaderMaterial material, bool useCustomData)
+    {
+        var instance = new MultiMeshInstance3D
+        {
+            Name = name,
+            Multimesh = new MultiMesh
             {
-                Name = $"Galaxy{g}",
-                Multimesh = new MultiMesh
-                {
-                    TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-                    UseColors = true,
-                    UseCustomData = true,
-                    Mesh = new QuadMesh { Size = Vector2.One, Material = Material },
-                },
-                // Explicit bounds: the galaxy cube plus system envelope margin, so the
-                // whole galaxy is never culled as one unit (§8.1.2).
-                CustomAabb = new Aabb(
-                    GalaxyVec.From(GalaxyLayout.GalaxyCenter(g))
-                        - Vector3.One * (GalaxyLayout.Half + GalaxyLayout.MaxSystemRadius),
-                    Vector3.One * 2f * (GalaxyLayout.Half + GalaxyLayout.MaxSystemRadius)),
-            };
-            _galaxies[g] = instance;
-            AddChild(instance);
+                TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                UseColors = true,
+                UseCustomData = useCustomData,
+                Mesh = new QuadMesh { Size = Vector2.One, Material = material },
+            },
+        };
+        AddChild(instance);
+        return instance;
+    }
+
+    /// <summary>Explicit per-galaxy bounds: the galaxy's ball or cube plus the system
+    /// envelope, so a galaxy is never frustum-culled as one unit (§8.1.2). Recomputed
+    /// when the geometry changes — centres and radii both move.</summary>
+    private void ApplyGeometryBounds()
+    {
+        float reach = Geometry.GalaxyRadius + GalaxyLayout.MaxSystemRadius;
+        for (int g = 0; g < GalaxyLayout.Bins; g++)
+        {
+            var aabb = new Aabb(
+                GalaxyVec.From(Geometry.GalaxyCenter(g)) - Vector3.One * reach,
+                Vector3.One * 2f * reach);
+            _galaxies[g].CustomAabb = aabb;
+            _coronas[g].CustomAabb = aabb;
         }
     }
 
@@ -119,27 +149,37 @@ public sealed partial class GalaxyStarField : Node3D
                 ulong hash = GalaxyLayout.CellHash(i, j, k, g);
                 _stars[g].Add(new GalaxyStar(
                     CellIndex(i, j, k, g), i, j, k, g,
-                    GalaxyVec.From(GalaxyLayout.StarPosition(i, j, k, g)),
+                    GalaxyVec.From(Geometry.StarPosition(i, j, k, g)),
                     GalaxyLayout.StarRadius(fitness),
                     GalaxyVec.From(GalaxyLayout.StarColor(i, j, k, fitness)),
                     fitness, hash, entry));
             }
         }
 
+        ApplyGeometryBounds();
         for (int g = 0; g < GalaxyLayout.Bins; g++)
         {
             List<GalaxyStar> stars = _stars[g];
             MultiMesh mesh = _galaxies[g].Multimesh;
+            MultiMesh corona = _coronas[g].Multimesh;
             mesh.InstanceCount = stars.Count;
+            corona.InstanceCount = stars.Count;
             Count += stars.Count;
             for (int n = 0; n < stars.Count; n++)
             {
                 GalaxyStar star = stars[n];
-                mesh.SetInstanceTransform(n, new Transform3D(
-                    Basis.Identity.Scaled(Vector3.One * star.Radius), star.Position));
-                mesh.SetInstanceColor(n, star.Color);
+                var transform = new Transform3D(
+                    Basis.Identity.Scaled(Vector3.One * star.Radius), star.Position);
                 bool fresh = !previous.ContainsKey(star.Cell);
-                mesh.SetInstanceCustomData(n, new Color(star.Fitness, fresh ? 0f : 1f, 0f, 0f));
+                var custom = new Color(star.Fitness, fresh ? 0f : 1f, 0f, 0f);
+                mesh.SetInstanceTransform(n, transform);
+                mesh.SetInstanceColor(n, star.Color);
+                mesh.SetInstanceCustomData(n, custom);
+                // The luminosity layer mirrors the body exactly (§ luminosity —
+                // the corona shader does the rest).
+                corona.SetInstanceTransform(n, transform);
+                corona.SetInstanceColor(n, star.Color);
+                corona.SetInstanceCustomData(n, custom);
                 _index[star.Cell] = (g, n);
                 if (fresh)
                 {
@@ -169,7 +209,9 @@ public sealed partial class GalaxyStarField : Node3D
                 continue;
             }
             Color custom = mesh.GetInstanceCustomData(instance);
-            mesh.SetInstanceCustomData(instance, new Color(custom.R, t, custom.B, custom.A));
+            var ramped = new Color(custom.R, t, custom.B, custom.A);
+            mesh.SetInstanceCustomData(instance, ramped);
+            _coronas[galaxy].Multimesh.SetInstanceCustomData(instance, ramped);
             if (t >= 1f)
             {
                 _igniting.RemoveAt(i);

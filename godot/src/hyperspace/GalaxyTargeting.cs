@@ -63,6 +63,9 @@ public sealed class GalaxyTargeting
     private Vector2 _frameSize;
     private ulong _cachedFrame = ulong.MaxValue;
 
+    /// <summary>The grid picked targets live in — swapped by the radial toggle.</summary>
+    public IGalaxyGeometry Geometry { get; set; } = new CubeGalaxyGeometry();
+
     public GalaxyTargeting(Camera3D camera, GalaxyStarField stars, GalaxyPlanets planets)
     {
         _camera = camera;
@@ -111,7 +114,7 @@ public sealed class GalaxyTargeting
     {
         GalaxyTargetKind.Star => target.Star!.Position,
         GalaxyTargetKind.Planet => target.Planet!.PositionAt(clock),
-        _ => GalaxyVec.From(GalaxyLayout.GalaxyCenter(target.Galaxy)),
+        _ => GalaxyVec.From(Geometry.GalaxyCenter(target.Galaxy)),
     };
 
     /// <summary>Apparent radius in pixels — sizes the lock reticle and the hover ring.</summary>
@@ -127,7 +130,7 @@ public sealed class GalaxyTargeting
         {
             GalaxyTargetKind.Star => target.Star!.Radius * 2.2f,
             GalaxyTargetKind.Planet => Mathf.Max(target.Planet!.Orbit.BodyRadius * 3f, 1.5f),
-            _ => GalaxyLayout.Half,
+            _ => Geometry.GalaxyRadius,
         };
         Vector3 offset = _camera.GlobalBasis.X * worldRadius;
         return Project(world + offset) is { } edge
@@ -224,8 +227,8 @@ public sealed class GalaxyTargeting
     {
         for (int g = 0; g < GalaxyLayout.Bins; g++)
         {
-            Vector3 center = GalaxyVec.From(GalaxyLayout.GalaxyCenter(g));
-            if (eye.DistanceTo(center) < GalaxyLayout.NearGalaxy
+            Vector3 center = GalaxyVec.From(Geometry.GalaxyCenter(g));
+            if (eye.DistanceTo(center) < Geometry.GalaxyRadius * 2f
                 || Project(center) is not { } screen)
             {
                 continue;

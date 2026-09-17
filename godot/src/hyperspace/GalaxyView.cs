@@ -44,6 +44,13 @@ public partial class GalaxyView : Control
     private GalaxyStarField _stars = null!;
     private GalaxyPlanets _planets = null!;
     private GalaxyTargeting _targeting = null!;
+
+    /// <summary>The grid everything plots against. CUBE is the shipping default; the
+    /// RADIAL experiment (2026-09-17, designer) swaps in a spherical grid with
+    /// galaxies scattered through 3D space — same renderer, same targeting, same
+    /// dashboard, different geometry. The toggle re-applies the current snapshot.</summary>
+    private IGalaxyGeometry _geometry = new CubeGalaxyGeometry();
+    private Button _gridToggle = null!;
     private MeshInstance3D _cellHighlight = null!;
     private StandardMaterial3D _cellHighlightMaterial = null!;
     private MeshInstance3D _sectorGrid = null!;
@@ -99,13 +106,56 @@ public partial class GalaxyView : Control
     public override void _Ready()
     {
         BuildUi();
-        // Parked outside galaxy 4 looking back down the lane.
-        _ship.Position = GalaxyVec.To(GalaxyVec.From(GalaxyLayout.GalaxyCenter(4))
-            + new Vector3(0f, GalaxyLayout.Half * 0.35f, GalaxyLayout.Half * 1.9f));
-        ApplyShipToRig();
-        _nearestGalaxy = GalaxyNavigation.NearestGalaxy(ShipPosition.X);
+        if (AutomationEnv.GalaxyGrid == "radial")
+        {
+            SetGeometry(new RadialGalaxyGeometry(), announce: false);
+        }
+        ParkShip();
+        _nearestGalaxy = GalaxyNavigation.NearestGalaxy(GalaxyVec.To(ShipPosition), _geometry);
         ApplyAutomation();
         ApplyStatus();
+    }
+
+    /// <summary>The boot overlook: outside galaxy 4, looking at it.</summary>
+    private void ParkShip()
+    {
+        Vector3 center = GalaxyVec.From(_geometry.GalaxyCenter(4));
+        Vector3 eye = center + new Vector3(0f, _geometry.GalaxyRadius * 0.35f, _geometry.GalaxyRadius * 1.9f);
+        _ship.Position = GalaxyVec.To(eye);
+        Vector3 toCenter = center - eye;
+        _ship.Yaw = Mathf.Atan2(-toCenter.X, -toCenter.Z);
+        _ship.Pitch = Mathf.Atan2(toCenter.Y, new Vector2(toCenter.X, toCenter.Z).Length());
+        ApplyShipToRig();
+    }
+
+    /// <summary>Swap grids: rebuild the markers for the new centres, re-plot the
+    /// snapshot, drop any lock (its object may not exist where you now are) and
+    /// re-park the ship at the overlook.</summary>
+    private void SetGeometry(IGalaxyGeometry geometry, bool announce)
+    {
+        _geometry = geometry;
+        _stars.Geometry = geometry;
+        _targeting.Geometry = geometry;
+        SetLock(null);
+        _warping = false;
+        _warpTarget = null;
+        RebuildGalaxyMarkers();
+        _lastHighlightCell = null;
+        _lastSectorCell = null;
+        if (_snapshot is { } current)
+        {
+            ApplySnapshot(current);
+        }
+        ParkShip();
+        _nearestGalaxy = GalaxyNavigation.NearestGalaxy(GalaxyVec.To(ShipPosition), _geometry);
+        if (_gridToggle is not null)
+        {
+            _gridToggle.Text = geometry.Name == "radial" ? "GRID: RADIAL EXP" : "GRID: CUBE";
+        }
+        if (announce)
+        {
+            _hud.Toast($"{geometry.Name} grid");
+        }
     }
 
     /// <summary>BRAWLER_GALAXY_CAM / _FLY: the view's only headless handles — park
@@ -249,12 +299,13 @@ public partial class GalaxyView : Control
         Fly((float)delta);
         UpdateWarp((float)delta);
         _clock += (float)delta;
-        _nearestGalaxy = GalaxyNavigation.NearestGalaxy(ShipPosition.X, _nearestGalaxy);
+        _nearestGalaxy = GalaxyNavigation.NearestGalaxy(
+            GalaxyVec.To(ShipPosition), _geometry, _nearestGalaxy);
         _planets.Update(ShipPosition, _clock);
         UpdateTargeting((float)delta);
-        _dashboard.Refresh(_stars, ShipPosition, _ship.Yaw, _ship.Speed,
+        _dashboard.Refresh(_stars, _geometry, ShipPosition, _ship.Yaw, _ship.Speed,
             Input.IsActionPressed("hs_boost"), _nearestGalaxy, _lock ?? _hover,
-            locked: _lock is not null, _snapshot?.Bins);
+            locked: _lock is not null);
         if (_pendingAutoLock && _hover is not null)
         {
             _pendingAutoLock = false;
@@ -365,6 +416,8 @@ public partial class GalaxyView : Control
     /// the grid it actually is. Quiets as you fly inside the cell, where its walls
     /// would otherwise swamp the view. Independent of the G sector-grid toggle.
     /// </summary>
+    private (int, int, int, int)? _lastHighlightCell;
+
     private void UpdateCellHighlight(GalaxyTarget? focus)
     {
         if (focus?.Star is not { } star)
@@ -372,10 +425,15 @@ public partial class GalaxyView : Control
             _cellHighlightMaterial.AlbedoColor = new Color(1f, 0.82f, 0.35f, 0f);
             return;
         }
-        Vector3 center = GalaxyVec.From(GalaxyLayout.GalaxyCenter(star.G))
-            + new Vector3((star.I - 3.5f) * GalaxyLayout.S, (star.J - 3.5f) * GalaxyLayout.S,
-                (star.K - 3.5f) * GalaxyLayout.S);
-        _cellHighlight.Position = center;
+        // The bucket's outline comes from the geometry (a box, or a spherical
+        // wedge); rebuilt only when the focused cell changes.
+        if (_lastHighlightCell != (star.I, star.J, star.K, star.G))
+        {
+            _lastHighlightCell = (star.I, star.J, star.K, star.G);
+            _cellHighlight.Position = GalaxyVec.From(_geometry.GalaxyCenter(star.G));
+            _cellHighlight.Mesh = SegmentsMesh(
+                _geometry.CellWireframe(star.I, star.J, star.K), _cellHighlightMaterial);
+        }
         float distance = ShipPosition.DistanceTo(star.Position);
         float alpha = 0.45f * Mathf.Clamp(distance / (1.2f * GalaxyLayout.S), 0.12f, 1f);
         _cellHighlightMaterial.AlbedoColor = new Color(1f, 0.82f, 0.35f, alpha);
@@ -386,6 +444,8 @@ public partial class GalaxyView : Control
     /// your own bucket while flying. Distinct from the hover/lock cell highlight,
     /// which wireframes the cell of whatever you are pointing at.
     /// </summary>
+    private (int, int, int, int)? _lastSectorCell;
+
     private void UpdateSectorGrid()
     {
         if (!_sectorGridOn)
@@ -393,19 +453,20 @@ public partial class GalaxyView : Control
             _sectorGridMaterial.AlbedoColor = new Color(0.42f, 0.72f, 0.62f, 0f);
             return;
         }
-        Vector3 local = ShipPosition - GalaxyVec.From(GalaxyLayout.GalaxyCenter(_nearestGalaxy));
-        int i = GalaxyNavigation.SectorOf(local.X);
-        int j = GalaxyNavigation.SectorOf(local.Y);
-        int k = GalaxyNavigation.SectorOf(local.Z);
-        if (i < 0 || j < 0 || k < 0)
+        Vector3 local = ShipPosition - GalaxyVec.From(_geometry.GalaxyCenter(_nearestGalaxy));
+        if (_geometry.SectorOf(GalaxyVec.To(local)) is not { } sector)
         {
-            // Outside the galaxy there is no sector to draw — fade, never cut.
+            // Outside the grid there is no sector to draw — fade, never cut.
             _sectorGridMaterial.AlbedoColor = new Color(0.42f, 0.72f, 0.62f, 0f);
             return;
         }
-        _sectorGrid.Position = GalaxyVec.From(GalaxyLayout.GalaxyCenter(_nearestGalaxy))
-            + new Vector3((i - 3.5f) * GalaxyLayout.S, (j - 3.5f) * GalaxyLayout.S,
-                (k - 3.5f) * GalaxyLayout.S);
+        if (_lastSectorCell != (sector.I, sector.J, sector.K, _nearestGalaxy))
+        {
+            _lastSectorCell = (sector.I, sector.J, sector.K, _nearestGalaxy);
+            _sectorGrid.Position = GalaxyVec.From(_geometry.GalaxyCenter(_nearestGalaxy));
+            _sectorGrid.Mesh = SegmentsMesh(
+                _geometry.CellWireframe(sector.I, sector.J, sector.K), _sectorGridMaterial);
+        }
         _sectorGridMaterial.AlbedoColor = new Color(0.42f, 0.72f, 0.62f, 0.22f);
     }
 
@@ -418,11 +479,7 @@ public partial class GalaxyView : Control
             AlbedoColor = new Color(1f, 0.82f, 0.35f, 0f),
             DisableReceiveShadows = true,
         };
-        _cellHighlight = new MeshInstance3D
-        {
-            Name = "CellHighlight",
-            Mesh = BoxWireframe(Vector3.Zero, GalaxyLayout.S / 2f, _cellHighlightMaterial),
-        };
+        _cellHighlight = new MeshInstance3D { Name = "CellHighlight" };
         _world.AddChild(_cellHighlight);
 
         _sectorGridMaterial = new StandardMaterial3D
@@ -432,11 +489,7 @@ public partial class GalaxyView : Control
             AlbedoColor = new Color(0.42f, 0.72f, 0.62f, 0f),
             DisableReceiveShadows = true,
         };
-        _sectorGrid = new MeshInstance3D
-        {
-            Name = "SectorGrid",
-            Mesh = BoxWireframe(Vector3.Zero, GalaxyLayout.S / 2f, _sectorGridMaterial),
-        };
+        _sectorGrid = new MeshInstance3D { Name = "SectorGrid" };
         _world.AddChild(_sectorGrid);
     }
 
@@ -490,10 +543,11 @@ public partial class GalaxyView : Control
         {
             Vector3 toShip = ShipPosition - destination;
             Vector3 direction = toShip.LengthSquared() < 1e-3f ? Vector3.Back : toShip.Normalized();
+            float arrivalRadius = _geometry.GalaxyRadius + 40f;
             arrival = destination + new Vector3(
-                direction.X * GalaxyNavigation.GalaxyArrivalRadius,
-                direction.Y * GalaxyNavigation.GalaxyArrivalRadius * 0.4f,
-                direction.Z * GalaxyNavigation.GalaxyArrivalRadius);
+                direction.X * arrivalRadius,
+                direction.Y * arrivalRadius * 0.4f,
+                direction.Z * arrivalRadius);
             _hud.Toast("hyperspace");
         }
         else
@@ -643,13 +697,14 @@ public partial class GalaxyView : Control
     /// </summary>
     private void UpdateGalaxyMarkers()
     {
+        float nearRadius = _geometry.GalaxyRadius * 2f;
         for (int g = 0; g < GalaxyLayout.Bins; g++)
         {
-            float distance = ShipPosition.DistanceTo(GalaxyVec.From(GalaxyLayout.GalaxyCenter(g)));
+            float distance = ShipPosition.DistanceTo(GalaxyVec.From(_geometry.GalaxyCenter(g)));
 
             // Halo ramps IN as you leave a galaxy, so it never blinks on at the edge.
             float presence = GalaxyNavigation.FadeBand(distance,
-                fullAt: 1.4f * GalaxyLayout.NearGalaxy, zeroAt: 0.8f * GalaxyLayout.NearGalaxy);
+                fullAt: 1.4f * nearRadius, zeroAt: 0.8f * nearRadius);
             // ...and out again at the far end of the lane, where eight labels would
             // otherwise stack on the horizon.
             float reach = GalaxyNavigation.FadeBand(distance,
@@ -666,7 +721,7 @@ public partial class GalaxyView : Control
             _names[g].Modulate = new Color(1f, 1f, 1f, presence * reach);
 
             float boxAlpha = GalaxyNavigation.FadeBand(distance,
-                fullAt: 1.6f * GalaxyLayout.Half, zeroAt: 5f * GalaxyLayout.Half) * 0.28f;
+                fullAt: 1.6f * _geometry.GalaxyRadius, zeroAt: 5f * _geometry.GalaxyRadius) * 0.28f;
             _boundsMaterials[g].AlbedoColor = new Color(0.42f, 0.52f, 0.72f, boxAlpha);
         }
     }
@@ -715,8 +770,24 @@ public partial class GalaxyView : Control
         _dashboard.GalaxyStepRequested += StepGalaxy;
         column.AddChild(_dashboard);
 
+        var statusRow = new HBoxContainer();
+        statusRow.AddThemeConstantOverride("separation", 10);
+        column.AddChild(statusRow);
         _statusLine = UiWidgets.MakeLabel("", 12);
-        column.AddChild(_statusLine);
+        _statusLine.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        statusRow.AddChild(_statusLine);
+        _gridToggle = new Button
+        {
+            Text = "GRID: CUBE",
+            TooltipText = "SWAP BETWEEN THE CUBE GRID AND THE SPHERICAL/RADIAL EXPERIMENT",
+        };
+        _gridToggle.AddThemeFontSizeOverride("font_size", 11);
+        _gridToggle.Pressed += () => SetGeometry(
+            _geometry.Name == "cube"
+                ? new RadialGalaxyGeometry()
+                : new CubeGalaxyGeometry(),
+            announce: true);
+        statusRow.AddChild(_gridToggle);
 
         // Deliberately NOT wired to Resized: the signal last fires while the tab is
         // hidden and the SubViewport still has a placeholder size, and it never
@@ -764,7 +835,8 @@ public partial class GalaxyView : Control
         _world.AddChild(_stars);
         _planets = new GalaxyPlanets { Name = "Planets" };
         _world.AddChild(_planets);
-        _targeting = new GalaxyTargeting(_camera, _stars, _planets);
+        _targeting = new GalaxyTargeting(_camera, _stars, _planets) { Geometry = _geometry };
+        _stars.Geometry = _geometry;
         BuildCellHighlight();
 
         BuildAmbientSky();
@@ -818,7 +890,7 @@ public partial class GalaxyView : Control
     {
         for (int g = 0; g < GalaxyLayout.Bins; g++)
         {
-            Vector3 center = GalaxyVec.From(GalaxyLayout.GalaxyCenter(g));
+            Vector3 center = GalaxyVec.From(_geometry.GalaxyCenter(g));
 
             // The halo is what a galaxy looks like from outside: one additive
             // billboard roughly the size of the galaxy itself. Alpha-blended it
@@ -840,11 +912,11 @@ public partial class GalaxyView : Control
                 Name = $"Halo{g}",
                 Mesh = new QuadMesh
                 {
-                    // Sized so the falloff's visible disc lands on the galaxy itself.
-                    // This was 2.8x the edge, a ~2,000-unit additive billboard you
-                    // fly THROUGH on the way in — it fogged the entire view from
-                    // anywhere near the galaxy.
-                    Size = Vector2.One * (GalaxyLayout.Extent * 1.7f),
+                    // Sized so the falloff's visible disc lands on the galaxy itself
+                    // (3.4 x its bounding radius; the visible third of the sprite).
+                    // History: 2.8x the cube edge was a ~2,000-unit billboard you
+                    // flew THROUGH on the way in and it fogged everything.
+                    Size = Vector2.One * (_geometry.GalaxyRadius * 3.4f),
                     Material = _haloMaterials[g],
                 },
                 Position = center,
@@ -860,7 +932,7 @@ public partial class GalaxyView : Control
                 NoDepthTest = true,
                 FontSize = 128,
                 PixelSize = GalaxyLayout.Half * 0.0011f,
-                Position = center + new Vector3(0f, GalaxyLayout.Half * 1.15f, 0f),
+                Position = center + new Vector3(0f, _geometry.GalaxyRadius * 1.15f, 0f),
                 Modulate = new Color(1f, 1f, 1f, 0f),
             };
             _world.AddChild(_names[g]);
@@ -875,35 +947,37 @@ public partial class GalaxyView : Control
             _bounds[g] = new MeshInstance3D
             {
                 Name = $"Bounds{g}",
-                Mesh = BoxWireframe(center, GalaxyLayout.Half, _boundsMaterials[g]),
+                Position = center,
+                Mesh = SegmentsMesh(_geometry.BoundsWireframe(), _boundsMaterials[g]),
             };
             _world.AddChild(_bounds[g]);
         }
     }
 
-    /// <summary>A galaxy's bounds box as line segments.</summary>
-    private static ImmediateMesh BoxWireframe(Vector3 center, float half, Material material)
+    /// <summary>Tear down and rebuild the per-galaxy markers — the grid toggle moves
+    /// every centre and changes the bounds shape (cube edges vs great-circle rings).</summary>
+    private void RebuildGalaxyMarkers()
+    {
+        for (int g = 0; g < GalaxyLayout.Bins; g++)
+        {
+            _halos[g].QueueFree();
+            _names[g].QueueFree();
+            _bounds[g].QueueFree();
+        }
+        BuildGalaxyMarkers();
+    }
+
+    /// <summary>Line segments (galaxy-local) as an ImmediateMesh.</summary>
+    private static ImmediateMesh SegmentsMesh(
+        System.Collections.Generic.IReadOnlyList<(BrawlerSim.Hyperspace.GalaxyPoint A, BrawlerSim.Hyperspace.GalaxyPoint B)> segments,
+        Material material)
     {
         var mesh = new ImmediateMesh();
         mesh.SurfaceBegin(Mesh.PrimitiveType.Lines, material);
-        var corners = new Vector3[8];
-        for (int i = 0; i < 8; i++)
+        foreach ((BrawlerSim.Hyperspace.GalaxyPoint a, BrawlerSim.Hyperspace.GalaxyPoint b) in segments)
         {
-            corners[i] = center + new Vector3(
-                (i & 1) == 0 ? -half : half,
-                (i & 2) == 0 ? -half : half,
-                (i & 4) == 0 ? -half : half);
-        }
-        int[,] edges =
-        {
-            { 0, 1 }, { 0, 2 }, { 1, 3 }, { 2, 3 },
-            { 4, 5 }, { 4, 6 }, { 5, 7 }, { 6, 7 },
-            { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 },
-        };
-        for (int e = 0; e < edges.GetLength(0); e++)
-        {
-            mesh.SurfaceAddVertex(corners[edges[e, 0]]);
-            mesh.SurfaceAddVertex(corners[edges[e, 1]]);
+            mesh.SurfaceAddVertex(GalaxyVec.From(a));
+            mesh.SurfaceAddVertex(GalaxyVec.From(b));
         }
         mesh.SurfaceEnd();
         return mesh;

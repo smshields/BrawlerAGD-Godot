@@ -108,6 +108,32 @@ public static class GalaxyNavigation
         return toCandidate < 0.9f * toPrevious ? candidate : previous;
     }
 
+    /// <summary>
+    /// Geometry-aware nearest galaxy by full 3D distance, with the same 10%
+    /// hysteresis (§8.1.6). On the cube grid's lane this agrees with the x-based
+    /// overload; the radial experiment's 3D scatter needs the real distances.
+    /// </summary>
+    public static int NearestGalaxy(GalaxyPoint position, IGalaxyGeometry geometry, int previous = -1)
+    {
+        int nearest = 0;
+        float best = float.MaxValue;
+        for (int g = 0; g < GalaxyLayout.Bins; g++)
+        {
+            float d = (position + geometry.GalaxyCenter(g) * -1f).Length;
+            if (d < best)
+            {
+                best = d;
+                nearest = g;
+            }
+        }
+        if (previous < 0 || previous >= GalaxyLayout.Bins || previous == nearest)
+        {
+            return nearest;
+        }
+        float toPrevious = (position + geometry.GalaxyCenter(previous) * -1f).Length;
+        return best < 0.9f * toPrevious ? nearest : previous;
+    }
+
     /// <summary>Bin index of a coordinate LOCAL to a galaxy centre, or −1 for
     /// "outside" — the PositionPod's per-axis readout.</summary>
     public static int SectorOf(float local)

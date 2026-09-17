@@ -189,10 +189,10 @@ public sealed partial class GalaxyDashboard : PanelContainer
 
     /// <summary>Per-frame readouts. `nearest` is a DERIVED value (§8.1.6) — it drives
     /// these pods and nothing about what the world draws.</summary>
-    public void Refresh(GalaxyStarField stars, Vector3 ship, float yaw, float speed, bool boosting,
-        int nearest, GalaxyTarget? focus, bool locked, DescriptorBins? bins)
+    public void Refresh(GalaxyStarField stars, IGalaxyGeometry geometry, Vector3 ship, float yaw,
+        float speed, bool boosting, int nearest, GalaxyTarget? focus, bool locked)
     {
-        _positionText.Text = PositionReadout(ship, nearest);
+        _positionText.Text = PositionReadout(geometry, ship, nearest);
         _speedText.Text = $"SPEED {speed:F0} U/S{(boosting ? "  ·  BOOST" : "")}";
 
         for (int g = 0; g < GalaxyLayout.Bins; g++)
@@ -203,24 +203,21 @@ public sealed partial class GalaxyDashboard : PanelContainer
         }
         if (_mapPod.Visible)
         {
-            _map.Refresh(stars, nearest, ship, yaw, focus?.Star);
+            _map.Refresh(stars, geometry, nearest, ship, yaw, focus?.Star);
         }
 
         UpdateTargetPod(focus, locked);
         UpdatePreviewPod(focus);
     }
 
-    private static string PositionReadout(Vector3 ship, int nearest)
+    private static string PositionReadout(IGalaxyGeometry geometry, Vector3 ship, int nearest)
     {
-        Vector3 local = ship - GalaxyVec.From(GalaxyLayout.GalaxyCenter(nearest));
+        Vector3 local = ship - GalaxyVec.From(geometry.GalaxyCenter(nearest));
         string[] names = Descriptors.AxisNames;
-        string Bin(float value)
-        {
-            int bin = GalaxyNavigation.SectorOf(value);
-            return bin < 0 ? "OUTSIDE" : bin.ToString();
-        }
-        return $"{names[0]}  {Bin(local.X)}\n{names[1]}  {Bin(local.Y)}\n"
-            + $"{names[2]}  {Bin(local.Z)}\n{names[3]}  {nearest}";
+        (int I, int J, int K)? sector = geometry.SectorOf(GalaxyVec.To(local));
+        string Bin(int? value) => value is { } bin ? bin.ToString() : "OUTSIDE";
+        return $"{names[0]}  {Bin(sector?.I)}\n{names[1]}  {Bin(sector?.J)}\n"
+            + $"{names[2]}  {Bin(sector?.K)}\n{names[3]}  {nearest}";
     }
 
     private void UpdateTargetPod(GalaxyTarget? focus, bool locked)

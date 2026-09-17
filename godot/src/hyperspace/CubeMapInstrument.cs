@@ -19,16 +19,17 @@ public interface IMapPodInstrument
 {
     Control Root { get; }
 
-    void Refresh(GalaxyStarField stars, int galaxy, Vector3 ship, float yaw, GalaxyStar? highlight);
+    void Refresh(GalaxyStarField stars, IGalaxyGeometry geometry, int galaxy, Vector3 ship,
+        float yaw, GalaxyStar? highlight);
 }
 
 public sealed partial class CubeMapInstrument : SubViewportContainer, IMapPodInstrument
 {
     private const float Yaw = 0.72f, Pitch = 0.38f;
 
-    /// <summary>Derived from HALF so the wire cube always fits its monitor, whatever
-    /// the world scale is.</summary>
-    private const float Scale = 30f / GalaxyLayout.Half;
+    /// <summary>Derived per refresh from the geometry's bounding radius, so the wire
+    /// frame always fits its monitor whichever grid is up.</summary>
+    private float _scale = 30f / GalaxyLayout.Half;
 
     private SubViewport _viewport = null!;
     private Camera3D _camera = null!;
@@ -104,35 +105,39 @@ public sealed partial class CubeMapInstrument : SubViewportContainer, IMapPodIns
     /// and was one of the two big main-thread costs of the tab).</summary>
     private int _builtGalaxy = -1;
     private int _builtVersion = -1;
+    private string _builtGrid = "";
 
-    public void Refresh(GalaxyStarField stars, int galaxy, Vector3 ship, float yaw, GalaxyStar? highlight)
+    public void Refresh(GalaxyStarField stars, IGalaxyGeometry geometry, int galaxy, Vector3 ship,
+        float yaw, GalaxyStar? highlight)
     {
-        Vector3 center = GalaxyVec.From(GalaxyLayout.GalaxyCenter(galaxy));
-        if (galaxy != _builtGalaxy || stars.Version != _builtVersion)
+        Vector3 center = GalaxyVec.From(geometry.GalaxyCenter(galaxy));
+        _scale = 30f / geometry.GalaxyRadius;
+        if (galaxy != _builtGalaxy || stars.Version != _builtVersion || geometry.Name != _builtGrid)
         {
             _builtGalaxy = galaxy;
             _builtVersion = stars.Version;
+            _builtGrid = geometry.Name;
             System.Collections.Generic.IReadOnlyList<GalaxyStar> list = stars.StarsIn(galaxy);
             MultiMesh mesh = _points.Multimesh;
             mesh.InstanceCount = list.Count;
             for (int i = 0; i < list.Count; i++)
             {
                 mesh.SetInstanceTransform(i, new Transform3D(Basis.Identity,
-                    (list[i].Position - center) * Scale));
+                    (list[i].Position - center) * _scale));
                 mesh.SetInstanceColor(i, list[i].Color);
             }
         }
 
         // The ship is drawn even when it is outside this galaxy — clamped to the
         // monitor's edge, so "you are over there" still reads.
-        Vector3 local = (ship - center) * Scale;
+        Vector3 local = (ship - center) * _scale;
         _shipMark.Position = local.Clamp(Vector3.One * -34f, Vector3.One * 34f);
         _shipMark.Rotation = new Vector3(0f, yaw, 0f);
 
         if (highlight is not null && highlight.G == galaxy)
         {
             _highlightMark.Visible = true;
-            _highlightMark.Position = (highlight.Position - center) * Scale;
+            _highlightMark.Position = (highlight.Position - center) * _scale;
         }
         else
         {
