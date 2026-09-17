@@ -191,8 +191,9 @@ public partial class GalaxyView : Control
                 pool.Add(member.Fitness);
             }
         }
-        _stars.SetSnapshot(snapshot, new FitnessScale(pool));
-        _planets.Rebuild(_stars);
+        var scale = new FitnessScale(pool);
+        _stars.SetSnapshot(snapshot, scale);
+        _planets.Rebuild(_stars, scale);
         // A capture aimed at "the densest system" can only resolve once there IS an
         // archive — at _Ready the sky is empty.
         if (AutomationEnv.GalaxyCam == "densest")
@@ -209,8 +210,9 @@ public partial class GalaxyView : Control
     public void Clear()
     {
         _snapshot = null;
-        _stars.SetSnapshot(null, new FitnessScale(System.Array.Empty<float>()));
-        _planets.Rebuild(_stars);
+        var empty = new FitnessScale(System.Array.Empty<float>());
+        _stars.SetSnapshot(null, empty);
+        _planets.Rebuild(_stars, empty);
         ApplyStatus();
     }
 

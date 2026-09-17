@@ -58,12 +58,11 @@ public sealed partial class GalaxyPlanets : Node3D
     public override void _Ready()
     {
         _bodyMaterial = new ShaderMaterial { Shader = GalaxyShaders.Star() };
-        _bodyMaterial.SetShaderParameter("halo", GalaxyShaders.HaloTexture());
-        // Bodies are lit discs, not glowing cores: a tighter sprite than a star's and
-        // no distance fade of their own (the range band below owns that). The screen
-        // clamps come from the same shader, so a planet you warp to cannot fill the
-        // view either.
-        _bodyMaterial.SetShaderParameter("sprite_scale", 4f);
+        // Solid bodies, same disc the stars wear (2026-09-17): no distance fade of
+        // their own (the range band below owns that), and the shader's screen clamps
+        // keep a planet you warp to from filling the view.
+        _bodyMaterial.SetShaderParameter("halo", GalaxyShaders.DiscTexture());
+        _bodyMaterial.SetShaderParameter("sprite_scale", GalaxyShaders.SpriteScale);
         _bodyMaterial.SetShaderParameter("core_fraction", GalaxyShaders.CoreFraction);
         _bodyMaterial.SetShaderParameter("min_pixels", 1.3f);
         _bodyMaterial.SetShaderParameter("max_pixels", 60f);
@@ -108,7 +107,7 @@ public sealed partial class GalaxyPlanets : Node3D
     }
 
     /// <summary>Precompute every system's orbits from the snapshot's members.</summary>
-    public void Rebuild(GalaxyStarField field)
+    public void Rebuild(GalaxyStarField field, FitnessScale scale)
     {
         _planets.Clear();
         _visible.Clear();
@@ -119,14 +118,17 @@ public sealed partial class GalaxyPlanets : Node3D
                 IReadOnlyList<HyperspaceEntry> members = star.Entry.Occupants;
                 for (int n = 0; n < members.Count; n++)
                 {
-                    // A member's own fitness drives its size (designer 2026-09-16);
-                    // the normalized value rides along on the star's scale, so it is
-                    // already comparable with every other body in the sky.
-                    float fitness = Mathf.Clamp(members[n].Fitness, 0f, 1f);
+                    // The member's own PERCENTILE fitness drives its size (length-
+                    // scaled: radius linear in it) and its habitability colour.
+                    // The first version clamped the RAW score to [0,1] — a raw score
+                    // is ~40-120, so every planet rendered at max size and the
+                    // encoding never existed. Normalize through the same scale the
+                    // stars use, so bodies are comparable across the whole sky.
+                    float fitness = scale.Normalize(members[n].Fitness);
                     OrbitElements orbit = GalaxyLayout.Orbit(
                         star.Hash, n, members.Count, star.Radius, fitness);
                     _planets.Add(new GalaxyPlanet(star, n, orbit,
-                        GalaxyVec.From(GalaxyLayout.PlanetColor(GalaxyVec.To(star.Color))),
+                        GalaxyVec.From(GalaxyLayout.PlanetColor(fitness)),
                         members[n]));
                 }
             }

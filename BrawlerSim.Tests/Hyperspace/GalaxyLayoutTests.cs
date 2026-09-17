@@ -35,10 +35,11 @@ public class GalaxyLayoutTests
     }
 
     /// <summary>
-    /// THE separation invariant: two worst-case-jittered systems in adjacent cells
-    /// must still leave clear void between them. Asserted across the whole planet
-    /// count range because the 2026-09-16 revision made the ENVELOPE the capped
-    /// quantity — the inequality contains no K, and this test is what proves it.
+    /// THE containment invariant (designer, 2026-09-17): a system — star, orbits,
+    /// planet bodies — stays entirely inside its OWN cell, at every placement and
+    /// every planet count. Containment implies neighbours can never intersect, which
+    /// is what freed placement to roam the whole bucket. The worst case is asserted,
+    /// not the typical one: max-fitness star, max-fitness planets.
     /// </summary>
     [Theory]
     [InlineData(0)]
@@ -48,13 +49,12 @@ public class GalaxyLayoutTests
     [InlineData(8)]
     [InlineData(16)]
     [InlineData(32)]
-    public void NeighbouringSystemsNeverTouchAtAnyPlanetCount(int planets)
+    public void SystemsNeverLeaveTheirOwnCell(int planets)
     {
         float starRadius = GalaxyLayout.StarRadius(1f);          // worst case: max fitness
         var fitness = new float[planets];
         System.Array.Fill(fitness, 1f);                          // worst case: max planets
 
-        float worst = 0f;
         for (int i = 0; i < GalaxyLayout.Bins; i++)
         {
             for (int j = 0; j < GalaxyLayout.Bins; j++)
@@ -62,44 +62,61 @@ public class GalaxyLayoutTests
                 for (int k = 0; k < GalaxyLayout.Bins; k++)
                 {
                     ulong hash = GalaxyLayout.CellHash(i, j, k, 3);
-                    worst = System.MathF.Max(worst,
-                        GalaxyLayout.SystemRadius(hash, planets, starRadius, fitness));
+                    float radius = GalaxyLayout.SystemRadius(hash, planets, starRadius, fitness);
+                    Assert.True(radius <= GalaxyLayout.MaxSystemRadius,
+                        $"system envelope {radius} exceeded the cap {GalaxyLayout.MaxSystemRadius}");
+
+                    GalaxyPoint star = GalaxyLayout.StarPosition(i, j, k, 3);
+                    GalaxyPoint center = GalaxyLayout.GalaxyCenter(3);
+                    float[] offsets =
+                    {
+                        star.X - center.X - (i - 3.5f) * GalaxyLayout.S,
+                        star.Y - center.Y - (j - 3.5f) * GalaxyLayout.S,
+                        star.Z - center.Z - (k - 3.5f) * GalaxyLayout.S,
+                    };
+                    foreach (float offset in offsets)
+                    {
+                        Assert.True(
+                            System.MathF.Abs(offset) + radius <= GalaxyLayout.S / 2f + 1e-3f,
+                            $"{planets} planets: a system at offset {offset} with envelope "
+                            + $"{radius} crosses its cell wall (half-cell {GalaxyLayout.S / 2f})");
+                    }
                 }
             }
         }
-
-        Assert.True(worst <= GalaxyLayout.MaxSystemRadius,
-            $"system envelope {worst} exceeded the cap {GalaxyLayout.MaxSystemRadius}");
-        Assert.True(
-            GalaxyLayout.WorstCaseNeighborSeparation >= 2f * worst + GalaxyLayout.MinVoid,
-            $"{planets} planets: separation {GalaxyLayout.WorstCaseNeighborSeparation} leaves "
-            + $"{GalaxyLayout.WorstCaseNeighborSeparation - 2f * worst} of void, below the "
-            + $"{GalaxyLayout.MinVoid} floor");
     }
 
+    /// <summary>Placement must actually USE the bucket (designer: "randomly placed
+    /// inside"), not hug the centre the way the old triangular jitter did.</summary>
     [Fact]
-    public void StarsStayWellInsideTheirOwnCell()
+    public void PlacementSpreadsAcrossTheWholeCell()
     {
+        float range = GalaxyLayout.S / 2f - GalaxyLayout.PlacementInset;
         float maxOffset = 0f;
+        int farHalf = 0, total = 0;
         for (int i = 0; i < GalaxyLayout.Bins; i++)
         {
             for (int j = 0; j < GalaxyLayout.Bins; j++)
             {
                 for (int k = 0; k < GalaxyLayout.Bins; k++)
                 {
-                    GalaxyPoint star = GalaxyLayout.StarPosition(i, j, k, 2);
-                    GalaxyPoint center = GalaxyLayout.GalaxyCenter(2);
-                    maxOffset = System.MathF.Max(maxOffset,
-                        System.MathF.Abs(star.X - center.X - (i - 3.5f) * GalaxyLayout.S));
-                    maxOffset = System.MathF.Max(maxOffset,
-                        System.MathF.Abs(star.Y - center.Y - (j - 3.5f) * GalaxyLayout.S));
-                    maxOffset = System.MathF.Max(maxOffset,
-                        System.MathF.Abs(star.Z - center.Z - (k - 3.5f) * GalaxyLayout.S));
+                    GalaxyPoint star = GalaxyLayout.StarPosition(i, j, k, 5);
+                    GalaxyPoint center = GalaxyLayout.GalaxyCenter(5);
+                    float offset = System.MathF.Abs(
+                        star.X - center.X - (i - 3.5f) * GalaxyLayout.S);
+                    maxOffset = System.MathF.Max(maxOffset, offset);
+                    if (offset > range / 2f)
+                    {
+                        farHalf++;
+                    }
+                    total++;
                 }
             }
         }
-        Assert.True(maxOffset <= GalaxyLayout.Jitter * GalaxyLayout.S + 1e-3f,
-            $"jitter reached {maxOffset}, past the {GalaxyLayout.Jitter * GalaxyLayout.S} bound");
+        Assert.True(maxOffset > 0.9f * range,
+            $"nothing placed near the wall region: max offset {maxOffset} of {range}");
+        // Uniform placement puts about half the stars in the outer half of the range.
+        Assert.True(farHalf > total / 3, $"only {farHalf}/{total} stars left the centre");
     }
 
     [Fact]
@@ -211,10 +228,32 @@ public class GalaxyLayoutTests
         Assert.True(green.G > green.R && green.G > green.B);
         Assert.True(blue.B > blue.R && blue.B > blue.G);
 
-        // Planet colour is its star lifted toward white — same family, distinct body.
-        GalaxyColor planet = GalaxyLayout.PlanetColor(red);
-        Assert.True(Luminance(planet) > Luminance(red));
-        Assert.True(planet.R > planet.G && planet.R > planet.B);
+    }
+
+    /// <summary>Planet bodies are a habitability ramp (designer, 2026-09-17): red at
+    /// the hostile end, blue-green at the habitable one, by normalized fitness.</summary>
+    [Fact]
+    public void PlanetColourRunsRedToBlueGreen()
+    {
+        GalaxyColor hostile = GalaxyLayout.PlanetColor(0f);
+        Assert.True(hostile.R > hostile.G && hostile.R > hostile.B,
+            $"low fitness should be red, was ({hostile.R:F2},{hostile.G:F2},{hostile.B:F2})");
+
+        GalaxyColor habitable = GalaxyLayout.PlanetColor(1f);
+        Assert.True(habitable.G > habitable.R && habitable.B > habitable.R,
+            $"high fitness should be blue-green, was ({habitable.R:F2},{habitable.G:F2},{habitable.B:F2})");
+
+        // The ramp moves monotonically away from red, so mid values stay readable.
+        float previous = float.MaxValue;
+        for (int step = 0; step <= 10; step++)
+        {
+            GalaxyColor c = GalaxyLayout.PlanetColor(step / 10f);
+            float redness = c.R - (c.G + c.B) / 2f;
+            Assert.True(redness <= previous + 1e-3f, $"redness rose again at {step / 10f}");
+            previous = redness;
+        }
+        // Habitable worlds glow a little brighter — size-limited dots keep the read.
+        Assert.True(Luminance(habitable) > Luminance(hostile));
     }
 
     [Fact]

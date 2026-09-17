@@ -52,20 +52,22 @@ public readonly record struct OrbitElements(
 /// crossing is still ~13.5 s at cruise) while systems get room for many planets.
 /// See <see cref="GalaxyNavigation"/> for the speeds that pair with these constants.
 ///
-/// THE SEPARATION INVARIANT. A "system" is a star plus everything orbiting it, and
-/// players must see where one ends and the next begins. Two stars in adjacent cells,
-/// each jittered maximally toward the other, sit `S * (1 - 2*JITTER)` apart:
+/// THE CONTAINMENT INVARIANT (designer, 2026-09-17, superseding the 09-16
+/// separation rule): a system — star, orbits, planet bodies — stays entirely inside
+/// its OWN cell. Containment implies non-intersection with every neighbour for free,
+/// and it frees the star to sit ANYWHERE in its bucket rather than hugging the
+/// centre: placement is hashed UNIFORM within the cell, inset by
+/// <see cref="PlacementInset"/> so the worst-case envelope cannot reach a wall.
 ///
-///     S * (1 - 2*JITTER)  >=  2 * MaxSystemRadius + MinVoid
-///     88 * 0.5 = 44.0     >=  2 * 15.0 + 14.0 = 44.0
+///     |offset from cell centre| + MaxSystemRadius + WallMargin  <=  S / 2
 ///
-/// The 2026-09-16 revision made the SYSTEM ENVELOPE the capped quantity rather than
-/// the planet count, so the invariant contains no K: raising the planets per star
-/// needs no geometry re-derivation, only a legibility check. Orbit radii are packed
-/// to fit <see cref="MaxSystemRadius"/> including each planet's own body; separation
-/// between orbits comes from randomized PLANE ORIENTATION and eccentricity, not from
-/// radial spacing. Any change to S, JITTER, MaxSystemRadius, or the radius formulas
-/// must re-check the inequality — GalaxyLayoutTests pins it.
+/// The envelope stays capped at <see cref="MaxSystemRadius"/> independent of the
+/// planet count, so K remains a free knob; orbit separation comes from randomized
+/// PLANE ORIENTATION and eccentricity, not radial spacing. The inset uses the
+/// MAXIMUM envelope, never the actual one — a star's position must be a pure
+/// function of its cell alone, or a snapshot that adds a member would MOVE the star
+/// (§8.1: rebuilds never move anything). Any change to S, MaxSystemRadius, or the
+/// radius formulas must re-check containment — GalaxyLayoutTests pins it.
 /// </summary>
 public static class GalaxyLayout
 {
@@ -89,8 +91,9 @@ public static class GalaxyLayout
     /// clickable. Scales with S by construction.</summary>
     public const float PlanetRange = 7f * S;       // 616
 
-    /// <summary>+/- fraction of a bin a star may wander from its cell centre.</summary>
-    public const float Jitter = 0.25f;
+    /// <summary>Clear space kept between a worst-case system and its cell wall, so
+    /// two neighbours' orbits cannot even touch across the boundary.</summary>
+    public const float WallMargin = 1f;
 
     /// <summary>Numerator of the star distance fade — scales with S.</summary>
     public const float FadeNumerator = 11f * S;    // 968
@@ -99,9 +102,10 @@ public static class GalaxyLayout
     /// planet bodies included. The invariant's only geometric input.</summary>
     public const float MaxSystemRadius = 0.17f * S; // 14.96
 
-    /// <summary>Clear space the invariant guarantees between two worst-case adjacent
-    /// systems — 32% of the worst-case separation, the ratio the PoC shipped.</summary>
-    public const float MinVoid = 14f;
+    /// <summary>How far a star's centre must stay from its cell walls: the largest
+    /// envelope any system can have, plus the wall margin. The placement range per
+    /// axis is +/- (S/2 - PlacementInset) around the cell centre.</summary>
+    public static float PlacementInset => MaxSystemRadius + WallMargin;
 
     /// <summary>Largest eccentricity a planet's orbit may take.</summary>
     public const float MaxEccentricity = 0.35f;
@@ -138,22 +142,26 @@ public static class GalaxyLayout
     public static float HashUnit(ulong hash, int b) => ((hash >> (b * 8)) & 0xFF) / 255f;
 
     /// <summary>
-    /// Star world position: the cell centre plus TRIANGULAR jitter (two uniforms
-    /// summed), which keeps most stars near their centre — the invariant's worst case
-    /// is real but rare.
+    /// Star world position: hashed UNIFORM placement anywhere in the cell that the
+    /// worst-case system envelope still fits (designer 2026-09-17 — "randomly placed
+    /// inside the bucket"; the earlier triangular jitter hugged the centre). Two hash
+    /// bytes per axis, so placement resolves finer than a byte grid.
     /// </summary>
     public static GalaxyPoint StarPosition(int i, int j, int k, int g)
     {
         ulong hash = CellHash(i, j, k, g);
         GalaxyPoint center = GalaxyCenter(g);
         return new GalaxyPoint(
-            center.X + (i - 3.5f) * S + JitterOffset(hash, 0, 1),
-            center.Y + (j - 3.5f) * S + JitterOffset(hash, 2, 3),
-            center.Z + (k - 3.5f) * S + JitterOffset(hash, 4, 5));
+            center.X + (i - 3.5f) * S + PlacementOffset(hash, 0, 1),
+            center.Y + (j - 3.5f) * S + PlacementOffset(hash, 2, 3),
+            center.Z + (k - 3.5f) * S + PlacementOffset(hash, 4, 5));
     }
 
-    private static float JitterOffset(ulong hash, int byteA, int byteB) =>
-        (HashUnit(hash, byteA) + HashUnit(hash, byteB) - 1f) * 0.5f * S * 2f * Jitter;
+    private static float PlacementOffset(ulong hash, int byteA, int byteB)
+    {
+        float u = (HashUnit(hash, byteA) * 255f + HashUnit(hash, byteB)) / 256f;
+        return (u - 0.5f) * 2f * (S / 2f - PlacementInset);
+    }
 
     /// <summary>
     /// Star colour: bins pick the hue, fitness the saturation and luminosity.
@@ -167,12 +175,20 @@ public static class GalaxyLayout
         return HslToRgb(h, s * (0.25f + 0.75f * f), 0.28f + 0.44f * f);
     }
 
-    /// <summary>Planet body colour: its star's colour lifted toward white, so a
-    /// planet reads as belonging to its star while staying distinct from it.</summary>
-    public static GalaxyColor PlanetColor(GalaxyColor star) => new(
-        (140f + star.R * 255f * 0.42f) / 255f,
-        (140f + star.G * 255f * 0.42f) / 255f,
-        (140f + star.B * 255f * 0.42f) / 255f);
+    /// <summary>
+    /// Planet body colour: a habitability ramp from red (hostile — low fitness) to
+    /// blue-green (habitable — high fitness), by the member's own NORMALIZED fitness
+    /// (designer, 2026-09-17). This replaces the earlier star-derived tint: the orbit
+    /// RING carries system membership (it is drawn in the star's colour), which frees
+    /// the body to carry data.
+    /// </summary>
+    public static GalaxyColor PlanetColor(float normalizedFitness)
+    {
+        float f = Clamp01(normalizedFitness);
+        // Hue 0 (red) sweeping to 0.44 (blue-green); habitable worlds sit a little
+        // brighter, so the ramp reads in size-limited dots too.
+        return HslToRgb(0.44f * f, 0.78f, 0.40f + 0.18f * f);
+    }
 
     /// <summary>Per-instance star alpha by camera distance. Floored ABOVE zero — there
     /// is deliberately no far cull for stars (§8.1).</summary>
@@ -275,10 +291,6 @@ public static class GalaxyLayout
         }
         return radius;
     }
-
-    /// <summary>Worst-case distance between two stars in adjacent cells, each
-    /// jittered maximally toward the other.</summary>
-    public static float WorstCaseNeighborSeparation => S * (1f - 2f * Jitter);
 
     private static float Clamp01(float v) => Math.Clamp(v, 0f, 1f);
 

@@ -49,7 +49,9 @@ public sealed partial class GalaxyStarField : Node3D
     public override void _Ready()
     {
         Material = new ShaderMaterial { Shader = GalaxyShaders.Star() };
-        Material.SetShaderParameter("halo", GalaxyShaders.HaloTexture());
+        // Solid discs since 2026-09-17 — the glow texture belongs to galaxy markers
+        // and the ambient sky now, never to bodies.
+        Material.SetShaderParameter("halo", GalaxyShaders.DiscTexture());
         Material.SetShaderParameter("fade_numerator", GalaxyLayout.FadeNumerator);
         Material.SetShaderParameter("sprite_scale", GalaxyShaders.SpriteScale);
         Material.SetShaderParameter("core_fraction", GalaxyShaders.CoreFraction);

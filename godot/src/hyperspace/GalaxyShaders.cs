@@ -16,21 +16,21 @@ namespace BrawlerGodot.Hyperspace;
 public static class GalaxyShaders
 {
     /// <summary>
-    /// Quad half-extent as a multiple of the star's world radius.
+    /// Quad half-extent as a multiple of the body's world radius.
     ///
-    /// This was 20, which made a max-fitness star's sprite 48 world units across: at
-    /// the warp standoff the camera sat INSIDE a glow quad wider than the viewport,
-    /// and every approach washed the screen white (designer, 2026-09-16 — "light
-    /// sources turn each galaxy into a massive bloom"). At 6 the quad is 3x the star's
-    /// radius, with <see cref="CoreFraction"/> of it the bright core and the falloff
-    /// done by the edge, so a star reads as a disc with a halo instead of a floodlight.
+    /// Bodies are SOLID since the 2026-09-17 designer round ("luminosity should not
+    /// interfere with overall visibility — black space should be visible between
+    /// stars"): the sprite is barely bigger than the body itself, and the texture is
+    /// an opaque disc with an anti-aliased rim, not a glow falloff. The two earlier
+    /// values tell the story — 20 was a floodlight you could sit inside, 6 was a
+    /// halo that still fogged dense fields.
     /// </summary>
-    public const float SpriteScale = 6f;
+    public const float SpriteScale = 2.4f;
 
-    /// <summary>Fraction of the sprite's half-extent that is full-alpha core. The
-    /// shader needs it to size the screen clamps, and HaloTexture bakes it — they must
-    /// agree, so both read it from here.</summary>
-    public const float CoreFraction = 0.33f;
+    /// <summary>Fraction of the sprite's half-extent that is opaque body; the rest is
+    /// the anti-aliased rim. The shader sizes its screen clamps by it and DiscTexture
+    /// bakes it — they must agree, so both read it from here.</summary>
+    public const float CoreFraction = 0.82f;
 
     /// <summary>A star's core never shrinks below this on screen, so the far end of
     /// the lane stays populated (§8.1: no far cull for stars). Same quad, same
@@ -46,6 +46,7 @@ public static class GalaxyShaders
 
     private static Shader? _star;
     private static Texture2D? _halo;
+    private static Texture2D? _disc;
 
     public static Shader Star() => _star ??= new Shader
     {
@@ -105,9 +106,38 @@ public static class GalaxyShaders
     };
 
     /// <summary>
-    /// The radial falloff, generated rather than shipped as an asset so it stays in
-    /// step with the numbers it encodes: full core out to 10% of the sprite radius,
-    /// ~10% alpha by 30%, zero at the edge (galaxy-view.md §3).
+    /// The SOLID body: opaque out to <see cref="CoreFraction"/> of the sprite, a
+    /// smooth anti-aliased rim to the edge, and nothing else — no skirt, no bloom.
+    /// Stars and planets both wear it; the eye reads their size and brightness, and
+    /// the space between them stays black (designer, 2026-09-17).
+    /// </summary>
+    public static Texture2D DiscTexture()
+    {
+        if (_disc is not null)
+        {
+            return _disc;
+        }
+        const int size = 64;
+        var image = Image.CreateEmpty(size, size, false, Image.Format.Rgba8);
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = (x + 0.5f) / size * 2f - 1f;
+                float dy = (y + 0.5f) / size * 2f - 1f;
+                float r = Mathf.Sqrt(dx * dx + dy * dy);
+                float alpha = 1f - Mathf.SmoothStep(CoreFraction, 1f, r);
+                image.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+            }
+        }
+        _disc = ImageTexture.CreateFromImage(image);
+        return _disc;
+    }
+
+    /// <summary>
+    /// The radial falloff for things that ARE glows — the galaxy markers and the
+    /// ambient sky. Bodies stopped using it in the 2026-09-17 solid pass: full core
+    /// out to a third of the sprite, ~10% alpha by 60%, zero at the edge.
     /// </summary>
     public static Texture2D HaloTexture()
     {
@@ -116,9 +146,9 @@ public static class GalaxyShaders
             return _halo;
         }
         const int size = 128;
-        const float core = CoreFraction;
+        const float core = 0.33f;
         // Exponent solved so alpha(0.6) == 0.1 given the core radius: the glow is
-        // gone well inside the quad, which is what keeps neighbouring systems from
+        // gone well inside the quad, which is what keeps neighbouring galaxies from
         // merging into haze.
         const float exponent = 4.46f;
         var image = Image.CreateEmpty(size, size, false, Image.Format.Rgba8);
