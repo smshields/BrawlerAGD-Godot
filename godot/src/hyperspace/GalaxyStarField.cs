@@ -46,17 +46,22 @@ public sealed partial class GalaxyStarField : Node3D
 
     public int Count { get; private set; }
 
+    /// <summary>Bumped on every snapshot rebuild, so consumers that copy star data
+    /// (the sector-map instrument) can cache against it instead of re-reading every
+    /// frame.</summary>
+    public int Version { get; private set; }
+
     public override void _Ready()
     {
+        // Opaque procedural spheres since 2026-09-17 (designer: solid, and shaded so
+        // they stop reading flat) — no texture at all; the glow texture belongs to
+        // galaxy markers and the ambient sky, never to bodies.
         Material = new ShaderMaterial { Shader = GalaxyShaders.Star() };
-        // Solid discs since 2026-09-17 — the glow texture belongs to galaxy markers
-        // and the ambient sky now, never to bodies.
-        Material.SetShaderParameter("halo", GalaxyShaders.DiscTexture());
         Material.SetShaderParameter("fade_numerator", GalaxyLayout.FadeNumerator);
         Material.SetShaderParameter("sprite_scale", GalaxyShaders.SpriteScale);
-        Material.SetShaderParameter("core_fraction", GalaxyShaders.CoreFraction);
         Material.SetShaderParameter("min_pixels", GalaxyShaders.MinStarPixels);
         Material.SetShaderParameter("max_pixels", GalaxyShaders.MaxStarPixels);
+        Material.SetShaderParameter("shade_directional", 0f); // limb darkening
 
         for (int g = 0; g < GalaxyLayout.Bins; g++)
         {
@@ -103,6 +108,7 @@ public sealed partial class GalaxyStarField : Node3D
         _index.Clear();
         _igniting.Clear();
         Count = 0;
+        Version++;
 
         if (snapshot is not null)
         {

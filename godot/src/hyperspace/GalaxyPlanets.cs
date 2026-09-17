@@ -41,6 +41,12 @@ public sealed partial class GalaxyPlanets : Node3D
     /// pure functions of (cell hash, member index), so they never need recomputing.</summary>
     private readonly List<GalaxyPlanet> _planets = new();
 
+    /// <summary>Planets grouped by their star as (star, first index, count), so the
+    /// per-frame pass pays one distance test per SYSTEM and skips out-of-range
+    /// systems wholesale — the flat per-planet walk grew with the archive
+    /// (2026-09-17 performance round).</summary>
+    private readonly List<(GalaxyStar Star, int First, int Count)> _systems = new();
+
     /// <summary>What the last frame actually drew — the pick list for targeting.</summary>
     private readonly List<(GalaxyPlanet Planet, Vector3 Position, float Alpha)> _visible = new();
 
@@ -58,15 +64,16 @@ public sealed partial class GalaxyPlanets : Node3D
     public override void _Ready()
     {
         _bodyMaterial = new ShaderMaterial { Shader = GalaxyShaders.Star() };
-        // Solid bodies, same disc the stars wear (2026-09-17): no distance fade of
-        // their own (the range band below owns that), and the shader's screen clamps
-        // keep a planet you warp to from filling the view.
-        _bodyMaterial.SetShaderParameter("halo", GalaxyShaders.DiscTexture());
+        // Same opaque sphere the stars wear, but lit DIRECTIONALLY: a fixed key
+        // light with a terminator, so a planet reads as a lit ball against its
+        // self-luminous star. No distance fade of its own (the range band below owns
+        // that); the shader's screen clamps keep a planet you warp to from filling
+        // the view.
         _bodyMaterial.SetShaderParameter("sprite_scale", GalaxyShaders.SpriteScale);
-        _bodyMaterial.SetShaderParameter("core_fraction", GalaxyShaders.CoreFraction);
         _bodyMaterial.SetShaderParameter("min_pixels", 1.3f);
         _bodyMaterial.SetShaderParameter("max_pixels", 60f);
         _bodyMaterial.SetShaderParameter("fade_numerator", 1e9f);
+        _bodyMaterial.SetShaderParameter("shade_directional", 1f);
 
         _bodies = new MultiMeshInstance3D
         {
@@ -110,12 +117,17 @@ public sealed partial class GalaxyPlanets : Node3D
     public void Rebuild(GalaxyStarField field, FitnessScale scale)
     {
         _planets.Clear();
+        _systems.Clear();
         _visible.Clear();
         for (int g = 0; g < GalaxyLayout.Bins; g++)
         {
             foreach (GalaxyStar star in field.StarsIn(g))
             {
                 IReadOnlyList<HyperspaceEntry> members = star.Entry.Occupants;
+                if (members.Count > 0)
+                {
+                    _systems.Add((star, _planets.Count, members.Count));
+                }
                 for (int n = 0; n < members.Count; n++)
                 {
                     // The member's own PERCENTILE fitness drives its size (length-
@@ -153,9 +165,9 @@ public sealed partial class GalaxyPlanets : Node3D
         }
 
         int bodyCount = 0, ringCount = 0;
-        foreach (GalaxyPlanet planet in _planets)
+        foreach ((GalaxyStar star, int first, int count) in _systems)
         {
-            float distance = eye.DistanceTo(planet.Star.Position);
+            float distance = eye.DistanceTo(star.Position);
             float band = GalaxyNavigation.FadeBand(distance,
                 fullAt: 0.62f * GalaxyLayout.PlanetRange, zeroAt: GalaxyLayout.PlanetRange);
             if (band <= 0.001f)
@@ -163,27 +175,32 @@ public sealed partial class GalaxyPlanets : Node3D
                 continue;
             }
 
-            Vector3 position = planet.PositionAt(clock);
-            if (bodyCount < MaxVisibleBodies)
+            for (int p = first; p < first + count; p++)
             {
-                bodies.SetInstanceTransform(bodyCount, new Transform3D(
-                    Basis.Identity.Scaled(Vector3.One * planet.Orbit.BodyRadius), position));
-                bodies.SetInstanceColor(bodyCount, planet.Color);
-                // .x unused by the body material's fade; .y is the alpha ramp.
-                bodies.SetInstanceCustomData(bodyCount, new Color(1f, band, 0f, 0f));
-                bodyCount++;
-                _visible.Add((planet, position, band));
-            }
+                GalaxyPlanet planet = _planets[p];
+                Vector3 position = planet.PositionAt(clock);
+                if (bodyCount < MaxVisibleBodies)
+                {
+                    bodies.SetInstanceTransform(bodyCount, new Transform3D(
+                        Basis.Identity.Scaled(Vector3.One * planet.Orbit.BodyRadius), position));
+                    bodies.SetInstanceColor(bodyCount, planet.Color);
+                    // .x rides at 1 (fitness is baked into the body colour); .y is
+                    // the range band, a brightness ramp on the opaque body.
+                    bodies.SetInstanceCustomData(bodyCount, new Color(1f, band, 0f, 0f));
+                    bodyCount++;
+                    _visible.Add((planet, position, band));
+                }
 
-            if (ringCount < MaxVisibleRings)
-            {
-                bool highlighted = ReferenceEquals(HighlightStar, planet.Star)
-                    || ReferenceEquals(HighlightPlanet, planet);
-                float alpha = (highlighted ? 0.6f : 0.16f) * band;
-                rings.SetInstanceTransform(ringCount, RingTransform(planet));
-                rings.SetInstanceColor(ringCount, new Color(
-                    planet.Star.Color.R, planet.Star.Color.G, planet.Star.Color.B, alpha));
-                ringCount++;
+                if (ringCount < MaxVisibleRings)
+                {
+                    bool highlighted = ReferenceEquals(HighlightStar, star)
+                        || ReferenceEquals(HighlightPlanet, planet);
+                    float alpha = (highlighted ? 0.6f : 0.16f) * band;
+                    rings.SetInstanceTransform(ringCount, RingTransform(planet));
+                    rings.SetInstanceColor(ringCount, new Color(
+                        star.Color.R, star.Color.G, star.Color.B, alpha));
+                    ringCount++;
+                }
             }
         }
         bodies.VisibleInstanceCount = bodyCount;

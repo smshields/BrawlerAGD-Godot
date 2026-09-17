@@ -53,6 +53,16 @@ public sealed class GalaxyTargeting
     private readonly GalaxyStarField _stars;
     private readonly GalaxyPlanets _planets;
 
+    // Per-frame projection cache (2026-09-17 performance round). Hover walks every
+    // star in range every frame, and Camera3D.UnprojectPosition/IsPositionBehind are
+    // engine-interop calls — two per star per frame was the galaxy tab's biggest
+    // main-thread cost. The camera transform and projection are fetched ONCE per
+    // frame; everything after that is managed struct math.
+    private Transform3D _frameInverse;
+    private Projection _frameProjection;
+    private Vector2 _frameSize;
+    private ulong _cachedFrame = ulong.MaxValue;
+
     public GalaxyTargeting(Camera3D camera, GalaxyStarField stars, GalaxyPlanets planets)
     {
         _camera = camera;
@@ -60,10 +70,42 @@ public sealed class GalaxyTargeting
         _planets = planets;
     }
 
+    /// <summary>Refresh the projection cache if this frame has not yet. Guarded at
+    /// the public entry points, never inside the per-star loops.</summary>
+    private void EnsureFrame()
+    {
+        ulong frame = Engine.GetProcessFrames();
+        if (frame == _cachedFrame)
+        {
+            return;
+        }
+        _cachedFrame = frame;
+        _frameInverse = _camera.GlobalTransform.AffineInverse();
+        _frameSize = _camera.GetViewport().GetVisibleRect().Size;
+        _frameProjection = Projection.CreatePerspective(
+            _camera.Fov, _frameSize.X / Mathf.Max(1f, _frameSize.Y),
+            _camera.Near, _camera.Far, flipFov: false);
+    }
+
     /// <summary>Screen position of a world point, or null when it is behind the
-    /// camera (unprojecting a point behind the eye yields a mirrored ghost).</summary>
-    public Vector2? Project(Vector3 world) =>
-        _camera.IsPositionBehind(world) ? null : _camera.UnprojectPosition(world);
+    /// camera (projecting a point behind the eye yields a mirrored ghost). Pure
+    /// managed math against the frame cache — safe to call in tight loops.</summary>
+    public Vector2? Project(Vector3 world)
+    {
+        Vector3 cam = _frameInverse * world;
+        if (cam.Z > -0.05f)
+        {
+            return null;
+        }
+        Vector4 clip = _frameProjection * new Vector4(cam.X, cam.Y, cam.Z, 1f);
+        if (clip.W <= 0f)
+        {
+            return null;
+        }
+        return new Vector2(
+            (clip.X / clip.W * 0.5f + 0.5f) * _frameSize.X,
+            (0.5f - clip.Y / clip.W * 0.5f) * _frameSize.Y);
+    }
 
     public Vector3 PositionOf(GalaxyTarget target, float clock) => target.Kind switch
     {
@@ -75,6 +117,7 @@ public sealed class GalaxyTargeting
     /// <summary>Apparent radius in pixels — sizes the lock reticle and the hover ring.</summary>
     public float ScreenRadius(GalaxyTarget target, float clock)
     {
+        EnsureFrame();
         Vector3 world = PositionOf(target, clock);
         if (Project(world) is not { } center)
         {
@@ -96,6 +139,7 @@ public sealed class GalaxyTargeting
     /// Hover drives the readout and a thin ring; it never rotates the ship.</summary>
     public GalaxyTarget? Hover(Vector2 crosshair, Vector3 eye)
     {
+        EnsureFrame();
         GalaxyStar? best = null;
         float bestDistance = HoverStarPixels;
         for (int g = 0; g < GalaxyLayout.Bins; g++)
@@ -128,6 +172,7 @@ public sealed class GalaxyTargeting
     /// </summary>
     public GalaxyTarget? Pick(Vector2 cursor, Vector3 eye, float clock)
     {
+        EnsureFrame();
         GalaxyPlanet? planet = null;
         float bestPlanet = PickPlanetPixels;
         foreach ((GalaxyPlanet candidate, Vector3 position, float alpha) in _planets.Visible)

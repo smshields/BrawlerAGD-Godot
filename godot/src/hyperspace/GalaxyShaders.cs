@@ -16,21 +16,12 @@ namespace BrawlerGodot.Hyperspace;
 public static class GalaxyShaders
 {
     /// <summary>
-    /// Quad half-extent as a multiple of the body's world radius.
-    ///
-    /// Bodies are SOLID since the 2026-09-17 designer round ("luminosity should not
-    /// interfere with overall visibility — black space should be visible between
-    /// stars"): the sprite is barely bigger than the body itself, and the texture is
-    /// an opaque disc with an anti-aliased rim, not a glow falloff. The two earlier
-    /// values tell the story — 20 was a floodlight you could sit inside, 6 was a
-    /// halo that still fogged dense fields.
+    /// Quad half-extent as a multiple of the body's world radius. The procedural
+    /// sphere fills the quad exactly, so 2.0 means the disc IS the body. (History:
+    /// 20 was a floodlight you could sit inside, 6 a halo that fogged dense fields,
+    /// 2.4 a translucent disc with a soft rim — each a designer play-test round.)
     /// </summary>
-    public const float SpriteScale = 2.4f;
-
-    /// <summary>Fraction of the sprite's half-extent that is opaque body; the rest is
-    /// the anti-aliased rim. The shader sizes its screen clamps by it and DiscTexture
-    /// bakes it — they must agree, so both read it from here.</summary>
-    public const float CoreFraction = 0.82f;
+    public const float SpriteScale = 2f;
 
     /// <summary>A star's core never shrinks below this on screen, so the far end of
     /// the lane stays populated (§8.1: no far cull for stars). Same quad, same
@@ -46,25 +37,30 @@ public static class GalaxyShaders
 
     private static Shader? _star;
     private static Texture2D? _halo;
-    private static Texture2D? _disc;
 
     public static Shader Star() => _star ??= new Shader
     {
         Code = """
         shader_type spatial;
-        render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled;
+        // OPAQUE since 2026-09-17 (designer: "solid, not transparent"): no blend
+        // mode, no ALPHA — bodies write depth and genuinely occlude what is behind
+        // them. Dimming (distance fade, fitness, ignition) goes through ALBEDO
+        // instead, which on black space looks identical and costs less: opaque quads
+        // skip blending and get early-Z.
+        render_mode unshaded, cull_disabled, shadows_disabled, fog_disabled;
 
-        uniform sampler2D halo : source_color, filter_linear;
         uniform float fade_numerator = 968.0;
-        uniform float sprite_scale = 6.0;
-        uniform float core_fraction = 0.33;
-        uniform float min_pixels = 2.4;
-        uniform float max_pixels = 120.0;
+        uniform float sprite_scale = 2.0;
+        uniform float min_pixels = 1.2;
+        uniform float max_pixels = 90.0;
+        // 0 = self-luminous limb darkening (stars); 1 = a fixed key light with a
+        // terminator (planets). Both make the disc read as a BALL, not a dot.
+        uniform float shade_directional = 0.0;
         // World units per screen pixel at one unit of depth: 2*tan(fov/2)/viewport_h.
         uniform float world_per_pixel = 0.002;
 
-        varying vec3 star_rgb;
-        varying float star_alpha;
+        varying vec3 body_rgb;
+        varying float brightness;
 
         void vertex() {
             vec3 center = MODEL_MATRIX[3].xyz;
@@ -73,14 +69,11 @@ public static class GalaxyShaders
             float dist = max(distance(center, eye), 0.001);
 
             // Sprite size in world units, then clamped in SCREEN units: floored so a
-            // distant star stays visible, capped so a near one cannot swallow the
-            // view. Both bounds are expressed against the bright CORE, which is what
-            // the eye actually measures the star by.
+            // distant body stays visible, capped so a near one cannot swallow the
+            // view. The disc fills the quad, so the bounds ARE the body's radius.
             float world_per_px = world_per_pixel * dist;
-            float sprite = radius * sprite_scale;
-            float min_sprite = 2.0 * min_pixels * world_per_px / core_fraction;
-            float max_sprite = 2.0 * max_pixels * world_per_px / core_fraction;
-            sprite = clamp(sprite, min_sprite, max_sprite);
+            float sprite = clamp(radius * sprite_scale,
+                2.0 * min_pixels * world_per_px, 2.0 * max_pixels * world_per_px);
 
             vec3 cam_right = INV_VIEW_MATRIX[0].xyz;
             vec3 cam_up = INV_VIEW_MATRIX[1].xyz;
@@ -88,51 +81,35 @@ public static class GalaxyShaders
 
             // GalaxyLayout.StarFade is the tested C# twin of this line; keep them
             // together (the LightRig.TintTile precedent). INSTANCE_CUSTOM.x is the
-            // normalized fitness, .y the 0->1 ignition ramp for a newly filled cell.
-            float fitness = INSTANCE_CUSTOM.x;
-            float fade = clamp(fade_numerator / dist, 0.10, 1.0) * (0.35 + 0.62 * fitness);
-            star_alpha = fade * INSTANCE_CUSTOM.y;
-            star_rgb = COLOR.rgb;
+            // normalized fitness, .y the 0->1 ignition ramp for a newly filled cell
+            // (fading up from black on black space needs no transparency).
+            float fade = clamp(fade_numerator / dist, 0.10, 1.0)
+                * (0.35 + 0.62 * INSTANCE_CUSTOM.x);
+            brightness = fade * INSTANCE_CUSTOM.y;
+            body_rgb = COLOR.rgb;
 
             POSITION = PROJECTION_MATRIX * VIEW_MATRIX * vec4(world, 1.0);
         }
 
         void fragment() {
-            float profile = texture(halo, UV).a;
-            ALBEDO = star_rgb;
-            ALPHA = profile * star_alpha;
+            // Procedural sphere on the billboard: circular cut, then a normal from
+            // the disc so the body shades as a ball instead of reading flat.
+            vec2 p = UV * 2.0 - 1.0;
+            float r2 = dot(p, p);
+            if (r2 > 1.0) {
+                discard;
+            }
+            float nz = sqrt(1.0 - r2);
+            vec3 n = normalize(vec3(p.x, -p.y, nz));
+            // Stars: limb darkening, bright centre to darker rim, like a sun.
+            float limb = mix(0.42, 1.0, pow(nz, 0.6));
+            // Planets: a fixed upper-left key light with a soft terminator.
+            float lit = mix(0.10, 1.0,
+                clamp(dot(n, normalize(vec3(-0.5, 0.55, 0.7))), 0.0, 1.0));
+            ALBEDO = body_rgb * brightness * mix(limb, lit, shade_directional);
         }
         """,
     };
-
-    /// <summary>
-    /// The SOLID body: opaque out to <see cref="CoreFraction"/> of the sprite, a
-    /// smooth anti-aliased rim to the edge, and nothing else — no skirt, no bloom.
-    /// Stars and planets both wear it; the eye reads their size and brightness, and
-    /// the space between them stays black (designer, 2026-09-17).
-    /// </summary>
-    public static Texture2D DiscTexture()
-    {
-        if (_disc is not null)
-        {
-            return _disc;
-        }
-        const int size = 64;
-        var image = Image.CreateEmpty(size, size, false, Image.Format.Rgba8);
-        for (int y = 0; y < size; y++)
-        {
-            for (int x = 0; x < size; x++)
-            {
-                float dx = (x + 0.5f) / size * 2f - 1f;
-                float dy = (y + 0.5f) / size * 2f - 1f;
-                float r = Mathf.Sqrt(dx * dx + dy * dy);
-                float alpha = 1f - Mathf.SmoothStep(CoreFraction, 1f, r);
-                image.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
-            }
-        }
-        _disc = ImageTexture.CreateFromImage(image);
-        return _disc;
-    }
 
     /// <summary>
     /// The radial falloff for things that ARE glows — the galaxy markers and the

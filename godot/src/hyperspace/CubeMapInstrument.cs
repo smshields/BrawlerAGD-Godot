@@ -98,17 +98,29 @@ public sealed partial class CubeMapInstrument : SubViewportContainer, IMapPodIns
         _viewport.AddChild(_highlightMark);
     }
 
+    /// <summary>What the points buffer currently holds — rebuilding it is hundreds
+    /// of per-instance engine calls, so it happens only when the galaxy or the
+    /// snapshot actually changed (2026-09-17 performance round; this ran EVERY frame
+    /// and was one of the two big main-thread costs of the tab).</summary>
+    private int _builtGalaxy = -1;
+    private int _builtVersion = -1;
+
     public void Refresh(GalaxyStarField stars, int galaxy, Vector3 ship, float yaw, GalaxyStar? highlight)
     {
         Vector3 center = GalaxyVec.From(GalaxyLayout.GalaxyCenter(galaxy));
-        System.Collections.Generic.IReadOnlyList<GalaxyStar> list = stars.StarsIn(galaxy);
-        MultiMesh mesh = _points.Multimesh;
-        mesh.InstanceCount = list.Count;
-        for (int i = 0; i < list.Count; i++)
+        if (galaxy != _builtGalaxy || stars.Version != _builtVersion)
         {
-            mesh.SetInstanceTransform(i, new Transform3D(Basis.Identity,
-                (list[i].Position - center) * Scale));
-            mesh.SetInstanceColor(i, list[i].Color);
+            _builtGalaxy = galaxy;
+            _builtVersion = stars.Version;
+            System.Collections.Generic.IReadOnlyList<GalaxyStar> list = stars.StarsIn(galaxy);
+            MultiMesh mesh = _points.Multimesh;
+            mesh.InstanceCount = list.Count;
+            for (int i = 0; i < list.Count; i++)
+            {
+                mesh.SetInstanceTransform(i, new Transform3D(Basis.Identity,
+                    (list[i].Position - center) * Scale));
+                mesh.SetInstanceColor(i, list[i].Color);
+            }
         }
 
         // The ship is drawn even when it is outside this galaxy — clamped to the
