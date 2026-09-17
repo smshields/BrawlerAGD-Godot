@@ -45,11 +45,12 @@ public partial class GalaxyView : Control
     private GalaxyPlanets _planets = null!;
     private GalaxyTargeting _targeting = null!;
 
-    /// <summary>The grid everything plots against. CUBE is the shipping default; the
-    /// RADIAL experiment (2026-09-17, designer) swaps in a spherical grid with
-    /// galaxies scattered through 3D space — same renderer, same targeting, same
-    /// dashboard, different geometry. The toggle re-applies the current snapshot.</summary>
-    private IGalaxyGeometry _geometry = new CubeGalaxyGeometry();
+    /// <summary>The grid everything plots against. RADIAL is the default (designer,
+    /// 2026-09-17, after flying the experiment): a spherical grid with galaxies
+    /// scattered through 3D space. The cube remains one toggle away — same renderer,
+    /// same targeting, same dashboard, different geometry. Switching re-applies the
+    /// current snapshot.</summary>
+    private IGalaxyGeometry _geometry = new RadialGalaxyGeometry();
     private Button _gridToggle = null!;
     private MeshInstance3D _cellHighlight = null!;
     private StandardMaterial3D _cellHighlightMaterial = null!;
@@ -106,15 +107,19 @@ public partial class GalaxyView : Control
     public override void _Ready()
     {
         BuildUi();
-        if (AutomationEnv.GalaxyGrid == "radial")
+        // radial is the default; "cube" swaps back for captures of the alternate.
+        if (AutomationEnv.GalaxyGrid == "cube")
         {
-            SetGeometry(new RadialGalaxyGeometry(), announce: false);
+            SetGeometry(new CubeGalaxyGeometry(), announce: false);
         }
         ParkShip();
         _nearestGalaxy = GalaxyNavigation.NearestGalaxy(GalaxyVec.To(ShipPosition), _geometry);
         ApplyAutomation();
         ApplyStatus();
     }
+
+    private static string GridLabel(IGalaxyGeometry geometry) =>
+        geometry.Name == "radial" ? "GRID: RADIAL" : "GRID: CUBE";
 
     /// <summary>The boot overlook: outside galaxy 4, looking at it.</summary>
     private void ParkShip()
@@ -150,7 +155,7 @@ public partial class GalaxyView : Control
         _nearestGalaxy = GalaxyNavigation.NearestGalaxy(GalaxyVec.To(ShipPosition), _geometry);
         if (_gridToggle is not null)
         {
-            _gridToggle.Text = geometry.Name == "radial" ? "GRID: RADIAL EXP" : "GRID: CUBE";
+            _gridToggle.Text = GridLabel(geometry);
         }
         if (announce)
         {
@@ -778,8 +783,8 @@ public partial class GalaxyView : Control
         statusRow.AddChild(_statusLine);
         _gridToggle = new Button
         {
-            Text = "GRID: CUBE",
-            TooltipText = "SWAP BETWEEN THE CUBE GRID AND THE SPHERICAL/RADIAL EXPERIMENT",
+            Text = GridLabel(_geometry),
+            TooltipText = "SWAP BETWEEN THE SPHERICAL/RADIAL GRID AND THE CUBE GRID",
         };
         _gridToggle.AddThemeFontSizeOverride("font_size", 11);
         _gridToggle.Pressed += () => SetGeometry(

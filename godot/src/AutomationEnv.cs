@@ -75,8 +75,9 @@ public static class AutomationEnv
     /// into the tab mid-run, which is a different code path (deferred snapshot,
     /// late layout) from opening it at boot with tab=galaxy.</summary>
     public static string GalaxyTabAt => OS.GetEnvironment("BRAWLER_GALAXY_TAB_AT");
-    /// <summary>BRAWLER_GALAXY_GRID="radial": open the galaxy view on the
-    /// spherical/radial grid experiment instead of the cube default.</summary>
+    /// <summary>BRAWLER_GALAXY_GRID="cube": open the galaxy view on the cube grid
+    /// instead of the radial default (2026-09-17: radial was promoted to default
+    /// after the designer flew it).</summary>
     public static string GalaxyGrid => OS.GetEnvironment("BRAWLER_GALAXY_GRID");
     /// <summary>BRAWLER_GALAXY_WARP="1": warp to the auto-locked target and run the
     /// ease to completion, so a capture shows the ARRIVAL.</summary>
