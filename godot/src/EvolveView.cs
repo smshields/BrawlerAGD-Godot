@@ -19,13 +19,13 @@ namespace BrawlerGodot;
 /// with an overlaid save button, and a generation progress bar under the chart.
 /// Automation: BRAWLER_AUTOEVOLVE="name=x;pop=24;gens=20;seed=9" starts on load;
 /// with BRAWLER_SHOT set it captures the finished dashboard and quits.
-/// Hyperspace tab (2026-09-10, map-elites-descriptor-spec §8; the standalone
-/// MAP-Elites ALGORITHM option was removed 2026-09-11, designer — the descriptor
-/// archive stays as a visualization): the right column is a TabContainer — RUN =
-/// the classic dashboard (chart + progress, untouched), HYPERSPACE = the run's
-/// accumulated best-per-cell descriptor cube, fed by a view-only shadow archive
-/// that consumes no engine RNG. Automation tokens: tab=hyperspace, pilot=N
-/// (pilot sample override), hslice=N.
+/// Archive tabs: the right column is a TabContainer — RUN = the classic dashboard
+/// (chart + progress) and GALAXY = the archive as a flyable place, fed by a
+/// view-only shadow archive that consumes no engine RNG (map-elites-descriptor-spec
+/// §8's data contract). The HYPERSPACE cube tab was removed 2026-09-17 (designer);
+/// the cube view itself lives on in QUALITY EXPLORATION, and the designer's stated
+/// direction is that it eventually returns as the galaxy dashboard's star map.
+/// Automation tokens: tab=galaxy, pilot=N (pilot sample override).
 /// </summary>
 public partial class EvolveView : Control
 {
@@ -70,17 +70,24 @@ public partial class EvolveView : Control
 
     // Hyperspace tab (2026-09-10): the run's descriptor-archive cube.
     private TabContainer _tabs = null!;
-    private HyperspaceView _hyperspace = null!;
+    private BrawlerGodot.Hyperspace.GalaxyView _galaxy = null!;
     private int _pilotSamples = BrawlerSim.Evolution.DescriptorBins.DefaultPilotSamples;
     private readonly System.Collections.Concurrent.ConcurrentQueue<HyperspaceSnapshot> _pendingSnapshots = new();
 
+    /// <summary>Games finished evaluating, streamed from the evaluation workers so the
+    /// chart plots them AS THEY LAND (2026-09-16) instead of a block per generation.
+    /// Timed off a Stopwatch rather than the engine: BrawlerSim stays clock-free, and
+    /// completion time is wall-clock by nature — a view quantity, never a result.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(int Generation, int Index, float Score, float Time, GameGenome Genome)> _pendingCandidates = new();
+
+    private readonly System.Diagnostics.Stopwatch _runClock = new();
+
     // Evolution Explorer (2026-07-27, designer): per-game chart points feed a live
     // match preview + the save-to-favorites button. Generations cross from the
-    // engine thread through a queue (GameGenome is not a Variant, so no CallDeferred
-    // args); genomes are immutable and survivors are shared refs across generations,
-    // so retaining them is cheap.
-    private readonly System.Collections.Concurrent.ConcurrentQueue<
-        (GenerationStats Stats, float[] Scores, GameGenome[] Genomes)> _pendingGenerations = new();
+    // engine thread through a queue. Since 2026-09-16 the per-game scores and genomes
+    // reach the chart through _pendingCandidates as they finish, so this queue carries
+    // only what closes a generation: its stats.
+    private readonly System.Collections.Concurrent.ConcurrentQueue<GenerationStats> _pendingGenerations = new();
     private int _lastBestIndex;
     private bool _autoFavorite;
     private Label _previewInfo = null!;
@@ -111,13 +118,14 @@ public partial class EvolveView : Control
         int generations = (int)_generations.Value;
         _runDir = System.IO.Path.Combine(AppPaths.RunsRoot(), RunName());
         _chart.Clear();
-        _hyperspace.Clear();
+        _galaxy.Clear();
         ClearSelection();
         SetRunning(true);
         _progress.MaxValue = generations;
         _progress.Value = 0;
         _status.Text = $"RUNNING → {_runDir}";
         _startTimeMs = Time.GetTicksMsec();
+        _runClock.Restart();
         _cancel = new CancellationTokenSource();
         StartGaRun(generations, _cancel.Token);
     }
@@ -132,6 +140,13 @@ public partial class EvolveView : Control
             MutationRate = (float)_mutation.Value,
             DropoutRate = (float)_dropout.Value,
             Generation = BuildGenerationConfig(),
+            // UX before throughput on the INTERACTIVE screen (designer 2026-09-17):
+            // leave one core for the render thread and the live previews instead of
+            // letting evaluation saturate the machine and starve the UI. Headless
+            // CLI runs keep every core. Parallelism is runtime-only — run.json never
+            // records it — and results are identical at any value (parallel==serial
+            // is pinned by test), so this trades wall time and nothing else.
+            Parallelism = System.Math.Max(1, System.Environment.ProcessorCount - 1),
         };
         string runDir = _runDir;
         string runName = RunName();
@@ -157,21 +172,32 @@ public partial class EvolveView : Control
         // of everything it produces — ACCUMULATED best-per-cell over the whole run.
         // View-only: it consumes no engine RNG and alters nothing in the run.
         CallDeferred(nameof(SetStatus), "MEASURING DESCRIPTOR SPACE (PILOT)…");
+        // Member capacity (2026-09-16): the GALAXY tab orbits a cell's other
+        // occupants around its elite as planets. The cube tab reads elites only and
+        // is unaffected; the archive-wide budget bounds the memory this costs.
         var shadow = new MapElitesArchive(
-            LoadOrCreateBins(config.Generation, config.Seed, runDir, pilotSamples));
+            LoadOrCreateBins(config.Generation, config.Seed, runDir, pilotSamples),
+            MapElitesArchive.DefaultMemberCapacity);
         CallDeferred(nameof(SetStatus), $"RUNNING → {runDir}");
         var engine = new EvolutionEngine(config);
         var history = new System.Collections.Generic.List<GenerationStats>();
         float bestSoFar = float.MinValue;
         while (engine.GenerationsCompleted < generations && !token.IsCancellationRequested)
         {
+            // The genomes this generation evaluates, indexed the way the progress
+            // callback reports them. Captured before Step for the same reason the
+            // scores are: Step replaces the bottom slots in place afterwards.
+            int liveGeneration = engine.GenerationsCompleted;
             // Snapshot the population BEFORE Step: Step evaluates exactly these
             // genomes, then replaces the bottom-dropout slots in place with fresh
             // UNEVALUATED children — pairing post-Step Population with LastFitness
             // would credit child genomes with scores they never earned (found in
             // the 2026-09-10 review; the chart had the same latent mismatch).
             GameGenome[] evaluated = engine.Population.ToArray();
+            engine.CandidateEvaluated = (index, score) => _pendingCandidates.Enqueue((
+                liveGeneration, index, score, (float)_runClock.Elapsed.TotalSeconds, evaluated[index]));
             GenerationStats stats = engine.Step();
+            engine.CandidateEvaluated = null;
             float[] scores = engine.LastFitness.ToArray(); // the scores of `evaluated`
             history.Add(stats);
             if (stats.TopFitness > bestSoFar)
@@ -181,7 +207,7 @@ public partial class EvolveView : Control
                 RunStore.SaveBest(runDir, evaluated[stats.BestIndex], stats, trace);
             }
             RunStore.SaveCheckpoint(runDir, engine, config, history);
-            _pendingGenerations.Enqueue((stats, scores, evaluated));
+            _pendingGenerations.Enqueue(stats);
             for (int i = 0; i < evaluated.Length; i++)
             {
                 shadow.Offer(new BrawlerSim.Evolution.ArchiveEntry(
@@ -229,15 +255,31 @@ public partial class EvolveView : Control
         int i = 0;
         foreach (var kv in shadow.Cells)
         {
-            int gen = kv.Value.Candidate / populationSize;
-            int index = kv.Value.Candidate % populationSize;
-            entries[i++] = new HyperspaceEntry(
-                kv.Value.Descriptor, kv.Value.Fitness, kv.Value.Genome,
-                $"{runName}-g{gen}-game{index}",
-                $"evolve-explorer:{runName} gen {gen} game {index} fitness {kv.Value.Fitness:F1}",
-                PreviewSeed: (ulong)(gen * 1000 + index + 1));
+            System.Collections.Generic.IReadOnlyList<BrawlerSim.Evolution.ArchiveEntry> members =
+                shadow.MembersOf(kv.Key);
+            var planets = new HyperspaceEntry[members.Count];
+            for (int m = 0; m < members.Count; m++)
+            {
+                planets[m] = ShadowEntry(members[m], runName, populationSize);
+            }
+            entries[i++] = ShadowEntry(kv.Value, runName, populationSize) with { Members = planets };
         }
         return new HyperspaceSnapshot(shadow.Bins, players, entries, ArchiveStatusLine(shadow, "SHADOW OF GA RUN"));
+    }
+
+    /// <summary>One archive occupant as a plottable entry — elites and the members
+    /// orbiting them are described identically, so a planet is as watchable and as
+    /// savable as its star.</summary>
+    private static HyperspaceEntry ShadowEntry(
+        BrawlerSim.Evolution.ArchiveEntry entry, string runName, int populationSize)
+    {
+        int gen = entry.Candidate / populationSize;
+        int index = entry.Candidate % populationSize;
+        return new HyperspaceEntry(
+            entry.Descriptor, entry.Fitness, entry.Genome,
+            $"{runName}-g{gen}-game{index}",
+            $"evolve-explorer:{runName} gen {gen} game {index} fitness {entry.Fitness:F1}",
+            PreviewSeed: (ulong)(gen * 1000 + index + 1));
     }
 
     private static string ArchiveStatusLine(MapElitesArchive archive, string kind) =>
@@ -245,15 +287,41 @@ public partial class EvolveView : Control
         $"({archive.Coverage:P1}) · QD {archive.QdScore:F0} · BEST {archive.Best?.Fitness ?? 0f:F1}" +
         (archive.OutOfPilotRangeCount > 0 ? $" · OUT-OF-PILOT {archive.OutOfPilotRangeCount}" : "");
 
+    /// <summary>
+    /// Games land on the chart as they finish, every frame — not in a block when the
+    /// generation closes. This is what keeps the chart moving through a long
+    /// generation instead of sitting blank and then jumping.
+    /// </summary>
+    public override void _Process(double delta)
+    {
+        if (_runClock.IsRunning)
+        {
+            _chart.SetElapsed((float)_runClock.Elapsed.TotalSeconds);
+        }
+        DrainCandidates();
+    }
+
+    private void DrainCandidates()
+    {
+        while (_pendingCandidates.TryDequeue(out var candidate))
+        {
+            _chart.AddCandidate(candidate.Generation, candidate.Index, candidate.Score,
+                candidate.Time, candidate.Genome);
+        }
+    }
+
     private void DrainGenerations()
     {
-        while (_pendingGenerations.TryDequeue(out var gen))
+        // Any games still in flight belong BEFORE the generation's divider.
+        DrainCandidates();
+        while (_pendingGenerations.TryDequeue(out GenerationStats stats))
         {
-            _chart.AddGeneration(gen.Stats.TopFitness, gen.Stats.AverageFitness, gen.Scores, gen.Genomes);
-            _lastBestIndex = gen.Stats.BestIndex;
-            _progress.Value = gen.Stats.Generation;
+            _chart.AddGeneration(stats.Generation, stats.TopFitness, stats.AverageFitness,
+                (float)_runClock.Elapsed.TotalSeconds);
+            _lastBestIndex = stats.BestIndex;
+            _progress.Value = stats.Generation;
             float elapsed = (Time.GetTicksMsec() - _startTimeMs) / 1000f;
-            _status.Text = $"TOP {gen.Stats.TopFitness:F1} · AVG {gen.Stats.AverageFitness:F1} · {elapsed:F1}S";
+            _status.Text = $"TOP {stats.TopFitness:F1} · AVG {stats.AverageFitness:F1} · {elapsed:F1}S";
         }
         // The Hyperspace tab re-renders per snapshot, never per insertion — only the
         // newest queued archive state matters.
@@ -264,13 +332,14 @@ public partial class EvolveView : Control
         }
         if (latest is not null)
         {
-            _hyperspace.SetSnapshot(latest);
+            _galaxy.SetSnapshot(latest);
         }
     }
 
     private void OnRunFinished(int generations, bool cancelled)
     {
         DrainGenerations(); // anything still queued when the loop ended
+        _runClock.Stop();
         float elapsed = (Time.GetTicksMsec() - _startTimeMs) / 1000f;
         _status.Text = (cancelled
             ? $"PAUSED AFTER {generations} GENERATIONS (CHECKPOINT KEPT)"
@@ -309,7 +378,7 @@ public partial class EvolveView : Control
     private void ResetForNewRun()
     {
         _chart.Clear();
-        _hyperspace.Clear();
+        _galaxy.Clear();
         ClearSelection();
         _runName.Text = NextEvolutionName(_runName.Text);
         _seed.Value = RandomSeed();
@@ -496,17 +565,14 @@ public partial class EvolveView : Control
                 case "favorite": // =1: save the auto-selected best to favorites (automation)
                     _autoFavorite = kv[1] == "1";
                     break;
-                case "tab": // =hyperspace: open the archive cube (screenshots)
-                    if (kv[1] == "hyperspace")
+                case "tab": // =galaxy: open the archive flythrough (screenshots)
+                    if (kv[1] == "galaxy")
                     {
                         _tabs.CurrentTab = 1;
                     }
                     break;
                 case "pilot": // pilot sample override so automation runs stay fast
                     _pilotSamples = int.Parse(kv[1]);
-                    break;
-                case "hslice": // hidden-axis slider position, 8 = ALL (screenshots)
-                    _hyperspace.SetSliceForAutomation(int.Parse(kv[1]));
                     break;
             }
         }
@@ -688,9 +754,10 @@ public partial class EvolveView : Control
         left.AddChild(_previewInfo);
     }
 
-    /// <summary>The right column is a TabContainer (map-elites-descriptor-spec §8):
-    /// RUN = the existing dashboard column unchanged, HYPERSPACE = the archive cube.
-    /// Both algorithms feed both tabs.</summary>
+    /// <summary>The right column is a TabContainer: RUN = the existing dashboard
+    /// column unchanged, GALAXY = the archive as a place you fly through. (The
+    /// HYPERSPACE cube tab lived here 2026-09-10 to 2026-09-17; it remains the
+    /// QUALITY EXPLORATION view.)</summary>
     private void BuildChartColumn(HBoxContainer root)
     {
         _tabs = new TabContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
@@ -700,9 +767,15 @@ public partial class EvolveView : Control
         right.AddThemeConstantOverride("separation", 8);
         _tabs.AddChild(right);
 
-        _hyperspace = new HyperspaceView { Name = "HYPERSPACE" };
-        _hyperspace.EntrySelected += OnHyperspaceEntrySelected;
-        _tabs.AddChild(_hyperspace);
+        _galaxy = new BrawlerGodot.Hyperspace.GalaxyView { Name = "GALAXY" };
+        _galaxy.EntrySelected += OnHyperspaceEntrySelected;
+        _tabs.AddChild(_galaxy);
+        if (AutomationEnv.GalaxyTabAt.Length > 0)
+        {
+            // The headless stand-in for clicking into the tab mid-run.
+            GetTree().CreateTimer(double.Parse(AutomationEnv.GalaxyTabAt)).Timeout +=
+                () => _tabs.CurrentTab = 1;
+        }
         _chart = new FitnessChart { SizeFlagsVertical = SizeFlags.ExpandFill };
         _chart.PointSelected += OnPointSelected;
         right.AddChild(_chart);

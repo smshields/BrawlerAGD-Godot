@@ -201,4 +201,43 @@ public class EvolutionEngineTests
         Assert.Equal(stats.TopFitness, engine.FitnessFunction.Evaluate(result));
         Assert.True(trace.TickCount > 0);
     }
+
+    /// <summary>
+    /// The live evolve chart watches evaluation through CandidateEvaluated. It is a
+    /// view hook, so attaching one must not change a single score — otherwise
+    /// watching a run would change its results.
+    /// </summary>
+    [Fact]
+    public void CandidateEvaluatedReportsEveryIndividualAndChangesNothing()
+    {
+        EvolutionConfig config = SmallConfig();
+
+        var quiet = new EvolutionEngine(config);
+        GenerationStats quietStats = quiet.Step();
+        float[] quietFitness = quiet.LastFitness.ToArray();
+
+        var watched = new EvolutionEngine(config);
+        var seen = new System.Collections.Concurrent.ConcurrentDictionary<int, float>();
+        int calls = 0;
+        watched.CandidateEvaluated = (index, fitness) =>
+        {
+            System.Threading.Interlocked.Increment(ref calls);
+            seen[index] = fitness;
+        };
+        GenerationStats watchedStats = watched.Step();
+
+        // Every individual reported exactly once, with the score the engine kept.
+        Assert.Equal(config.PopulationSize, calls);
+        Assert.Equal(config.PopulationSize, seen.Count);
+        for (int i = 0; i < config.PopulationSize; i++)
+        {
+            Assert.Equal(watched.LastFitness[i], seen[i]);
+        }
+
+        // ...and the run is bit-identical to the unwatched one.
+        Assert.Equal(quietFitness, watched.LastFitness.ToArray());
+        Assert.Equal(quietStats.TopFitness, watchedStats.TopFitness);
+        Assert.Equal(quietStats.AverageFitness, watchedStats.AverageFitness);
+        Assert.Equal(quietStats.BestIndex, watchedStats.BestIndex);
+    }
 }

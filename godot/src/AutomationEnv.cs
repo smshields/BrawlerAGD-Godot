@@ -15,6 +15,8 @@ namespace BrawlerGodot;
 ///   BRAWLER_SHOT     = single screenshot path: with autoplay/autoevolve those flows
 ///                      capture it themselves; otherwise Boot saves whatever scene is
 ///                      up after a second and quits.
+///   BRAWLER_SHOT_AT  = seconds; capture BRAWLER_SHOT mid-flight instead, whatever
+///                      the scene is doing (animated screens).
 ///   BRAWLER_SHOT_DIR + BRAWLER_SHOT_TICKS = "60,300,..." — ArenaView saves
 ///                      screenshots at those sim ticks and quits after the last.
 ///   BRAWLER_TICKS_PER_FRAME = sim fast-forward for captures.
@@ -30,6 +32,11 @@ namespace BrawlerGodot;
 ///                      (parsed by CharacterSelectView.ApplyAutoSelect).
 ///   BRAWLER_AUTOEVOLVE = "name=x;pop=24;..." — start an evolve run on load
 ///                      (parsed by EvolveView.ApplyAutoConfig).
+///   BRAWLER_GALAXY_CAM = "x,y,z[,yaw,pitch]" — park the GALAXY tab's ship for a
+///                      capture (the view has no other headless way to be looked
+///                      at from a chosen spot).
+///   BRAWLER_GALAXY_FLY = "seconds[,boost]" — fly the ship straight ahead for that
+///                      long before capturing: the §8.1 pop-in acceptance pass.
 /// </summary>
 public static class AutomationEnv
 {
@@ -38,6 +45,11 @@ public static class AutomationEnv
     public static string Trace => OS.GetEnvironment("BRAWLER_TRACE");
     public static string Rules => OS.GetEnvironment("BRAWLER_RULES");
     public static string Shot => OS.GetEnvironment("BRAWLER_SHOT");
+    /// <summary>BRAWLER_SHOT_AT=&lt;seconds&gt;: capture BRAWLER_SHOT that many seconds
+    /// after the scene loads and quit, whatever the scene is doing. The only way to
+    /// see a mid-flight animated screen (a live evolve chart, a fly-through) headlessly
+    /// — the ordinary shot paths fire at a flow's end.</summary>
+    public static string ShotAt => OS.GetEnvironment("BRAWLER_SHOT_AT");
     public static string ShotDir => OS.GetEnvironment("BRAWLER_SHOT_DIR");
     public static string ShotTicks => OS.GetEnvironment("BRAWLER_SHOT_TICKS");
     public static string TicksPerFrame => OS.GetEnvironment("BRAWLER_TICKS_PER_FRAME");
@@ -53,4 +65,21 @@ public static class AutomationEnv
     public static bool AutoBuild => OS.GetEnvironment("BRAWLER_AUTOBUILD") == "1";
     public static string AutoSelect => OS.GetEnvironment("BRAWLER_AUTOSELECT");
     public static string AutoEvolve => OS.GetEnvironment("BRAWLER_AUTOEVOLVE");
+    public static string GalaxyCam => OS.GetEnvironment("BRAWLER_GALAXY_CAM");
+    public static string GalaxyFly => OS.GetEnvironment("BRAWLER_GALAXY_FLY");
+    /// <summary>BRAWLER_GALAXY_LOCK="hover": lock whatever the crosshair is on once
+    /// the archive lands, so a capture can show the reticle and cell highlight.</summary>
+    public static string GalaxyLock => OS.GetEnvironment("BRAWLER_GALAXY_LOCK");
+    /// <summary>BRAWLER_GALAXY_TAB_AT=&lt;seconds&gt;: switch the Evolve screen to the
+    /// GALAXY tab that long after load — the headless stand-in for a person clicking
+    /// into the tab mid-run, which is a different code path (deferred snapshot,
+    /// late layout) from opening it at boot with tab=galaxy.</summary>
+    public static string GalaxyTabAt => OS.GetEnvironment("BRAWLER_GALAXY_TAB_AT");
+    /// <summary>BRAWLER_GALAXY_GRID="cube": open the galaxy view on the cube grid
+    /// instead of the radial default (2026-09-17: radial was promoted to default
+    /// after the designer flew it).</summary>
+    public static string GalaxyGrid => OS.GetEnvironment("BRAWLER_GALAXY_GRID");
+    /// <summary>BRAWLER_GALAXY_WARP="1": warp to the auto-locked target and run the
+    /// ease to completion, so a capture shows the ARRIVAL.</summary>
+    public static string GalaxyWarp => OS.GetEnvironment("BRAWLER_GALAXY_WARP");
 }

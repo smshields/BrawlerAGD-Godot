@@ -65,7 +65,14 @@ public partial class Boot : Node
         // quality_exploration, whose scan finishes on its own clock — which handle
         // their own captures) saves whatever scene is up after a second, then quits.
         string shot = AutomationEnv.Shot;
-        if (shot.Length > 0
+        // BRAWLER_SHOT_AT wins outright: it exists to catch a scene MID-flight, so it
+        // must fire even for flows that would otherwise capture at their own end.
+        if (shot.Length > 0 && AutomationEnv.ShotAt.Length > 0)
+        {
+            GetTree().CreateTimer(double.Parse(AutomationEnv.ShotAt)).Timeout +=
+                () => _ = Screenshot.CaptureAsync(this, shot, quitWhenDone: true);
+        }
+        else if (shot.Length > 0
             && AutomationEnv.Autoplay.Length == 0
             && AutomationEnv.AutoEvolve.Length == 0
             && scene != "quality_exploration")
@@ -121,6 +128,22 @@ public partial class Boot : Node
         RegisterPadLayout(playerNumber: 2, device: 0);
         RegisterPadLayout(playerNumber: 3, device: 2);
         RegisterPadLayout(playerNumber: 4, device: 3);
+
+        // GALAXY view (2026-09-16, docs/features/galaxy-view.md §4). Separate action
+        // names from the p1_* set even where the key is shared: this is a menu
+        // screen, and the two never read input at the same time.
+        AddKey("hs_thrust_fwd", Key.W);
+        AddKey("hs_thrust_back", Key.S);
+        AddKey("hs_strafe_left", Key.A);
+        AddKey("hs_strafe_right", Key.D);
+        AddKey("hs_boost", Key.Shift);
+        AddKey("hs_brake", Key.Space);
+        AddKey("hs_warp", Key.Enter);
+        AddKey("hs_galaxy_prev", Key.Bracketleft);
+        AddKey("hs_galaxy_next", Key.Bracketright);
+        AddKey("hs_grid", Key.G);
+        AddKey("hs_planets", Key.P);
+        AddKey("hs_release", Key.Escape);
 
         AddKey("ui_pause", Key.Escape);
     }
