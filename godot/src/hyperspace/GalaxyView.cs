@@ -631,12 +631,13 @@ public partial class GalaxyView : Control
             float reach = GalaxyNavigation.FadeBand(distance,
                 fullAt: 1.5f * GalaxyLayout.Gap, zeroAt: 2.4f * GalaxyLayout.Gap);
 
-            // Additive: keep the peak low so a galaxy seen from inside its own
-            // neighbour does not blow out the stars in front of it. NOT faded by
-            // distance — only the LABEL culls at range (§8.1). A halo that dims with
-            // distance makes the far end of the lane empty, which §8.1.1 explicitly
-            // tests against; the sprite shrinking on screen is the distance cue.
-            float haloAlpha = presence * 0.55f;
+            // Additive, and deliberately faint: this is a marker saying "a galaxy is
+            // over there", not a light source. At 0.55 it washed out every star in
+            // front of it. NOT faded by distance — only the LABEL culls at range
+            // (§8.1); a halo that dims with distance makes the far end of the lane
+            // empty, which §8.1.1 tests against, so the sprite shrinking on screen is
+            // the only distance cue it gets.
+            float haloAlpha = presence * 0.20f;
             _haloMaterials[g].AlbedoColor = new Color(0.62f, 0.70f, 0.95f, haloAlpha);
             _names[g].Modulate = new Color(1f, 1f, 1f, presence * reach);
 
@@ -810,10 +811,11 @@ public partial class GalaxyView : Control
                 Name = $"Halo{g}",
                 Mesh = new QuadMesh
                 {
-                    // 2.8x the galaxy edge: the falloff's visible disc is only about
-                    // a third of the sprite, so a quad sized to the galaxy reads as a
-                    // dot floating inside its own star cloud.
-                    Size = Vector2.One * (GalaxyLayout.Extent * 2.8f),
+                    // Sized so the falloff's visible disc lands on the galaxy itself.
+                    // This was 2.8x the edge, a ~2,000-unit additive billboard you
+                    // fly THROUGH on the way in — it fogged the entire view from
+                    // anywhere near the galaxy.
+                    Size = Vector2.One * (GalaxyLayout.Extent * 1.7f),
                     Material = _haloMaterials[g],
                 },
                 Position = center,

@@ -59,10 +59,14 @@ public sealed partial class GalaxyPlanets : Node3D
     {
         _bodyMaterial = new ShaderMaterial { Shader = GalaxyShaders.Star() };
         _bodyMaterial.SetShaderParameter("halo", GalaxyShaders.HaloTexture());
-        // Bodies are lit discs, not glowing cores: a much tighter sprite than a star's
-        // and no distance fade of their own (the range band below owns that).
-        _bodyMaterial.SetShaderParameter("sprite_scale", 6f);
+        // Bodies are lit discs, not glowing cores: a tighter sprite than a star's and
+        // no distance fade of their own (the range band below owns that). The screen
+        // clamps come from the same shader, so a planet you warp to cannot fill the
+        // view either.
+        _bodyMaterial.SetShaderParameter("sprite_scale", 4f);
+        _bodyMaterial.SetShaderParameter("core_fraction", GalaxyShaders.CoreFraction);
         _bodyMaterial.SetShaderParameter("min_pixels", 1.3f);
+        _bodyMaterial.SetShaderParameter("max_pixels", 60f);
         _bodyMaterial.SetShaderParameter("fade_numerator", 1e9f);
 
         _bodies = new MultiMeshInstance3D

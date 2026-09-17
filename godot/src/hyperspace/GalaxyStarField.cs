@@ -52,7 +52,9 @@ public sealed partial class GalaxyStarField : Node3D
         Material.SetShaderParameter("halo", GalaxyShaders.HaloTexture());
         Material.SetShaderParameter("fade_numerator", GalaxyLayout.FadeNumerator);
         Material.SetShaderParameter("sprite_scale", GalaxyShaders.SpriteScale);
+        Material.SetShaderParameter("core_fraction", GalaxyShaders.CoreFraction);
         Material.SetShaderParameter("min_pixels", GalaxyShaders.MinStarPixels);
+        Material.SetShaderParameter("max_pixels", GalaxyShaders.MaxStarPixels);
 
         for (int g = 0; g < GalaxyLayout.Bins; g++)
         {
